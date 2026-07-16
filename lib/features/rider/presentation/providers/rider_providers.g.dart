@@ -13,11 +13,8 @@ part of 'rider_providers.dart';
 final riderRepositoryProvider = RiderRepositoryProvider._();
 
 final class RiderRepositoryProvider
-    extends $FunctionalProvider<
-      RiderRepository,
-      RiderRepository,
-      RiderRepository
-    >
+    extends
+        $FunctionalProvider<RiderRepository, RiderRepository, RiderRepository>
     with $Provider<RiderRepository> {
   RiderRepositoryProvider._()
     : super(
@@ -35,9 +32,8 @@ final class RiderRepositoryProvider
 
   @$internal
   @override
-  $ProviderElement<RiderRepository> $createElement(
-    $ProviderPointer pointer,
-  ) => $ProviderElement(pointer);
+  $ProviderElement<RiderRepository> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
 
   @override
   RiderRepository create(Ref ref) {
@@ -53,7 +49,7 @@ final class RiderRepositoryProvider
   }
 }
 
-String _$riderRepositoryHash() => r'rider_repository_hash_placeholder';
+String _$riderRepositoryHash() => r'65f496f9a2da583de6644786f2e138350e8764a9';
 
 @ProviderFor(RiderProfile)
 final riderProfileProvider = RiderProfileProvider._();
@@ -79,7 +75,7 @@ final class RiderProfileProvider
   RiderProfile create() => RiderProfile();
 }
 
-String _$riderProfileHash() => r'rider_profile_hash_placeholder';
+String _$riderProfileHash() => r'414b1341dd001f1a1ec8a4edf6908f3696950637';
 
 abstract class _$RiderProfile extends $AsyncNotifier<RiderEntity> {
   FutureOr<RiderEntity> build();
@@ -123,7 +119,7 @@ final class RiderActiveRouteProvider
   RiderActiveRoute create() => RiderActiveRoute();
 }
 
-String _$riderActiveRouteHash() => r'rider_active_route_hash_placeholder';
+String _$riderActiveRouteHash() => r'71d169b828239afde880d66ebf26706185055f31';
 
 abstract class _$RiderActiveRoute extends $AsyncNotifier<ActiveRouteEntity?> {
   FutureOr<ActiveRouteEntity?> build();
@@ -148,10 +144,11 @@ abstract class _$RiderActiveRoute extends $AsyncNotifier<ActiveRouteEntity?> {
 final riderCollectionHistoryProvider = RiderCollectionHistoryProvider._();
 
 final class RiderCollectionHistoryProvider
-    extends $AsyncNotifierProvider<
-      RiderCollectionHistory,
-      List<CollectionLogEntity>
-    > {
+    extends
+        $AsyncNotifierProvider<
+          RiderCollectionHistory,
+          List<CollectionLogEntity>
+        > {
   RiderCollectionHistoryProvider._()
     : super(
         from: null,
@@ -172,7 +169,7 @@ final class RiderCollectionHistoryProvider
 }
 
 String _$riderCollectionHistoryHash() =>
-    r'rider_collection_history_hash_placeholder';
+    r'c5e2b2d2bde3bce1565a0896b5f2a1810b778d2f';
 
 abstract class _$RiderCollectionHistory
     extends $AsyncNotifier<List<CollectionLogEntity>> {
@@ -205,10 +202,7 @@ abstract class _$RiderCollectionHistory
 final riderPerformanceProvider = RiderPerformanceProvider._();
 
 final class RiderPerformanceProvider
-    extends $AsyncNotifierProvider<
-      RiderPerformance,
-      RiderPerformanceEntity
-    > {
+    extends $AsyncNotifierProvider<RiderPerformance, RiderPerformanceEntity> {
   RiderPerformanceProvider._()
     : super(
         from: null,
@@ -228,7 +222,7 @@ final class RiderPerformanceProvider
   RiderPerformance create() => RiderPerformance();
 }
 
-String _$riderPerformanceHash() => r'rider_performance_hash_placeholder';
+String _$riderPerformanceHash() => r'3611c0041b809b421cb2b772e68504e589056ed9';
 
 abstract class _$RiderPerformance
     extends $AsyncNotifier<RiderPerformanceEntity> {
@@ -238,10 +232,7 @@ abstract class _$RiderPerformance
   WhenComplete runBuild() {
     final ref =
         this.ref
-            as $Ref<
-              AsyncValue<RiderPerformanceEntity>,
-              RiderPerformanceEntity
-            >;
+            as $Ref<AsyncValue<RiderPerformanceEntity>, RiderPerformanceEntity>;
     final element =
         ref.element
             as $ClassProviderElement<
@@ -261,10 +252,11 @@ abstract class _$RiderPerformance
 final riderNotificationsProvider = RiderNotificationsProvider._();
 
 final class RiderNotificationsProvider
-    extends $AsyncNotifierProvider<
-      RiderNotifications,
-      List<RiderNotificationEntity>
-    > {
+    extends
+        $AsyncNotifierProvider<
+          RiderNotifications,
+          List<RiderNotificationEntity>
+        > {
   RiderNotificationsProvider._()
     : super(
         from: null,
@@ -284,7 +276,8 @@ final class RiderNotificationsProvider
   RiderNotifications create() => RiderNotifications();
 }
 
-String _$riderNotificationsHash() => r'rider_notifications_hash_placeholder';
+String _$riderNotificationsHash() =>
+    r'18ca25e46c6c3975290f1e38932228c284743f06';
 
 abstract class _$RiderNotifications
     extends $AsyncNotifier<List<RiderNotificationEntity>> {
@@ -312,6 +305,3 @@ abstract class _$RiderNotifications
     return element.handleCreate(ref, build);
   }
 }
-
-// ignore_for_file: type=lint
-// ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

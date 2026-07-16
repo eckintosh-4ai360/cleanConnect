@@ -1,14 +1,12 @@
-import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/user_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-  final _secureStorage = const FlutterSecureStorage();
-  final String _userKey = 'cached_user';
-  final String _tokenKey = 'auth_token';
+  fb.FirebaseAuth get _firebaseAuth => fb.FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   AuthRepositoryImpl();
 
@@ -17,39 +15,32 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    // Simulate API network delay
-    await Future.delayed(const Duration(milliseconds: 1500));
+    try {
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-    if (email == 'error@ecowaste.com') {
-      throw Exception('Invalid credentials. Please try again.');
+      final fbUser = credential.user;
+      if (fbUser == null) {
+        throw Exception('User authentication failed.');
+      }
+
+      // Fetch user profile from Firestore
+      final doc = await _firestore.collection('users').doc(fbUser.uid).get();
+      if (!doc.exists) {
+        throw Exception('User profile not found in database.');
+      }
+
+      final data = doc.data()!;
+      data['id'] = fbUser.uid; // Ensure ID matches UID
+      final userModel = UserModel.fromJson(data);
+      return userModel.toEntity();
+    } on fb.FirebaseAuthException catch (e) {
+      throw Exception(e.message ?? 'Authentication error occurred.');
+    } catch (e) {
+      throw Exception(e.toString());
     }
-
-    // Determine role from email (e.g. contains 'rider' -> rider, 'admin' -> admin, else customer)
-    String role = 'customer';
-    if (email.contains('rider')) {
-      role = 'rider';
-    } else if (email.contains('admin')) {
-      role = 'admin';
-    }
-
-    final user = UserModel(
-      id: 'usr_mock_123',
-      fullName: email.split('@').first.toUpperCase(),
-      email: email,
-      phoneNumber: '+1 (555) 019-2834',
-      role: role,
-      address: '123 Green St, Eco City',
-      gpsLocation: '5.6037° N, 0.1870° W',
-      profilePictureUrl:
-          'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
-    );
-
-    // Save token and user data locally
-    await _secureStorage.write(key: _tokenKey, value: 'mock_jwt_token_xyz');
-    final authBox = Hive.box('auth_box');
-    await authBox.put(_userKey, jsonEncode(user.toJson()));
-
-    return user.toEntity();
   }
 
   @override
@@ -62,64 +53,88 @@ class AuthRepositoryImpl implements AuthRepository {
     required String gpsLocation,
     String? profilePicturePath,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 2000));
+    try {
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-    final user = UserModel(
-      id: 'usr_mock_new',
-      fullName: fullName,
-      email: email,
-      phoneNumber: phoneNumber,
-      role: 'customer',
-      address: address,
-      gpsLocation: gpsLocation,
-      profilePictureUrl: profilePicturePath,
-    );
+      final fbUser = credential.user;
+      if (fbUser == null) {
+        throw Exception('Registration failed.');
+      }
 
-    // Save token and user data locally
-    await _secureStorage.write(key: _tokenKey, value: 'mock_jwt_token_new');
-    final authBox = Hive.box('auth_box');
-    await authBox.put(_userKey, jsonEncode(user.toJson()));
+      final userModel = UserModel(
+        id: fbUser.uid,
+        fullName: fullName,
+        email: email,
+        phoneNumber: phoneNumber,
+        role: UserRole.customer,
+        address: address,
+        gpsLocation: gpsLocation,
+        profilePictureUrl: profilePicturePath,
+        status: 'active',
+        createdAt: DateTime.now(),
+      );
 
-    return user.toEntity();
+      // Save user details to Firestore
+      await _firestore.collection('users').doc(fbUser.uid).set(userModel.toJson());
+
+      return userModel.toEntity();
+    } on fb.FirebaseAuthException catch (e) {
+      throw Exception(e.message ?? 'Registration error occurred.');
+    } catch (e) {
+      throw Exception(e.toString());
+    }
   }
 
   @override
   Future<void> sendPasswordResetEmail(String email) async {
-    await Future.delayed(const Duration(milliseconds: 1200));
-    // Simulated success
+    try {
+      await _firebaseAuth.sendPasswordResetEmail(email: email);
+    } on fb.FirebaseAuthException catch (e) {
+      throw Exception(e.message ?? 'Error sending password reset email.');
+    } catch (e) {
+      throw Exception(e.toString());
+    }
   }
 
   @override
   Future<void> verifyOtp(String phoneNumber, String otpCode) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (otpCode != '1234') {
-      throw Exception('Invalid verification code. Please enter 1234.');
-    }
+    // Left unimplemented as we use Firebase Email/Password Auth for production
+    throw UnimplementedError('SMS OTP is not supported.');
   }
 
   @override
   Future<void> resendOtp(String phoneNumber) async {
-    await Future.delayed(const Duration(milliseconds: 1000));
+    // Left unimplemented as we use Firebase Email/Password Auth for production
+    throw UnimplementedError('SMS OTP is not supported.');
   }
 
   @override
   Future<UserEntity?> getCurrentUser() async {
-    final token = await _secureStorage.read(key: _tokenKey);
-    if (token == null) return null;
+    try {
+      final fbUser = _firebaseAuth.currentUser;
+      if (fbUser == null) return null;
 
-    final authBox = Hive.box('auth_box');
-    final cachedUserJson = authBox.get(_userKey);
-    if (cachedUserJson != null) {
-      final userMap = jsonDecode(cachedUserJson) as Map<String, dynamic>;
-      return UserModel.fromJson(userMap).toEntity();
+      final doc = await _firestore.collection('users').doc(fbUser.uid).get();
+      if (!doc.exists) return null;
+
+      final data = doc.data()!;
+      data['id'] = fbUser.uid;
+      final userModel = UserModel.fromJson(data);
+      return userModel.toEntity();
+    } catch (e) {
+      return null;
     }
-    return null;
   }
 
   @override
   Future<void> signOut() async {
-    await _secureStorage.delete(key: _tokenKey);
-    final authBox = Hive.box('auth_box');
-    await authBox.delete(_userKey);
+    try {
+      await _firebaseAuth.signOut();
+    } catch (e) {
+      throw Exception('Error signing out.');
+    }
   }
 }

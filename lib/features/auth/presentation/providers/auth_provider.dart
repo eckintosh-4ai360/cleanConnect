@@ -1,10 +1,35 @@
-import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 
 part 'auth_provider.g.dart';
+
+sealed class AuthState {
+  const AuthState();
+
+  bool get isLoading => this is AuthLoading;
+}
+
+class AuthLoading extends AuthState {
+  const AuthLoading();
+}
+
+class AuthAuthenticated extends AuthState {
+  final UserEntity user;
+  const AuthAuthenticated(this.user);
+}
+
+class AuthUnauthenticated extends AuthState {
+  const AuthUnauthenticated();
+}
+
+class AuthError extends AuthState {
+  final String message;
+  const AuthError(this.message);
+}
 
 @riverpod
 AuthRepository authRepository(Ref ref) {
@@ -13,19 +38,53 @@ AuthRepository authRepository(Ref ref) {
 
 @riverpod
 class AuthStateController extends _$AuthStateController {
+  StreamSubscription<fb.User?>? _subscription;
+
   @override
-  FutureOr<UserEntity?> build() async {
-    return ref.watch(authRepositoryProvider).getCurrentUser();
+  AuthState build() {
+    _subscription?.cancel();
+    
+    try {
+      // Listen to Firebase auth changes in real-time
+      _subscription = fb.FirebaseAuth.instance.authStateChanges().listen((fbUser) async {
+        if (fbUser == null) {
+          state = const AuthUnauthenticated();
+        } else {
+          try {
+            final user = await ref.read(authRepositoryProvider).getCurrentUser();
+            if (user != null) {
+              state = AuthAuthenticated(user);
+            } else {
+              state = const AuthUnauthenticated();
+            }
+          } catch (e) {
+            state = AuthError(e.toString());
+          }
+        }
+      });
+      
+      ref.onDispose(() {
+        _subscription?.cancel();
+      });
+    } catch (e) {
+      // Return AuthError to prevent app crash if Firebase core is not initialized
+      return AuthError('Firebase is not initialized: ${e.toString()}');
+    }
+
+    return const AuthLoading();
   }
 
   Future<void> login(String email, String password) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      return ref.read(authRepositoryProvider).signInWithEmailAndPassword(
+    state = const AuthLoading();
+    try {
+      final user = await ref.read(authRepositoryProvider).signInWithEmailAndPassword(
             email: email,
             password: password,
           );
-    });
+      state = AuthAuthenticated(user);
+    } catch (e) {
+      state = AuthError(e.toString().replaceAll('Exception: ', ''));
+    }
   }
 
   Future<void> register({
@@ -37,9 +96,9 @@ class AuthStateController extends _$AuthStateController {
     required String gpsLocation,
     String? profilePicturePath,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      return ref.read(authRepositoryProvider).register(
+    state = const AuthLoading();
+    try {
+      final user = await ref.read(authRepositoryProvider).register(
             fullName: fullName,
             email: email,
             phoneNumber: phoneNumber,
@@ -48,29 +107,33 @@ class AuthStateController extends _$AuthStateController {
             gpsLocation: gpsLocation,
             profilePicturePath: profilePicturePath,
           );
-    });
+      state = AuthAuthenticated(user);
+    } catch (e) {
+      state = AuthError(e.toString().replaceAll('Exception: ', ''));
+    }
   }
 
   Future<void> logout() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    state = const AuthLoading();
+    try {
       await ref.read(authRepositoryProvider).signOut();
-      return null;
-    });
+      state = const AuthUnauthenticated();
+    } catch (e) {
+      state = AuthError(e.toString().replaceAll('Exception: ', ''));
+    }
   }
 }
 
 @riverpod
-class OnboardingController extends _$OnboardingController {
-  @override
-  bool build() {
-    final box = Hive.box('settings_box');
-    return box.get('onboarding_completed', defaultValue: false) as bool;
+UserEntity? currentUser(Ref ref) {
+  final authState = ref.watch(authStateControllerProvider);
+  if (authState is AuthAuthenticated) {
+    return authState.user;
   }
+  return null;
+}
 
-  void completeOnboarding() {
-    final box = Hive.box('settings_box');
-    box.put('onboarding_completed', true);
-    state = true;
-  }
+@riverpod
+UserRole? currentUserRole(Ref ref) {
+  return ref.watch(currentUserProvider)?.role;
 }

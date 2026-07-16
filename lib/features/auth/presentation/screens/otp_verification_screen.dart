@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 
 class OtpVerificationScreen extends HookConsumerWidget {
@@ -90,8 +91,14 @@ class OtpVerificationScreen extends HookConsumerWidget {
             backgroundColor: Colors.green,
           ),
         );
-        // Successful verification routes to dashboard
-        context.go('/dashboard');
+        final user = ref.read(currentUserProvider);
+        if (user != null && user.role == UserRole.rider) {
+          context.go('/rider/home');
+        } else if (user != null && user.role == UserRole.admin) {
+          context.go('/admin/home');
+        } else {
+          context.go('/customer/home');
+        }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

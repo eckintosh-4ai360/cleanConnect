@@ -26,9 +26,6 @@ class CustomerBottomNavBar extends StatelessWidget {
         context.go('/customer/history');
         break;
       case 3:
-        context.go('/customer/subscription');
-        break;
-      case 4:
         context.go('/customer/profile');
         break;
     }
@@ -85,30 +82,24 @@ class CustomerBottomNavBar extends StatelessWidget {
                       _buildNavItem(
                         context: context,
                         index: 0,
-                        icon: Icons.home_filled,
+                        icon: Icons.home_rounded,
                         inactiveIcon: Icons.home_outlined,
                       ),
                       _buildNavItem(
                         context: context,
                         index: 1,
-                        icon: Icons.storefront_rounded,
-                        inactiveIcon: Icons.storefront_outlined,
+                        icon: Icons.delete_rounded,
+                        inactiveIcon: Icons.delete_outline_rounded,
                       ),
                       _buildNavItem(
                         context: context,
                         index: 2,
-                        icon: Icons.favorite_rounded,
-                        inactiveIcon: Icons.favorite_border_rounded,
+                        icon: Icons.history_rounded,
+                        inactiveIcon: Icons.history_rounded,
                       ),
                       _buildNavItem(
                         context: context,
                         index: 3,
-                        icon: Icons.shopping_bag_rounded,
-                        inactiveIcon: Icons.shopping_bag_outlined,
-                      ),
-                      _buildNavItem(
-                        context: context,
-                        index: 4,
                         icon: Icons.person_rounded,
                         inactiveIcon: Icons.person_outline_rounded,
                       ),

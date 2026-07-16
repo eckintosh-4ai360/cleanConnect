@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'theme_provider.dart';
+part of 'onboarding_provider.dart';
 
 // **************************************************************************
 // RiverpodGenerator
@@ -9,52 +9,52 @@ part of 'theme_provider.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 
-@ProviderFor(ThemeModeController)
-final themeModeControllerProvider = ThemeModeControllerProvider._();
+@ProviderFor(OnboardingController)
+final onboardingControllerProvider = OnboardingControllerProvider._();
 
-final class ThemeModeControllerProvider
-    extends $NotifierProvider<ThemeModeController, ThemeMode> {
-  ThemeModeControllerProvider._()
+final class OnboardingControllerProvider
+    extends $NotifierProvider<OnboardingController, bool> {
+  OnboardingControllerProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'themeModeControllerProvider',
+        name: r'onboardingControllerProvider',
         isAutoDispose: true,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$themeModeControllerHash();
+  String debugGetCreateSourceHash() => _$onboardingControllerHash();
 
   @$internal
   @override
-  ThemeModeController create() => ThemeModeController();
+  OnboardingController create() => OnboardingController();
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(ThemeMode value) {
+  Override overrideWithValue(bool value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<ThemeMode>(value),
+      providerOverride: $SyncValueProvider<bool>(value),
     );
   }
 }
 
-String _$themeModeControllerHash() =>
-    r'366710d2af2043976e8d9f0750667efb6a831236';
+String _$onboardingControllerHash() =>
+    r'63ae3bf1aa6f1245ee3482a418ba6503a21e4ac7';
 
-abstract class _$ThemeModeController extends $Notifier<ThemeMode> {
-  ThemeMode build();
+abstract class _$OnboardingController extends $Notifier<bool> {
+  bool build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
-    final ref = this.ref as $Ref<ThemeMode, ThemeMode>;
+    final ref = this.ref as $Ref<bool, bool>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<ThemeMode, ThemeMode>,
-              ThemeMode,
+              AnyNotifier<bool, bool>,
+              bool,
               Object?,
               Object?
             >;

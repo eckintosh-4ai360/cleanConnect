@@ -1,4 +1,13 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'auth_provider.dart';
+
+// **************************************************************************
+// RiverpodGenerator
+// **************************************************************************
+
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, type=warning
 
 @ProviderFor(authRepository)
 final authRepositoryProvider = AuthRepositoryProvider._();
@@ -45,7 +54,7 @@ String _$authRepositoryHash() => r'a8767550d220ede9bb05149c073a651c4422d5ef';
 final authStateControllerProvider = AuthStateControllerProvider._();
 
 final class AuthStateControllerProvider
-    extends $AsyncNotifierProvider<AuthStateController, UserEntity?> {
+    extends $NotifierProvider<AuthStateController, AuthState> {
   AuthStateControllerProvider._()
     : super(
         from: null,
@@ -63,22 +72,30 @@ final class AuthStateControllerProvider
   @$internal
   @override
   AuthStateController create() => AuthStateController();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(AuthState value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<AuthState>(value),
+    );
+  }
 }
 
 String _$authStateControllerHash() =>
-    r'a7b4c0671d984f436ba2599c119a4fb0a86ac2dc';
+    r'3a422a52ef096f93e67d7c371eb1194203d8fca6';
 
-abstract class _$AuthStateController extends $AsyncNotifier<UserEntity?> {
-  FutureOr<UserEntity?> build();
+abstract class _$AuthStateController extends $Notifier<AuthState> {
+  AuthState build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
-    final ref = this.ref as $Ref<AsyncValue<UserEntity?>, UserEntity?>;
+    final ref = this.ref as $Ref<AuthState, AuthState>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<AsyncValue<UserEntity?>, UserEntity?>,
-              AsyncValue<UserEntity?>,
+              AnyNotifier<AuthState, AuthState>,
+              AuthState,
               Object?,
               Object?
             >;
@@ -86,55 +103,84 @@ abstract class _$AuthStateController extends $AsyncNotifier<UserEntity?> {
   }
 }
 
-@ProviderFor(OnboardingController)
-final onboardingControllerProvider = OnboardingControllerProvider._();
+@ProviderFor(currentUser)
+final currentUserProvider = CurrentUserProvider._();
 
-final class OnboardingControllerProvider
-    extends $NotifierProvider<OnboardingController, bool> {
-  OnboardingControllerProvider._()
+final class CurrentUserProvider
+    extends $FunctionalProvider<UserEntity?, UserEntity?, UserEntity?>
+    with $Provider<UserEntity?> {
+  CurrentUserProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'onboardingControllerProvider',
+        name: r'currentUserProvider',
         isAutoDispose: true,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$onboardingControllerHash();
+  String debugGetCreateSourceHash() => _$currentUserHash();
 
   @$internal
   @override
-  OnboardingController create() => OnboardingController();
+  $ProviderElement<UserEntity?> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  UserEntity? create(Ref ref) {
+    return currentUser(ref);
+  }
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(bool value) {
+  Override overrideWithValue(UserEntity? value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<bool>(value),
+      providerOverride: $SyncValueProvider<UserEntity?>(value),
     );
   }
 }
 
-String _$onboardingControllerHash() =>
-    r'b72edbee09247d0aee534b74adef526233129861';
+String _$currentUserHash() => r'32f5c0e106d4bc6a2c2210609c730aa6a59d8643';
 
-abstract class _$OnboardingController extends $Notifier<bool> {
-  bool build();
-  @$mustCallSuper
+@ProviderFor(currentUserRole)
+final currentUserRoleProvider = CurrentUserRoleProvider._();
+
+final class CurrentUserRoleProvider
+    extends $FunctionalProvider<UserRole?, UserRole?, UserRole?>
+    with $Provider<UserRole?> {
+  CurrentUserRoleProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'currentUserRoleProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
   @override
-  WhenComplete runBuild() {
-    final ref = this.ref as $Ref<bool, bool>;
-    final element =
-        ref.element
-            as $ClassProviderElement<
-              AnyNotifier<bool, bool>,
-              bool,
-              Object?,
-              Object?
-            >;
-    return element.handleCreate(ref, build);
+  String debugGetCreateSourceHash() => _$currentUserRoleHash();
+
+  @$internal
+  @override
+  $ProviderElement<UserRole?> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  UserRole? create(Ref ref) {
+    return currentUserRole(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(UserRole? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<UserRole?>(value),
+    );
   }
 }
+
+String _$currentUserRoleHash() => r'0e33a95a6963c7c87434003fde4f909da4f3c486';

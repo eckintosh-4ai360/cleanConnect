@@ -1,6 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'user_model.dart';
 
+// **************************************************************************
 // JsonSerializableGenerator
+// **************************************************************************
 
 _UserModel _$UserModelFromJson(Map<String, dynamic> json) => _UserModel(
   id: json['id'] as String,
@@ -10,7 +14,9 @@ _UserModel _$UserModelFromJson(Map<String, dynamic> json) => _UserModel(
   address: json['address'] as String?,
   gpsLocation: json['gpsLocation'] as String?,
   profilePictureUrl: json['profilePictureUrl'] as String?,
-  role: json['role'] as String,
+  role: $enumDecode(_$UserRoleEnumMap, json['role']),
+  status: json['status'] as String,
+  createdAt: const TimestampConverter().fromJson(json['createdAt']),
 );
 
 Map<String, dynamic> _$UserModelToJson(_UserModel instance) =>
@@ -22,5 +28,13 @@ Map<String, dynamic> _$UserModelToJson(_UserModel instance) =>
       'address': instance.address,
       'gpsLocation': instance.gpsLocation,
       'profilePictureUrl': instance.profilePictureUrl,
-      'role': instance.role,
+      'role': _$UserRoleEnumMap[instance.role]!,
+      'status': instance.status,
+      'createdAt': const TimestampConverter().toJson(instance.createdAt),
     };
+
+const _$UserRoleEnumMap = {
+  UserRole.customer: 'customer',
+  UserRole.rider: 'rider',
+  UserRole.admin: 'admin',
+};

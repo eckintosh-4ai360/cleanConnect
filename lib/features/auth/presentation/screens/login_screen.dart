@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../../domain/entities/user_entity.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/shared/widgets/eco_text_field.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
@@ -17,29 +18,29 @@ class LoginScreen extends HookConsumerWidget {
     final formKey = useMemoized(() => GlobalKey<FormState>());
 
     // Listen to Auth State changes for success/error feedback
-    ref.listen(authStateControllerProvider, (previous, next) {
-      next.when(
-        data: (user) {
-          if (user != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Welcome back, ${user.fullName}!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            context.go('/dashboard');
-          }
-        },
-        error: (err, _) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(err.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red,
-            ),
-          );
-        },
-        loading: () {},
-      );
+    ref.listen<AuthState>(authStateControllerProvider, (previous, next) {
+      if (next is AuthAuthenticated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome back, ${next.user.fullName}!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        if (next.user.role == UserRole.rider) {
+          context.go('/rider/home');
+        } else if (next.user.role == UserRole.admin) {
+          context.go('/admin/home');
+        } else {
+          context.go('/customer/home');
+        }
+      } else if (next is AuthError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     });
 
     final authState = ref.watch(authStateControllerProvider);
@@ -155,7 +156,35 @@ class LoginScreen extends HookConsumerWidget {
                         color: isDark ? Colors.grey : Colors.grey.shade600,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.lightbulb_outline, size: 16, color: theme.colorScheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Test Tip: Sign in with an email containing "rider" (e.g. rider@ecowaste.com) to access the Rider dashboard.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     EcoTextField(
                       labelText: 'Email / Rider ID',
                       hintText: 'Enter your email or ID',
@@ -285,6 +314,32 @@ class LoginScreen extends HookConsumerWidget {
                               ),
                               TextSpan(
                                 text: 'Register here',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () => context.push('/rider/register'),
+                        child: RichText(
+                          text: TextSpan(
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontSize: 14,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: "Want to work with us? ",
+                                style: TextStyle(color: Colors.grey.shade500),
+                              ),
+                              TextSpan(
+                                text: 'Apply as Rider',
                                 style: TextStyle(
                                   color: theme.colorScheme.primary,
                                   fontWeight: FontWeight.bold,

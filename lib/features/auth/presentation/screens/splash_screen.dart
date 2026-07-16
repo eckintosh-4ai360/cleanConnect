@@ -3,6 +3,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../providers/onboarding_provider.dart';
+import '../../domain/entities/user_entity.dart';
 
 class SplashScreen extends HookConsumerWidget {
   const SplashScreen({super.key});
@@ -14,26 +16,25 @@ class SplashScreen extends HookConsumerWidget {
       Future.delayed(const Duration(seconds: 3), () async {
         if (!context.mounted) return;
 
-        // Check if onboarding is completed
-        final onboardingCompleted = ref.read(onboardingControllerProvider);
-        if (!onboardingCompleted) {
-          context.go('/onboarding');
-          return;
-        }
-
         // Check if user is logged in
         final authState = ref.read(authStateControllerProvider);
-        authState.when(
-          data: (user) {
-            if (user != null) {
-              context.go('/dashboard');
-            } else {
-              context.go('/login');
-            }
-          },
-          error: (_, __) => context.go('/login'),
-          loading: () => context.go('/login'),
-        );
+        if (authState is AuthAuthenticated) {
+          final user = authState.user;
+          if (user.role == UserRole.rider) {
+            context.go('/rider/home');
+          } else if (user.role == UserRole.admin) {
+            context.go('/admin/home');
+          } else {
+            context.go('/customer/home');
+          }
+        } else {
+          final completed = ref.read(onboardingControllerProvider);
+          if (completed) {
+            context.go('/login');
+          } else {
+            context.go('/onboarding');
+          }
+        }
       });
       return null;
     }, []);

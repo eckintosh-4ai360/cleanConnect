@@ -1,3 +1,9 @@
+enum UserRole {
+  customer,
+  rider,
+  admin
+}
+
 class UserEntity {
   final String id;
   final String fullName;
@@ -6,7 +12,9 @@ class UserEntity {
   final String? address;
   final String? gpsLocation;
   final String? profilePictureUrl;
-  final String role; // 'customer' or 'rider' or 'admin'
+  final UserRole role;
+  final String status;
+  final DateTime createdAt;
 
   const UserEntity({
     required this.id,
@@ -17,5 +25,7 @@ class UserEntity {
     this.gpsLocation,
     this.profilePictureUrl,
     required this.role,
+    required this.status,
+    required this.createdAt,
   });
 }

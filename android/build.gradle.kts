@@ -19,6 +19,15 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    plugins.withId("com.android.application") {
+        plugins.apply("org.jetbrains.kotlin.android")
+    }
+    plugins.withId("com.android.library") {
+        plugins.apply("org.jetbrains.kotlin.android")
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

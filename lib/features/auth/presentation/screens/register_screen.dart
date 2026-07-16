@@ -27,30 +27,23 @@ class RegisterScreen extends HookConsumerWidget {
     final formKey = useMemoized(() => GlobalKey<FormState>());
 
     // Listen to registration status
-    ref.listen(authStateControllerProvider, (previous, next) {
-      next.when(
-        data: (user) {
-          if (user != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Registration successful! Directing to verification...'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            // Navigate to OTP page, passing the phone number as parameter
-            context.go('/otp?phone=${Uri.encodeComponent(phoneController.text)}');
-          }
-        },
-        error: (err, _) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(err.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red,
-            ),
-          );
-        },
-        loading: () {},
-      );
+    ref.listen<AuthState>(authStateControllerProvider, (previous, next) {
+      if (next is AuthAuthenticated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Registration successful! Welcome to EcoWaste.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/customer/home');
+      } else if (next is AuthError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     });
 
     final authState = ref.watch(authStateControllerProvider);

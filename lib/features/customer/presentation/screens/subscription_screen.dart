@@ -68,7 +68,7 @@ class SubscriptionScreen extends HookConsumerWidget {
         title: const Text('Choose Your Plan', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
-      bottomNavigationBar: const CustomerBottomNavBar(currentIndex: 3),
+      bottomNavigationBar: const CustomerBottomNavBar(currentIndex: -1),
       body: SafeArea(
         child: subState.when(
           data: (currentSub) => SingleChildScrollView(
