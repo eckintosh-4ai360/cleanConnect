@@ -15,10 +15,13 @@ void main() async {
     if (kIsWeb) {
       await Firebase.initializeApp(
         options: const FirebaseOptions(
-          apiKey: "dummy-api-key-cleanconnect",
-          appId: "1:1234567890:web:1234567890",
-          messagingSenderId: "1234567890",
-          projectId: "clean-connect-dummy",
+          apiKey: "AIzaSyCiXCzwhOVG97hb2zyE6Xw5-gHh7UUI0uU",
+          appId: "1:718487738924:web:f81cdc6ef768fcec590f89",
+          messagingSenderId: "718487738924",
+          projectId: "cleanconnect-5a323",
+          authDomain: "cleanconnect-5a323.firebaseapp.com",
+          storageBucket: "cleanconnect-5a323.firebasestorage.app",
+          measurementId: "G-HMD5MGE2N3",
         ),
       );
     } else {

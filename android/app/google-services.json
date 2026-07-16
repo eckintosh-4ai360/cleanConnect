@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "718487738924",
+    "project_id": "cleanconnect-5a323",
+    "storage_bucket": "cleanconnect-5a323.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:718487738924:android:13622e7eefc6994e590f89",
+        "android_client_info": {
+          "package_name": "com.ecowaste.cleanconnect.clean_connect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBz7SW7jM3cU1o6fJtQBDUMPBIqNLbnaYM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:718487738924:android:0a09cd470362d46c590f89",
+        "android_client_info": {
+          "package_name": "eckintosh.cleanconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBz7SW7jM3cU1o6fJtQBDUMPBIqNLbnaYM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

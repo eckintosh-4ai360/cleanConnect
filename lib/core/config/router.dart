@@ -13,6 +13,7 @@ import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/customer/presentation/screens/customer_home_page.dart';
 import '../../features/rider/presentation/screens/rider_home_page.dart';
+import '../../features/rider/presentation/screens/rider_register_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard.dart';
 
 part 'router.g.dart';
@@ -58,6 +59,7 @@ GoRouter router(Ref ref) {
           loc == '/register' ||
           loc == '/forgot-password' ||
           loc == '/onboarding' ||
+          loc == '/rider/register' ||
           loc == '/';
 
       if (!isLoggedIn) {
@@ -111,6 +113,10 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/rider/register',
+        builder: (context, state) => const RiderRegisterScreen(),
       ),
       GoRoute(
         path: '/customer/home',

@@ -14,6 +14,7 @@ abstract class AuthRepository {
     required String address,
     required String gpsLocation,
     String? profilePicturePath,
+    UserRole role = UserRole.customer,
   });
 
   Future<void> sendPasswordResetEmail(String email);

@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
+import '../../../auth/domain/entities/user_entity.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 /// 3-step rider onboarding registration flow
-class RiderRegisterScreen extends StatefulWidget {
+class RiderRegisterScreen extends ConsumerStatefulWidget {
   const RiderRegisterScreen({super.key});
 
   @override
-  State<RiderRegisterScreen> createState() => _RiderRegisterScreenState();
+  ConsumerState<RiderRegisterScreen> createState() => _RiderRegisterScreenState();
 }
 
-class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
+class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
   int _currentStep = 0;
   final _pageController = PageController();
 
@@ -18,6 +21,7 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
 
   // Step 2 – Credentials & Vehicle
@@ -32,6 +36,20 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
   bool _photoUploaded = false;
 
   bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _passwordCtrl.dispose();
+    _addressCtrl.dispose();
+    _licenseCtrl.dispose();
+    _nationalIdCtrl.dispose();
+    _vehicleRegCtrl.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
 
   void _nextStep() {
     if (_currentStep < 2) {
@@ -52,11 +70,66 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
   }
 
   Future<void> _submit() async {
+    if (_nameCtrl.text.trim().isEmpty ||
+        _emailCtrl.text.trim().isEmpty ||
+        _phoneCtrl.text.trim().isEmpty ||
+        _passwordCtrl.text.isEmpty ||
+        _addressCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill out all fields in Step 1.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
-      setState(() => _isLoading = false);
-      context.go('/rider/dashboard');
+    try {
+      await ref.read(authStateControllerProvider.notifier).register(
+            fullName: _nameCtrl.text.trim(),
+            email: _emailCtrl.text.trim(),
+            phoneNumber: _phoneCtrl.text.trim(),
+            password: _passwordCtrl.text,
+            address: _addressCtrl.text.trim(),
+            gpsLocation: '5.6037° N, 0.1870° W',
+            role: UserRole.rider,
+          );
+
+      final authState = ref.read(authStateControllerProvider);
+      if (authState is AuthAuthenticated) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rider registration successful!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.go('/rider/home');
+        }
+      } else if (authState is AuthError) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(authState.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -133,6 +206,7 @@ class _RiderRegisterScreenState extends State<RiderRegisterScreen> {
                     nameCtrl: _nameCtrl,
                     emailCtrl: _emailCtrl,
                     phoneCtrl: _phoneCtrl,
+                    passwordCtrl: _passwordCtrl,
                     addressCtrl: _addressCtrl),
                 _Step2CredentialsVehicle(
                     licenseCtrl: _licenseCtrl,
@@ -187,12 +261,14 @@ class _Step1PersonalInfo extends StatelessWidget {
   final TextEditingController nameCtrl;
   final TextEditingController emailCtrl;
   final TextEditingController phoneCtrl;
+  final TextEditingController passwordCtrl;
   final TextEditingController addressCtrl;
 
   const _Step1PersonalInfo({
     required this.nameCtrl,
     required this.emailCtrl,
     required this.phoneCtrl,
+    required this.passwordCtrl,
     required this.addressCtrl,
   });
 
@@ -271,6 +347,19 @@ class _Step1PersonalInfo extends StatelessWidget {
             decoration: InputDecoration(
               hintText: '+1 (555) 000-0000',
               prefixIcon: const Icon(Icons.phone_outlined),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _FormLabel('Password'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: passwordCtrl,
+            obscureText: true,
+            decoration: InputDecoration(
+              hintText: '••••••••',
+              prefixIcon: const Icon(Icons.lock_outline),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
