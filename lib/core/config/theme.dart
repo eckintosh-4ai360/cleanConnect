@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class EcoTheme {
   // Brand Colors
@@ -24,6 +25,7 @@ class EcoTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: GoogleFonts.sora().fontFamily,
       colorScheme: const ColorScheme(
         brightness: Brightness.light,
         primary: primaryColor,
@@ -116,6 +118,7 @@ class EcoTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: GoogleFonts.sora().fontFamily,
       colorScheme: const ColorScheme(
         brightness: Brightness.dark,
         primary: primaryColor,

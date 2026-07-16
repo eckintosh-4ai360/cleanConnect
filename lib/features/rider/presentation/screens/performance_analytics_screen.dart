@@ -20,13 +20,13 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
-        title: Text('Performance',
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w900)),
-        actions: const [
-          ThemeToggleButton(),
-          SizedBox(width: 12),
-        ],
+        title: Text(
+          'Performance',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        actions: const [ThemeToggleButton(), SizedBox(width: 12)],
       ),
       body: RefreshIndicator(
         color: theme.colorScheme.primary,
@@ -41,7 +41,6 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
             data: (perf) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Efficiency Score Hero ──────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -71,10 +70,10 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                             child: CircularProgressIndicator(
                               value: perf.efficiencyScore / 100,
                               strokeWidth: 10,
-                              backgroundColor:
-                                  Colors.white.withOpacity(0.5),
+                              backgroundColor: Colors.white.withOpacity(0.5),
                               valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFFF0A500)),
+                                Color(0xFFF0A500),
+                              ),
                             ),
                           ),
                           Column(
@@ -90,8 +89,9 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                               const Text(
                                 'Score',
                                 style: TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF6E685E)),
+                                  fontSize: 11,
+                                  color: Color(0xFF6E685E),
+                                ),
                               ),
                             ],
                           ),
@@ -117,14 +117,17 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                             Text(
                               '${perf.onTimeDeliveryRate * 100 ~/ 1}% on-time delivery',
                               style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF6E685E),
-                                  fontWeight: FontWeight.w500),
+                                fontSize: 13,
+                                color: Color(0xFF6E685E),
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 5),
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.7),
                                 borderRadius: BorderRadius.circular(10),
@@ -133,12 +136,13 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                                 perf.efficiencyScore >= 90
                                     ? '🏆 Top Performer'
                                     : perf.efficiencyScore >= 75
-                                        ? '⭐ Good Standing'
-                                        : '📈 Improving',
+                                    ? '⭐ Good Standing'
+                                    : '📈 Improving',
                                 style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF2E2A24)),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF2E2A24),
+                                ),
                               ),
                             ),
                           ],
@@ -150,9 +154,12 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
 
                 // ── This Week ─────────────────────────────────────────────
-                Text('This Week',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'This Week',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -187,8 +194,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _MetricCard(
                         label: 'Week Earnings',
-                        value:
-                            '\$${perf.earningsThisWeek.toStringAsFixed(2)}',
+                        value: '\$${perf.earningsThisWeek.toStringAsFixed(2)}',
                         unit: '',
                         icon: Icons.payments_outlined,
                         color: const Color(0xFFFFF8E1),
@@ -200,8 +206,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _MetricCard(
                         label: 'Month Earnings',
-                        value:
-                            '\$${perf.earningsThisMonth.toStringAsFixed(2)}',
+                        value: '\$${perf.earningsThisMonth.toStringAsFixed(2)}',
                         unit: '',
                         icon: Icons.account_balance_wallet_outlined,
                         color: const Color(0xFFF3E5F5),
@@ -214,33 +219,38 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
 
                 // ── Weekly Score Chart ─────────────────────────────────
-                Text('Weekly Score Trend',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Weekly Score Trend',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? theme.cardTheme.color
-                        : Colors.white,
+                    color: isDark ? theme.cardTheme.color : Colors.white,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.grey.shade100),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4)),
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Last 7 Days',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w500)),
+                      const Text(
+                        'Last 7 Days',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       SizedBox(
                         height: 120,
@@ -250,9 +260,15 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-                            .map((d) => Text(d,
+                            .map(
+                              (d) => Text(
+                                d,
                                 style: const TextStyle(
-                                    fontSize: 11, color: Colors.grey)))
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            )
                             .toList(),
                       ),
                     ],
@@ -261,9 +277,12 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
 
                 // ── All-Time Stats ────────────────────────────────────────
-                Text('All Time',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'All Time',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 profileAsync.when(
                   data: (rider) => Column(
@@ -287,8 +306,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                       const SizedBox(height: 10),
                       _AllTimeStat(
                         label: 'Customer Rating',
-                        value:
-                            '${rider.rating.toStringAsFixed(1)} / 5.0 ★',
+                        value: '${rider.rating.toStringAsFixed(1)} / 5.0 ★',
                         icon: Icons.star_outline,
                         iconColor: Colors.amber.shade700,
                         isDark: isDark,
@@ -302,9 +320,12 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
 
                 // ── Weekly Summary Table ──────────────────────────────────
-                Text('Weekly Summary',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Weekly Summary',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Container(
                   decoration: BoxDecoration(
@@ -315,25 +336,24 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                   child: Column(
                     children: [
                       _TableRow(
-                          label: 'Complete Rate',
-                          value:
-                              '${perf.onTimeDeliveryRate * 100 ~/ 1}%',
-                          isHeader: true),
-                      _TableRow(
-                          label: 'Missed Stops',
-                          value: '4.8 kg'),
-                      _TableRow(
-                          label: 'Top Locations',
-                          value: '11'),
+                        label: 'Complete Rate',
+                        value: '${perf.onTimeDeliveryRate * 100 ~/ 1}%',
+                        isHeader: true,
+                      ),
+                      _TableRow(label: 'Missed Stops', value: '4.8 kg'),
+                      _TableRow(label: 'Top Locations', value: '11'),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
 
                 // ── Recent Ratings ─────────────────────────────────────
-                Text('Monthly Impact',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Monthly Impact',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -371,8 +391,11 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
               ],
             ),
             loading: () => const Center(
-                child:
-                    Padding(padding: EdgeInsets.symmetric(vertical: 60), child: CircularProgressIndicator())),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 60),
+                child: CircularProgressIndicator(),
+              ),
+            ),
             error: (_, __) =>
                 const Center(child: Text('Failed to load stats.')),
           ),
@@ -397,9 +420,10 @@ class _RatingStar extends StatelessWidget {
         Text(
           '$rating stars',
           style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: Color(0xFF2E2A24)),
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: Color(0xFF2E2A24),
+          ),
         ),
       ],
     );
@@ -449,15 +473,19 @@ class _MetricCard extends StatelessWidget {
             child: Icon(icon, color: iconColor, size: 20),
           ),
           const SizedBox(height: 12),
-          Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w900, fontSize: 18)),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          ),
           if (unit.isNotEmpty)
-            Text(unit,
-                style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          Text(label,
-              style:
-                  TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+            Text(
+              unit,
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
         ],
       ),
     );
@@ -481,13 +509,16 @@ class _BarChart extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Text('${score.toInt()}',
-                    style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: isLast
-                            ? const Color(0xFFF0A500)
-                            : Colors.grey.shade400)),
+                Text(
+                  '${score.toInt()}',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: isLast
+                        ? const Color(0xFFF0A500)
+                        : Colors.grey.shade400,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
@@ -536,7 +567,8 @@ class _AllTimeStat extends StatelessWidget {
         color: isDark ? theme.cardTheme.color : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+        ),
       ),
       child: Row(
         children: [
@@ -550,12 +582,15 @@ class _AllTimeStat extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-              child: Text(label,
-                  style: const TextStyle(
-                      fontSize: 14, color: Colors.grey))),
-          Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w900, fontSize: 15)),
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+          ),
         ],
       ),
     );
@@ -566,8 +601,11 @@ class _TableRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isHeader;
-  const _TableRow(
-      {required this.label, required this.value, this.isHeader = false});
+  const _TableRow({
+    required this.label,
+    required this.value,
+    this.isHeader = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -576,19 +614,22 @@ class _TableRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                  fontWeight:
-                      isHeader ? FontWeight.bold : FontWeight.normal)),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: isHeader
-                      ? const Color(0xFFF0A500)
-                      : null)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600,
+              fontWeight: isHeader ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: isHeader ? const Color(0xFFF0A500) : null,
+            ),
+          ),
         ],
       ),
     );
@@ -619,22 +660,29 @@ class _ImpactCard extends StatelessWidget {
         color: isDark ? theme.cardTheme.color : color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: isDark ? Colors.grey.shade800 : color.withOpacity(0.2)),
+          color: isDark ? Colors.grey.shade800 : color.withOpacity(0.2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value,
-              style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 15,
-                  color: color)),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+              color: color,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.bold)),
-          Text(sublabel,
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            sublabel,
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+          ),
         ],
       ),
     );

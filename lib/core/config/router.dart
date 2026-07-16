@@ -14,6 +14,12 @@ import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/customer/presentation/screens/customer_home_page.dart';
 import '../../features/rider/presentation/screens/rider_home_page.dart';
 import '../../features/rider/presentation/screens/rider_register_screen.dart';
+import '../../features/rider/presentation/screens/rider_dashboard_screen.dart';
+import '../../features/rider/presentation/screens/route_optimization_screen.dart';
+import '../../features/rider/presentation/screens/rider_collection_screen.dart';
+import '../../features/rider/presentation/screens/performance_analytics_screen.dart';
+import '../../features/rider/presentation/screens/rider_profile_screen.dart';
+import '../../features/rider/presentation/screens/rider_notifications_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard.dart';
 
 part 'router.g.dart';
@@ -124,7 +130,31 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: '/rider/home',
-        builder: (context, state) => const RiderHomePage(),
+        builder: (context, state) => const RiderDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/rider/dashboard',
+        builder: (context, state) => const RiderDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/rider/route',
+        builder: (context, state) => const RouteOptimizationScreen(),
+      ),
+      GoRoute(
+        path: '/rider/collection',
+        builder: (context, state) => const RiderCollectionScreen(),
+      ),
+      GoRoute(
+        path: '/rider/performance',
+        builder: (context, state) => const PerformanceAnalyticsScreen(),
+      ),
+      GoRoute(
+        path: '/rider/profile',
+        builder: (context, state) => const RiderProfileScreen(),
+      ),
+      GoRoute(
+        path: '/rider/notifications',
+        builder: (context, state) => const RiderNotificationsScreen(),
       ),
       GoRoute(
         path: '/admin/home',
