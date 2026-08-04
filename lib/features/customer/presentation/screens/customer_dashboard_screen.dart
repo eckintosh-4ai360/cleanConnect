@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
@@ -13,6 +16,14 @@ class CustomerDashboardScreen extends ConsumerWidget {
     final binState = ref.watch(customerBinsProvider);
     final subState = ref.watch(customerSubscriptionProvider);
 
+    final authState = ref.watch(authStateControllerProvider);
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    final displayName = user?.fullName ?? currentUser?.displayName ?? 'Customer';
+    final photoUrl = currentUser?.photoURL ?? user?.photoUrl;
+    final firstName = displayName.split(' ').first;
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -22,6 +33,7 @@ class CustomerDashboardScreen extends ConsumerWidget {
       bottomNavigationBar: const CustomerBottomNavBar(currentIndex: 0),
       body: SafeArea(
         child: RefreshIndicator(
+          color: theme.colorScheme.primary,
           onRefresh: () async {
             ref.invalidate(customerBinsProvider);
             ref.invalidate(customerSubscriptionProvider);
@@ -39,19 +51,33 @@ class CustomerDashboardScreen extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundImage: const NetworkImage(
-                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+                        GestureDetector(
+                          onTap: () => context.push('/customer/profile'),
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: theme.colorScheme.primaryContainer,
+                            backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                                ? (photoUrl.startsWith('data:image')
+                                    ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
+                                    : NetworkImage(photoUrl))
+                                : null,
+                            child: photoUrl == null || photoUrl.isEmpty
+                                ? Text(
+                                    displayName.isNotEmpty ? displayName[0].toUpperCase() : 'C',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  )
+                                : null,
                           ),
-                          backgroundColor: theme.colorScheme.primaryContainer,
                         ),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Hello, Mark',
+                              'Hello, $firstName',
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w900,
                               ),

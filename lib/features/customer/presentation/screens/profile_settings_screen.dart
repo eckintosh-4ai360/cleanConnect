@@ -1,7 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../core/services/profile_image_picker_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
@@ -63,25 +67,148 @@ class ProfileSettingsScreen extends HookConsumerWidget {
           padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 24.0, bottom: 100.0),
           child: Column(
             children: [
-              // Avatar details
-              const CircleAvatar(
-                radius: 48,
-                backgroundImage: NetworkImage(
-                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+    final authState = ref.watch(authStateControllerProvider);
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final photoUrlState = useState<String?>(currentUser?.photoUrl);
+    final isUploading = useState(false);
+
+    final displayName = user?.fullName ?? currentUser?.displayName ?? 'Mark Aggrey';
+    final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@ecowaste.com';
+    final currentPhotoUrl = photoUrlState.value ?? currentUser?.photoUrl;
+
+    Future<void> showImagePickerModal() async {
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Update Profile Photo',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
+                title: const Text('Take a Photo'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  isUploading.value = true;
+                  try {
+                    final newUrl = await ProfileImagePickerService.pickAndUploadProfileImage(
+                      source: ImageSource.camera,
+                    );
+                    if (newUrl != null) {
+                      photoUrlState.value = newUrl;
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  } finally {
+                    isUploading.value = false;
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
+                title: const Text('Choose from Gallery'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  isUploading.value = true;
+                  try {
+                    final newUrl = await ProfileImagePickerService.pickAndUploadProfileImage(
+                      source: ImageSource.gallery,
+                    );
+                    if (newUrl != null) {
+                      photoUrlState.value = newUrl;
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  } finally {
+                    isUploading.value = false;
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      extendBody: true,
+      bottomNavigationBar: const CustomerBottomNavBar(currentIndex: 3),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 24.0, bottom: 100.0),
+          child: Column(
+            children: [
+              // Avatar details with interactive camera picker
+              GestureDetector(
+                onTap: showImagePickerModal,
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CircleAvatar(
+                      radius: 48,
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      backgroundImage: currentPhotoUrl != null && currentPhotoUrl.isNotEmpty
+                          ? (currentPhotoUrl.startsWith('data:image')
+                              ? MemoryImage(base64Decode(currentPhotoUrl.split(',').last)) as ImageProvider
+                              : NetworkImage(currentPhotoUrl))
+                          : null,
+                      child: currentPhotoUrl == null || currentPhotoUrl.isEmpty
+                          ? Text(
+                              displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
+                            )
+                          : null,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF0A500),
+                        shape: BoxShape.circle,
+                      ),
+                      child: isUploading.value
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Mark Aggrey',
-                style: TextStyle(
+              Text(
+                displayName,
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A1A),
                 ),
               ),
-              const Text(
-                'mark.aggrey@ecowaste.com',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
+              Text(
+                displayEmail,
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
               ),
               const SizedBox(height: 32),
 

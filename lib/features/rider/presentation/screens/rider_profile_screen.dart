@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../core/services/profile_image_picker_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/rider_nav_bar.dart';
@@ -13,6 +16,68 @@ class RiderProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(riderProfileProvider);
     final theme = Theme.of(context);
+
+    Future<void> showImagePickerModal(String riderId) async {
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Update Rider Photo',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
+                title: const Text('Take a Photo'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await ProfileImagePickerService.pickAndUploadProfileImage(
+                      source: ImageSource.camera,
+                      customUid: riderId,
+                    );
+                    ref.invalidate(riderProfileProvider);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
+                title: const Text('Choose from Gallery'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await ProfileImagePickerService.pickAndUploadProfileImage(
+                      source: ImageSource.gallery,
+                      customUid: riderId,
+                    );
+                    ref.invalidate(riderProfileProvider);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
@@ -55,36 +120,53 @@ class RiderProfileScreen extends ConsumerWidget {
                   ),
                   child: Column(
                     children: [
-                      Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundImage: NetworkImage(
-                                rider.profilePhotoUrl ??
-                                    'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200'),
-                            backgroundColor:
-                                theme.colorScheme.primaryContainer,
-                          ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      blurRadius: 6)
-                                ],
-                              ),
-                              child: const Icon(Icons.camera_alt,
-                                  size: 16,
-                                  color: Color(0xFFF0A500)),
+                      GestureDetector(
+                        onTap: () => showImagePickerModal(rider.id),
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 50,
+                              backgroundColor: theme.colorScheme.primaryContainer,
+                              backgroundImage: rider.profilePhotoUrl != null && rider.profilePhotoUrl!.isNotEmpty
+                                  ? (rider.profilePhotoUrl!.startsWith('data:image')
+                                      ? MemoryImage(base64Decode(rider.profilePhotoUrl!.split(',').last)) as ImageProvider
+                                      : NetworkImage(rider.profilePhotoUrl!))
+                                  : null,
+                              child: rider.profilePhotoUrl == null || rider.profilePhotoUrl!.isEmpty
+                                  ? Text(
+                                      rider.fullName.isNotEmpty ? rider.fullName[0].toUpperCase() : 'R',
+                                      style: TextStyle(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                          ),
-                        ],
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF0A500),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black26,
+                                      blurRadius: 6,
+                                    )
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Text(rider.fullName,

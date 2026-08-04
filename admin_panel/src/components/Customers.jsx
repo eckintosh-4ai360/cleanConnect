@@ -184,6 +184,34 @@ export default function Customers() {
     }
   };
 
+  const handleUploadCustomerPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedCustomer) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      try {
+        await updateDoc(doc(db, 'customers', selectedCustomer.id), {
+          photoUrl: dataUrl,
+          profilePhotoUrl: dataUrl,
+          updatedAt: serverTimestamp(),
+        });
+        try {
+          await updateDoc(doc(db, 'users', selectedCustomer.id), {
+            photoUrl: dataUrl,
+            profilePhotoUrl: dataUrl,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (_) {}
+        alert('Customer photo updated successfully!');
+      } catch (err) {
+        alert('Failed to update photo: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const statusBadgeClass = (status) => {
     if (status === 'active') return 'badge-active';
     if (status === 'suspended') return 'badge-defaulter';
@@ -287,11 +315,23 @@ export default function Customers() {
         {selectedCustomer && (
           <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <img
-                src={selectedCustomer.photoUrl ?? `https://api.dicebear.com/7.x/initials/svg?seed=${selectedCustomer.displayName}`}
-                alt={selectedCustomer.displayName}
-                style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }}
-              />
+              <div style={{ position: 'relative', width: '52px', height: '52px', cursor: 'pointer' }} onClick={() => document.getElementById(`cust-photo-input-${selectedCustomer.id}`)?.click()}>
+                <img
+                  src={selectedCustomer.photoUrl || selectedCustomer.profilePhotoUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${selectedCustomer.displayName}`}
+                  alt={selectedCustomer.displayName}
+                  style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-primary)' }}
+                />
+                <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--color-primary)', borderRadius: '50%', padding: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                </div>
+                <input
+                  id={`cust-photo-input-${selectedCustomer.id}`}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleUploadCustomerPhoto}
+                />
+              </div>
               <div>
                 <h4 style={{ fontSize: '15px', fontWeight: '800' }}>{selectedCustomer.displayName ?? selectedCustomer.fullName}</h4>
                 <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>

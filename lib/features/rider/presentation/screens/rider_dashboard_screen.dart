@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,16 +42,29 @@ class RiderDashboardScreen extends ConsumerWidget {
                     profileAsync.when(
                       data: (rider) {
                         if (rider == null) return const Text('EcoWaste Rider');
+                        final photoUrl = rider.profilePhotoUrl;
                         return Row(
                           children: [
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundImage: NetworkImage(
-                                rider.profilePhotoUrl ??
-                                    'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
+                            GestureDetector(
+                              onTap: () => context.push('/rider/profile'),
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: theme.colorScheme.primaryContainer,
+                                backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                                    ? (photoUrl.startsWith('data:image')
+                                        ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
+                                        : NetworkImage(photoUrl))
+                                    : null,
+                                child: photoUrl == null || photoUrl.isEmpty
+                                    ? Text(
+                                        rider.fullName.isNotEmpty ? rider.fullName[0].toUpperCase() : 'R',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      )
+                                    : null,
                               ),
-                              backgroundColor:
-                                  theme.colorScheme.primaryContainer,
                             ),
                             const SizedBox(width: 12),
                             Column(

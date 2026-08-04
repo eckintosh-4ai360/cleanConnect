@@ -134,6 +134,34 @@ export default function Riders() {
     }
   };
 
+  const handleUploadRiderPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedRider) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      try {
+        await updateDoc(doc(db, 'riders', selectedRider.id), {
+          photoUrl: dataUrl,
+          profilePhotoUrl: dataUrl,
+          updatedAt: serverTimestamp(),
+        });
+        try {
+          await updateDoc(doc(db, 'users', selectedRider.id), {
+            photoUrl: dataUrl,
+            profilePhotoUrl: dataUrl,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (_) {}
+        alert('Rider photo updated successfully!');
+      } catch (err) {
+        alert('Failed to update photo: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const activeCount = riders.filter(r => r.status === 'active').length;
 
   // Map positions for live riders (deterministic from index)
@@ -261,7 +289,30 @@ export default function Riders() {
 
           {/* Selected Rider Details */}
           {selectedRider && (
-            <div style={{ padding: '16px', background: 'var(--bg-app)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+            <div style={{ padding: '16px', background: 'var(--bg-app)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ position: 'relative', width: '48px', height: '48px', cursor: 'pointer' }} onClick={() => document.getElementById(`rider-photo-input-${selectedRider.id}`)?.click()}>
+                  <img
+                    src={selectedRider.photoUrl || selectedRider.profilePhotoUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${selectedRider.fullName}`}
+                    alt={selectedRider.fullName}
+                    style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-primary)' }}
+                  />
+                  <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--color-primary)', borderRadius: '50%', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  </div>
+                  <input
+                    id={`rider-photo-input-${selectedRider.id}`}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleUploadRiderPhoto}
+                  />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: '14px', fontWeight: '800' }}>{selectedRider.fullName}</h4>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{selectedRider.email || '—'}</p>
+                </div>
+              </div>
               {[
                 { label: 'Phone Number', value: selectedRider.phoneNumber || '—' },
                 { label: 'Vehicle', value: selectedRider.vehicleType || '—' },
