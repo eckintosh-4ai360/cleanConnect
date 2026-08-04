@@ -21,7 +21,7 @@ class CustomerDashboardScreen extends ConsumerWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     final displayName = user?.fullName ?? currentUser?.displayName ?? 'Customer';
-    final photoUrl = currentUser?.photoURL ?? user?.photoUrl;
+    final photoUrl = currentUser?.photoURL ?? user?.profilePictureUrl;
     final firstName = displayName.split(' ').first;
 
     final theme = Theme.of(context);

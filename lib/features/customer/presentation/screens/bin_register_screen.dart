@@ -29,7 +29,6 @@ class BinRegisterScreen extends HookConsumerWidget {
     // Step 2 inputs state
     final selectedFrequency = useState('Weekly'); // 'Weekly', 'Bi-weekly', 'Monthly'
     final preferredDays = useState<List<String>>(['Monday']);
-    final startDate = useState<DateTime>(DateTime.now().add(const Duration(days: 1)));
 
     final formKey1 = useMemoized(() => GlobalKey<FormState>());
 

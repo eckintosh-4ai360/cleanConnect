@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
@@ -18,6 +17,7 @@ class SupportHomeScreen extends HookConsumerWidget {
       void listener() {
         searchQuery.value = searchController.text.trim().toLowerCase();
       }
+
       searchController.addListener(listener);
       return () => searchController.removeListener(listener);
     }, []);
@@ -25,22 +25,26 @@ class SupportHomeScreen extends HookConsumerWidget {
     final faqs = [
       _FaqData(
         question: 'How do I change my pickup schedule?',
-        answer: 'You can change your collection schedule by navigating to Bins -> Select Bin -> Edit Schedule, or by updating your active subscription plan.',
+        answer:
+            'You can change your collection schedule by navigating to Bins -> Select Bin -> Edit Schedule, or by updating your active subscription plan.',
         category: 'pickup',
       ),
       _FaqData(
         question: 'What are the available bin sizes?',
-        answer: 'We offer 120L (Small), 240L (Standard/Large), and 360L (Extra Large) bins for General, Recycling, and Organic waste.',
+        answer:
+            'We offer 120L (Small), 240L (Standard/Large), and 360L (Extra Large) bins for General, Recycling, and Organic waste.',
         category: 'bins',
       ),
       _FaqData(
         question: 'How do I pay my outstanding balance?',
-        answer: 'Outstanding balances are visible on your Dashboard. You can pay instantly using Credit/Debit Card or Mobile Money.',
+        answer:
+            'Outstanding balances are visible on your Dashboard. You can pay instantly using Credit/Debit Card or Mobile Money.',
         category: 'payments',
       ),
       _FaqData(
         question: 'What items can be recycled?',
-        answer: 'Plastics (PET, HDPE), paper, clean cardboard, glass bottles, and aluminum cans are accepted in the Recycling bin.',
+        answer:
+            'Plastics (PET, HDPE), paper, clean cardboard, glass bottles, and aluminum cans are accepted in the Recycling bin.',
         category: 'recycling',
       ),
     ];
@@ -75,7 +79,9 @@ class SupportHomeScreen extends HookConsumerWidget {
               children: [
                 Text(
                   'Report: $categoryName',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -95,14 +101,18 @@ class SupportHomeScreen extends HookConsumerWidget {
                   text: 'Submit Report',
                   onPressed: () {
                     if (problemNoteController.text.trim().isNotEmpty) {
-                      ref.read(customerHistoryProvider.notifier).submitProblem(
+                      ref
+                          .read(customerHistoryProvider.notifier)
+                          .submitProblem(
                             category: categoryName,
                             description: problemNoteController.text.trim(),
                           );
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Report submitted successfully! Ticket added to history.'),
+                          content: Text(
+                            'Report submitted successfully! Ticket added to history.',
+                          ),
                           backgroundColor: Colors.green,
                         ),
                       );
@@ -134,9 +144,7 @@ class SupportHomeScreen extends HookConsumerWidget {
       final Uri uri = Uri(
         scheme: 'mailto',
         path: 'support@ecowaste.com',
-        queryParameters: {
-          'subject': 'EcoWaste Customer Support Request',
-        },
+        queryParameters: {'subject': 'EcoWaste Customer Support Request'},
       );
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
@@ -148,12 +156,14 @@ class SupportHomeScreen extends HookConsumerWidget {
     }
 
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Support', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Support',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -169,38 +179,69 @@ class SupportHomeScreen extends HookConsumerWidget {
                   hintText: 'Search for help...',
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: searchQuery.value.isNotEmpty
-                      ? IconButton(icon: const Icon(Icons.clear), onPressed: () => searchController.clear())
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => searchController.clear(),
+                        )
                       : null,
                 ),
               ),
               const SizedBox(height: 24),
 
-              const Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Frequently Asked Questions',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // FAQs expandable list
               if (filteredFaqs.isEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20.0),
-                  child: Text('No FAQs match your search query.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  child: Text(
+                    'No FAQs match your search query.',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
                 ),
               ] else ...[
-                ...filteredFaqs.map((faq) => Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ExpansionTile(
-                        title: Text(faq.question, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0),
-                            child: Text(faq.answer, style: const TextStyle(fontSize: 13, height: 1.4, color: Colors.grey)),
-                          ),
-                        ],
+                ...filteredFaqs.map(
+                  (faq) => Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ExpansionTile(
+                      title: Text(
+                        faq.question,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
-                    )),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            left: 16.0,
+                            right: 16.0,
+                            bottom: 16.0,
+                          ),
+                          child: Text(
+                            faq.answer,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.4,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
 
               const SizedBox(height: 24),
-              const Text('Report a Problem', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Report a Problem',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // Missed collection, damaged bin options
@@ -221,7 +262,10 @@ class SupportHomeScreen extends HookConsumerWidget {
               ),
 
               const SizedBox(height: 32),
-              const Text('Contact Support Channels', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Contact Support Channels',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // Contact cards (Call Us & Email)
@@ -280,9 +324,19 @@ class _ReportTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: onTap,
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        trailing: Icon(Icons.arrow_forward_ios, size: 14, color: theme.colorScheme.primary),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 11, color: Colors.grey),
+        ),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 14,
+          color: theme.colorScheme.primary,
+        ),
       ),
     );
   }
@@ -333,8 +387,17 @@ class _ContactCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     detail,

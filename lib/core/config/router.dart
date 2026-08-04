@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../features/auth/domain/entities/user_entity.dart';
@@ -30,6 +29,7 @@ import '../../features/rider/presentation/screens/rider_profile_screen.dart';
 import '../../features/rider/presentation/screens/rider_notifications_screen.dart';
 import '../../features/rider/presentation/screens/available_pickups_screen.dart';
 import '../../features/rider/presentation/screens/rider_navigation_screen.dart';
+import '../../features/rider/domain/entities/pickup_request_entity.dart';
 import '../../features/admin/presentation/screens/admin_dashboard.dart';
 
 part 'router.g.dart';

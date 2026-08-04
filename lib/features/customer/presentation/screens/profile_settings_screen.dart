@@ -51,31 +51,22 @@ class ProfileSettingsScreen extends HookConsumerWidget {
 
     final theme = Theme.of(context);
 
+    final authState = ref.watch(authStateControllerProvider);
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final photoUrlState = useState<String?>(currentUser?.photoURL);
+    final isUploading = useState(false);
+
+    final displayName = user?.fullName ?? currentUser?.displayName ?? 'Mark Aggrey';
+    final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@ecowaste.com';
+    final currentPhotoUrl = photoUrlState.value ?? currentUser?.photoURL;
+
     void handleLogout() async {
       await ref.read(authStateControllerProvider.notifier).logout();
       if (context.mounted) {
         context.go('/login');
       }
     }
-
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      extendBody: true,
-      bottomNavigationBar: const CustomerBottomNavBar(currentIndex: 3),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 24.0, bottom: 100.0),
-          child: Column(
-            children: [
-    final authState = ref.watch(authStateControllerProvider);
-    final user = authState is AuthAuthenticated ? authState.user : null;
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final photoUrlState = useState<String?>(currentUser?.photoUrl);
-    final isUploading = useState(false);
-
-    final displayName = user?.fullName ?? currentUser?.displayName ?? 'Mark Aggrey';
-    final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@ecowaste.com';
-    final currentPhotoUrl = photoUrlState.value ?? currentUser?.photoUrl;
 
     Future<void> showImagePickerModal() async {
       showModalBottomSheet(
@@ -146,6 +137,7 @@ class ProfileSettingsScreen extends HookConsumerWidget {
         ),
       );
     }
+
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

@@ -30,6 +30,24 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
 
+  // Admin profile — kept in sync with Settings page via localStorage
+  const [adminPhoto, setAdminPhoto] = useState(
+    () => localStorage.getItem('adminPhoto') || null
+  );
+  const [adminName, setAdminName] = useState(
+    () => localStorage.getItem('adminName') || 'Super Admin'
+  );
+
+  // Listen for storage changes from Settings page
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === 'adminPhoto') setAdminPhoto(e.newValue);
+      if (e.key === 'adminName') setAdminName(e.newValue);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   // Synchronize CSS custom data theme values and persist preference
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -424,9 +442,19 @@ export default function App() {
             </div>
 
             {/* Profile Info */}
-            <div className="user-profile-badge">
-              <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100" alt="Super Admin Profile" className="user-avatar" />
-              <span className="user-name">Admin</span>
+            <div className="user-profile-badge" title="Edit profile in Settings">
+              {adminPhoto ? (
+                <img src={adminPhoto} alt="Admin" className="user-avatar" style={{ objectFit: 'cover' }} />
+              ) : (
+                <div className="user-avatar" style={{
+                  background: 'linear-gradient(135deg, var(--color-primary), var(--color-info))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '16px', fontWeight: '900', color: 'white',
+                }}>
+                  {adminName[0]?.toUpperCase() || 'A'}
+                </div>
+              )}
+              <span className="user-name">{adminName.split(' ')[0]}</span>
             </div>
           </div>
         </header>
