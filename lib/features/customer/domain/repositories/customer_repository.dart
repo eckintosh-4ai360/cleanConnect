@@ -1,6 +1,7 @@
 import '../entities/customer_entities.dart';
 
 abstract class CustomerRepository {
+  Stream<List<BinEntity>> watchBins();
   Future<List<BinEntity>> getBins();
 
   Future<BinEntity> registerBin({
@@ -13,6 +14,7 @@ abstract class CustomerRepository {
     String? photoPath,
   });
 
+  Stream<List<PickupRequestEntity>> watchPickupRequests();
   Future<List<PickupRequestEntity>> getPickupRequests();
 
   Future<PickupRequestEntity> schedulePickup({
@@ -23,8 +25,10 @@ abstract class CustomerRepository {
     String? instructions,
   });
 
+  Stream<List<ServiceRecordEntity>> watchServiceHistory();
   Future<List<ServiceRecordEntity>> getServiceHistory();
 
+  Stream<SubscriptionEntity> watchSubscription();
   Future<SubscriptionEntity> getSubscription();
 
   Future<SubscriptionEntity> updateSubscription({

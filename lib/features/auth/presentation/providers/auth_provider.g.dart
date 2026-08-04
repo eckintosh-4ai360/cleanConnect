@@ -83,7 +83,7 @@ final class AuthStateControllerProvider
 }
 
 String _$authStateControllerHash() =>
-    r'3a422a52ef096f93e67d7c371eb1194203d8fca6';
+    r'4e5cf0d5ab347f432580936160982a82d1f54b60';
 
 abstract class _$AuthStateController extends $Notifier<AuthState> {
   AuthState build();

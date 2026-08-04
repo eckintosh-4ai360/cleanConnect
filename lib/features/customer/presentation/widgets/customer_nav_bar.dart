@@ -17,7 +17,7 @@ class CustomerBottomNavBar extends StatelessWidget {
 
     switch (index) {
       case 0:
-        context.go('/dashboard');
+        context.go('/customer/home');
         break;
       case 1:
         context.go('/customer/bins');
@@ -50,63 +50,32 @@ class CustomerBottomNavBar extends StatelessWidget {
               ),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                const SizedBox(width: 20),
-                // Menu Icon (≡) on the left
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    Scaffold.of(context).openDrawer();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(width: 14, height: 2, color: Colors.white.withOpacity(0.6)),
-                        const SizedBox(height: 3),
-                        Container(width: 18, height: 2, color: Colors.white.withOpacity(0.6)),
-                        const SizedBox(height: 3),
-                        Container(width: 14, height: 2, color: Colors.white.withOpacity(0.6)),
-                      ],
-                    ),
-                  ),
+                _buildNavItem(
+                  context: context,
+                  index: 0,
+                  icon: Icons.home_rounded,
+                  inactiveIcon: Icons.home_outlined,
                 ),
-                const SizedBox(width: 8),
-                // Bottom Nav Items
-                Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(
-                        context: context,
-                        index: 0,
-                        icon: Icons.home_rounded,
-                        inactiveIcon: Icons.home_outlined,
-                      ),
-                      _buildNavItem(
-                        context: context,
-                        index: 1,
-                        icon: Icons.delete_rounded,
-                        inactiveIcon: Icons.delete_outline_rounded,
-                      ),
-                      _buildNavItem(
-                        context: context,
-                        index: 2,
-                        icon: Icons.history_rounded,
-                        inactiveIcon: Icons.history_rounded,
-                      ),
-                      _buildNavItem(
-                        context: context,
-                        index: 3,
-                        icon: Icons.person_rounded,
-                        inactiveIcon: Icons.person_outline_rounded,
-                      ),
-                    ],
-                  ),
+                _buildNavItem(
+                  context: context,
+                  index: 1,
+                  icon: Icons.delete_rounded,
+                  inactiveIcon: Icons.delete_outline_rounded,
                 ),
-                const SizedBox(width: 16),
+                _buildNavItem(
+                  context: context,
+                  index: 2,
+                  icon: Icons.history_rounded,
+                  inactiveIcon: Icons.history_rounded,
+                ),
+                _buildNavItem(
+                  context: context,
+                  index: 3,
+                  icon: Icons.person_rounded,
+                  inactiveIcon: Icons.person_outline_rounded,
+                ),
               ],
             ),
           ),

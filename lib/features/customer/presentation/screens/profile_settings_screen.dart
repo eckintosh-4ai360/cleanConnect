@@ -46,11 +46,12 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     final smsNotifications = useState(false);
 
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    void handleLogout() {
-      ref.read(authStateControllerProvider.notifier).logout();
-      context.go('/login');
+    void handleLogout() async {
+      await ref.read(authStateControllerProvider.notifier).logout();
+      if (context.mounted) {
+        context.go('/login');
+      }
     }
 
     return Scaffold(

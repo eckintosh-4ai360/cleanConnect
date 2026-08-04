@@ -1,30 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+} from 'firebase/firestore';
 
 export default function Sites() {
-  const [sites, setSites] = useState([
-    { id: 'STE-092', name: 'Labadi Beach Estate', region: 'Labadi', capacity: '1200L', fill: 85, status: 'Critical', lastCollected: '2 hrs ago' },
-    { id: 'STE-093', name: 'Airport Residential Lane 4', region: 'Airport', capacity: '1200L', fill: 60, status: 'Normal', lastCollected: '4 hrs ago' },
-    { id: 'STE-094', name: 'East Legon Mall Bin C', region: 'East Legon', capacity: '2400L', fill: 45, status: 'Normal', lastCollected: '1 day ago' },
-    { id: 'STE-095', name: 'Cantonments Embassy Gate', region: 'Cantonments', capacity: '1200L', fill: 95, status: 'Critical', lastCollected: '3 hrs ago' },
-    { id: 'STE-096', name: 'Ridge Medical Clinic Site A', region: 'Ridge', capacity: '2400L', fill: 20, status: 'Normal', lastCollected: '5 mins ago' },
-  ]);
-
+  const [sites, setSites] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleAddSite = (e) => {
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'garbageSites'), (snap) => {
+      setSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (err) => {
+      console.warn('Sites listener:', err);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAddSite = async (e) => {
     e.preventDefault();
+    setSaving(true);
     const formData = new FormData(e.target);
-    const newSite = {
-      id: `STE-0${90 + sites.length + 7}`,
-      name: formData.get('name'),
-      region: formData.get('region'),
-      capacity: formData.get('capacity'),
-      fill: Math.floor(Math.random() * 50) + 10,
-      status: 'Normal',
-      lastCollected: 'Just registered',
-    };
-    setSites([...sites, newSite]);
-    setShowAddModal(false);
+    try {
+      await addDoc(collection(db, 'garbageSites'), {
+        name: formData.get('name'),
+        region: formData.get('region'),
+        capacity: formData.get('capacity'),
+        fill: 0,
+        status: 'Normal',
+        lastCollected: null,
+        createdAt: serverTimestamp(),
+      });
+      setShowAddModal(false);
+      e.target.reset();
+    } catch (err) {
+      console.error('Failed to add site:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSite = async (siteId) => {
+    if (!window.confirm('Remove this site?')) return;
+    await deleteDoc(doc(db, 'garbageSites', siteId));
+  };
+
+  const formatDate = (ts) => {
+    if (!ts) return 'Never';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   return (
@@ -42,41 +75,96 @@ export default function Sites() {
         </button>
       </div>
 
-      {/* ── Sites Grid ── */}
-      <div className="metrics-grid">
-        {sites.map((site) => {
-          const isCritical = site.fill >= 80;
-          return (
-            <div key={site.id} className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '16px', border: isCritical ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid var(--border-glass)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h4 style={{ fontSize: '14px', fontWeight: '800' }}>{site.name}</h4>
-                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{site.id} • {site.region}</p>
+      {/* ── Body ── */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)', fontSize: '14px' }}>
+          Loading sites…
+        </div>
+      ) : sites.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗑️</div>
+          <h3 style={{ fontSize: '16px', marginBottom: '8px' }}>No collection sites yet</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>
+            Create your first garbage collection site to start tracking bin fill levels.
+          </p>
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>+ Create New Site</button>
+        </div>
+      ) : (
+        <div className="metrics-grid">
+          {sites.map((site) => {
+            const fill = site.fill ?? 0;
+            const isCritical = fill >= 80;
+            return (
+              <div
+                key={site.id}
+                className="card-glass"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  border: isCritical ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid var(--border-glass)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <h4 style={{ fontSize: '14px', fontWeight: '800' }}>{site.name}</h4>
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {site.region}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={`badge ${isCritical ? 'badge-defaulter' : 'badge-active'}`}>
+                      {isCritical ? 'Critical' : 'Normal'}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteSite(site.id)}
+                      title="Remove site"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                        fontSize: '14px',
+                        padding: '2px 4px',
+                        borderRadius: '4px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
-                <span className={`badge ${isCritical ? 'badge-defaulter' : 'badge-active'}`}>
-                  {site.status}
-                </span>
-              </div>
 
-              {/* Fill Gauge */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Fill Load:</span>
-                  <span style={{ color: isCritical ? 'var(--color-danger)' : 'var(--text-primary)' }}>{site.fill}%</span>
+                {/* Fill Gauge */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Fill Load:</span>
+                    <span style={{ color: isCritical ? 'var(--color-danger)' : 'var(--text-primary)' }}>{fill}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${fill}%`,
+                        height: '100%',
+                        background: isCritical
+                          ? 'linear-gradient(to right, var(--color-danger), #f87171)'
+                          : 'linear-gradient(to right, var(--color-primary), var(--color-info))',
+                        borderRadius: '4px',
+                        transition: 'width 1s ease-out',
+                      }}
+                    />
+                  </div>
                 </div>
-                <div style={{ width: '100%', height: '8px', background: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ width: `${site.fill}%`, height: '100%', background: isCritical ? 'linear-gradient(to right, var(--color-danger), #f87171)' : 'linear-gradient(to right, var(--color-primary), var(--color-info))', borderRadius: '4px', transition: 'width 1s ease-out' }}></div>
-                </div>
-              </div>
 
-              <div style={{ borderTop: '1px solid var(--border-divider)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                <span>Bin: <strong>{site.capacity}</strong></span>
-                <span>Collected: <strong>{site.lastCollected}</strong></span>
+                <div style={{ borderTop: '1px solid var(--border-divider)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  <span>Bin: <strong>{site.capacity || '—'}</strong></span>
+                  <span>Last collected: <strong>{formatDate(site.lastCollected)}</strong></span>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Add Site Modal ── */}
       {showAddModal && (
@@ -102,7 +190,9 @@ export default function Sites() {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-outline" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Add Site Location</button>
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? 'Adding…' : 'Add Site Location'}
+                </button>
               </div>
             </form>
           </div>

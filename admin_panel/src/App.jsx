@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { db } from './firebase';
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  doc,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore';
 import Dashboard from './components/Dashboard';
 import Customers from './components/Customers';
 import Riders from './components/Riders';
 import Sites from './components/Sites';
 import Collections from './components/Collections';
+import PickupRequests from './components/PickupRequests';
 import Routes from './components/Routes';
 import Payments from './components/Payments';
 import Maintenance from './components/Maintenance';
@@ -12,16 +23,86 @@ import Settings from './components/Settings';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'light';
+  });
   const [searchQuery, setSearchQuery] = useState('');
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifDrawer, setShowNotifDrawer] = useState(false);
 
-  // Synchronize CSS custom data theme values
+  // Synchronize CSS custom data theme values and persist preference
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
   }, [theme]);
+
+  // Real-time Platform Notifications
+  useEffect(() => {
+    const q = query(
+      collection(db, 'admin_notifications'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const items = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+          createdAt: d.data().createdAt?.toDate?.() || new Date(),
+        }));
+        setNotifications(items);
+      },
+      (err) => {
+        console.warn('Notification snapshot listener:', err);
+      }
+    );
+    return () => unsub();
+  }, []);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const handleMarkAllRead = async () => {
+    try {
+      const unreadDocs = notifications.filter((n) => !n.isRead);
+      const batch = writeBatch(db);
+      unreadDocs.forEach((n) => {
+        batch.update(doc(db, 'admin_notifications', n.id), { isRead: true });
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error('Failed to mark all notifications read:', err);
+    }
+  };
+
+  const handleNotificationClick = async (n) => {
+    if (!n.isRead) {
+      try {
+        await updateDoc(doc(db, 'admin_notifications', n.id), { isRead: true });
+      } catch (_) {}
+    }
+    if (
+      n.type === 'bin_registered' ||
+      n.type === 'pickup_requested' ||
+      n.type === 'customer_registered'
+    ) {
+      setActiveTab('Customers');
+    } else if (n.type === 'collection_completed') {
+      setActiveTab('Collections');
+    }
+    setShowNotifDrawer(false);
+  };
+
+  const formatNotifTime = (date) => {
+    if (!date) return 'Just now';
+    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return date.toLocaleDateString();
   };
 
   // Sidebar Menu Items with Inline Custom Vector Paths
@@ -63,6 +144,14 @@ export default function App() {
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+      )
+    },
+    {
+      name: 'Pickups',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="2" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" />
         </svg>
       )
     },
@@ -121,6 +210,8 @@ export default function App() {
         return <Sites />;
       case 'Collections':
         return <Collections />;
+      case 'Pickups':
+        return <PickupRequests />;
       case 'Routes':
         return <Routes />;
       case 'Payments':
@@ -196,9 +287,141 @@ export default function App() {
             </button>
 
             {/* Notification Center */}
-            <button className="action-btn" onClick={() => alert('No new platform alerts.')}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="action-btn"
+                onClick={() => setShowNotifDrawer(!showNotifDrawer)}
+                aria-label="Notifications"
+                style={{ position: 'relative' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-3px',
+                      right: '-3px',
+                      background: 'var(--color-danger)',
+                      color: 'white',
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      borderRadius: '50%',
+                      width: '16px',
+                      height: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 0 8px rgba(239, 68, 68, 0.5)',
+                    }}
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Real-time Notification Popover / Drawer */}
+              {showNotifDrawer && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '48px',
+                    right: '0',
+                    width: '360px',
+                    maxHeight: '440px',
+                    background: 'var(--bg-sidebar)',
+                    backdropFilter: 'var(--glass-blur)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '16px',
+                    boxShadow: 'var(--shadow-premium)',
+                    zIndex: 1000,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '14px 16px',
+                      borderBottom: '1px solid var(--border-divider)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h4 style={{ fontSize: '14px', fontWeight: '800' }}>Platform Notifications</h4>
+                      {unreadCount > 0 && (
+                        <span
+                          style={{
+                            background: 'var(--color-primary)',
+                            color: 'white',
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '10px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--color-primary)',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ overflowY: 'auto', flex: 1, padding: '8px' }}>
+                    {notifications.length === 0 ? (
+                      <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                        No platform alerts recorded yet.
+                      </div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          style={{
+                            padding: '12px',
+                            borderRadius: '10px',
+                            marginBottom: '6px',
+                            background: !n.isRead ? 'rgba(2, 132, 199, 0.08)' : 'transparent',
+                            borderLeft: !n.isRead ? '3px solid var(--color-primary)' : '3px solid transparent',
+                            cursor: 'pointer',
+                            transition: 'var(--transition-smooth)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '800', color: !n.isRead ? 'var(--color-primary)' : 'var(--text-primary)' }}>
+                              {n.title}
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {formatNotifTime(n.createdAt)}
+                            </span>
+                          </div>
+                          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.4' }}>
+                            {n.message}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Profile Info */}
             <div className="user-profile-badge">

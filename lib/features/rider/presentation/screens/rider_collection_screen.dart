@@ -26,7 +26,7 @@ class _RiderCollectionScreenState
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 2),
+      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 3),
       appBar: AppBar(
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,

@@ -16,7 +16,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 3),
+      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 4),
       appBar: AppBar(
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
@@ -285,41 +285,44 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 profileAsync.when(
-                  data: (rider) => Column(
-                    children: [
-                      _AllTimeStat(
-                        label: 'Total Collections',
-                        value: '${rider.totalCollections}',
-                        icon: Icons.recycling,
-                        iconColor: Colors.green,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 10),
-                      _AllTimeStat(
-                        label: 'Total Weight Collected',
-                        value:
-                            '${(rider.totalWeightKg / 1000).toStringAsFixed(1)} tons',
-                        icon: Icons.scale_outlined,
-                        iconColor: Colors.blue,
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 10),
-                      _AllTimeStat(
-                        label: 'Customer Rating',
-                        value: '${rider.rating.toStringAsFixed(1)} / 5.0 ★',
-                        icon: Icons.star_outline,
-                        iconColor: Colors.amber.shade700,
-                        isDark: isDark,
-                      ),
-                    ],
-                  ),
+                  data: (rider) {
+                    if (rider == null) return const SizedBox.shrink();
+                    return Column(
+                      children: [
+                        _AllTimeStat(
+                          label: 'Total Collections',
+                          value: '${rider.totalCollections}',
+                          icon: Icons.recycling,
+                          iconColor: Colors.green,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 10),
+                        _AllTimeStat(
+                          label: 'Total Weight Collected',
+                          value:
+                              '${(rider.totalWeightKg / 1000).toStringAsFixed(1)} tons',
+                          icon: Icons.scale_outlined,
+                          iconColor: Colors.blue,
+                          isDark: isDark,
+                        ),
+                        const SizedBox(height: 10),
+                        _AllTimeStat(
+                          label: 'Customer Rating',
+                          value: '${rider.rating.toStringAsFixed(1)} / 5.0 ★',
+                          icon: Icons.star_outline,
+                          iconColor: Colors.amber.shade700,
+                          isDark: isDark,
+                        ),
+                      ],
+                    );
+                  },
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
                 ),
 
                 const SizedBox(height: 24),
 
-                // ── Weekly Summary Table ──────────────────────────────────
+                // ── Weekly Summary Table
                 Text(
                   'Weekly Summary',
                   style: theme.textTheme.titleMedium?.copyWith(

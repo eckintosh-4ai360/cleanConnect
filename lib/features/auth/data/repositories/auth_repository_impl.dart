@@ -169,6 +169,61 @@ class AuthRepositoryImpl implements AuthRepository {
       // Save user details to Firestore
       try {
         await _firestore.collection('users').doc(fbUser.uid).set(userModel.toJson());
+        if (role == UserRole.customer) {
+          await _firestore.collection('customers').doc(fbUser.uid).set({
+            'displayName': fullName,
+            'fullName': fullName,
+            'email': email,
+            'phoneNumber': phoneNumber,
+            'contractType': 'Residential',
+            'subscriptionPlan': 'Weekly Plan',
+            'subscriptionFee': 50.0,
+            'subscriptionStatus': 'active',
+            'paymentMethod': 'Mobile Money',
+            'outstandingBalance': 0.0,
+            'registeredBinsCount': 0,
+            'activeRequestsCount': 0,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+          await _firestore.collection('admin_notifications').add({
+            'title': 'New Customer Registered',
+            'message': '$fullName ($email) created a new account.',
+            'type': 'customer_registered',
+            'customerId': fbUser.uid,
+            'customerName': fullName,
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        } else if (role == UserRole.rider) {
+          await _firestore.collection('riders').doc(fbUser.uid).set({
+            'fullName': fullName,
+            'email': email,
+            'phoneNumber': phoneNumber,
+            'vehicleType': 'Motorbike',
+            'licenseNumber': 'DL-GH-20240312',
+            'nationalIdNumber': 'GHA-0012345678',
+            'status': 'active',
+            'rating': 5.0,
+            'totalCollections': 0,
+            'totalWeightKg': 0.0,
+            'earningsThisMonth': 0.0,
+            'efficiencyScore': 100.0,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+          await _firestore.collection('admin_notifications').add({
+            'title': 'New Rider Registered',
+            'message': '$fullName ($email) registered as a rider.',
+            'type': 'rider_registered',
+            'riderId': fbUser.uid,
+            'riderName': fullName,
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
       } catch (e) {
         // Log error but proceed to let the user log in locally even if Firestore write fails
         print('Firestore save failed during registration: $e');

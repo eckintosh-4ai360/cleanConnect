@@ -13,8 +13,8 @@ CustomerRepository customerRepository(Ref ref) {
 @riverpod
 class CustomerBins extends _$CustomerBins {
   @override
-  FutureOr<List<BinEntity>> build() async {
-    return ref.watch(customerRepositoryProvider).getBins();
+  Stream<List<BinEntity>> build() {
+    return ref.watch(customerRepositoryProvider).watchBins();
   }
 
   Future<void> registerNewBin({
@@ -26,27 +26,23 @@ class CustomerBins extends _$CustomerBins {
     required String gpsLocation,
     String? photoPath,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await ref.read(customerRepositoryProvider).registerBin(
-            type: type,
-            size: size,
-            serialNumber: serialNumber,
-            frequency: frequency,
-            pickupDays: pickupDays,
-            gpsLocation: gpsLocation,
-            photoPath: photoPath,
-          );
-      return ref.read(customerRepositoryProvider).getBins();
-    });
+    await ref.read(customerRepositoryProvider).registerBin(
+          type: type,
+          size: size,
+          serialNumber: serialNumber,
+          frequency: frequency,
+          pickupDays: pickupDays,
+          gpsLocation: gpsLocation,
+          photoPath: photoPath,
+        );
   }
 }
 
 @riverpod
 class CustomerPickupRequests extends _$CustomerPickupRequests {
   @override
-  FutureOr<List<PickupRequestEntity>> build() async {
-    return ref.watch(customerRepositoryProvider).getPickupRequests();
+  Stream<List<PickupRequestEntity>> build() {
+    return ref.watch(customerRepositoryProvider).watchPickupRequests();
   }
 
   Future<void> requestPickup({
@@ -56,25 +52,21 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
     required String location,
     String? instructions,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await ref.read(customerRepositoryProvider).schedulePickup(
-            binTypes: binTypes,
-            date: date,
-            timeSlot: timeSlot,
-            location: location,
-            instructions: instructions,
-          );
-      return ref.read(customerRepositoryProvider).getPickupRequests();
-    });
+    await ref.read(customerRepositoryProvider).schedulePickup(
+          binTypes: binTypes,
+          date: date,
+          timeSlot: timeSlot,
+          location: location,
+          instructions: instructions,
+        );
   }
 }
 
 @riverpod
 class CustomerSubscription extends _$CustomerSubscription {
   @override
-  FutureOr<SubscriptionEntity> build() async {
-    return ref.watch(customerRepositoryProvider).getSubscription();
+  Stream<SubscriptionEntity> build() {
+    return ref.watch(customerRepositoryProvider).watchSubscription();
   }
 
   Future<void> changePlan({
@@ -82,46 +74,32 @@ class CustomerSubscription extends _$CustomerSubscription {
     required double fee,
     required String paymentMethod,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      final updated = await ref.read(customerRepositoryProvider).updateSubscription(
-            newPlan: newPlan,
-            fee: fee,
-            paymentMethod: paymentMethod,
-          );
-      ref.invalidate(customerHistoryProvider); // Refresh history for potential new invoice
-      return updated;
-    });
+    await ref.read(customerRepositoryProvider).updateSubscription(
+          newPlan: newPlan,
+          fee: fee,
+          paymentMethod: paymentMethod,
+        );
   }
 
   Future<void> payBalance() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await ref.read(customerRepositoryProvider).payOutstandingBalance();
-      ref.invalidate(customerHistoryProvider); // Refresh history for payment confirmation
-      return ref.read(customerRepositoryProvider).getSubscription();
-    });
+    await ref.read(customerRepositoryProvider).payOutstandingBalance();
   }
 }
 
 @riverpod
 class CustomerHistory extends _$CustomerHistory {
   @override
-  FutureOr<List<ServiceRecordEntity>> build() async {
-    return ref.watch(customerRepositoryProvider).getServiceHistory();
+  Stream<List<ServiceRecordEntity>> build() {
+    return ref.watch(customerRepositoryProvider).watchServiceHistory();
   }
 
   Future<void> submitProblem({
     required String category,
     required String description,
   }) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await ref.read(customerRepositoryProvider).reportProblem(
-            category: category,
-            description: description,
-          );
-      return ref.read(customerRepositoryProvider).getServiceHistory();
-    });
+    await ref.read(customerRepositoryProvider).reportProblem(
+          category: category,
+          description: description,
+        );
   }
 }

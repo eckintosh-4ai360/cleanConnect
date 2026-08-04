@@ -1,378 +1,166 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/rider_entities.dart';
+import '../../domain/entities/pickup_request_entity.dart';
 import '../../domain/repositories/rider_repository.dart';
 
 class RiderRepositoryImpl implements RiderRepository {
-  // Mock data for demonstration
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  String get _uid => _auth.currentUser?.uid ?? 'rider_default';
+
+  DocumentReference get _riderRef => _db.collection('riders').doc(_uid);
+
+  CollectionReference get _notificationsRef =>
+      _riderRef.collection('notifications');
+
+  CollectionReference get _routesRef => _db.collection('routes');
+
+  CollectionReference get _collectionsRef => _db.collection('collections');
+
+  // ── Profile & Status ──────────────────────────────────────────────────────
+
+  @override
+  Stream<RiderEntity?> watchRiderProfile() {
+    return _riderRef.snapshots().map((doc) {
+      if (!doc.exists) return _fallbackProfile();
+      return _riderFromDoc(doc);
+    });
+  }
 
   @override
   Future<RiderEntity> getRiderProfile() async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    return const RiderEntity(
-      id: 'rider_001',
-      fullName: 'Marcus Sterling',
-      email: 'marcus.sterling@ecowaste.com',
-      phoneNumber: '+1 (555) 234-5678',
-      profilePhotoUrl:
-          'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
-      vehicleType: 'compact_van',
-      licenseNumber: 'DL-GH-20240312',
-      nationalIdNumber: 'GHA-0012345678',
-      status: 'active',
-      rating: 4.8,
-      totalCollections: 312,
-      totalWeightKg: 14800,
-      earningsThisMonth: 1248.50,
-      efficiencyScore: 94.2,
-    );
+    final doc = await _riderRef.get();
+    if (!doc.exists) return _fallbackProfile();
+    return _riderFromDoc(doc);
   }
 
   @override
   Future<RiderEntity> updateRiderStatus(String status) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return RiderEntity(
-      id: 'rider_001',
-      fullName: 'Marcus Sterling',
-      email: 'marcus.sterling@ecowaste.com',
-      phoneNumber: '+1 (555) 234-5678',
-      profilePhotoUrl:
-          'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
-      vehicleType: 'compact_van',
-      licenseNumber: 'DL-GH-20240312',
-      nationalIdNumber: 'GHA-0012345678',
-      status: status,
-      rating: 4.8,
-      totalCollections: 312,
-      totalWeightKg: 14800,
-      earningsThisMonth: 1248.50,
-      efficiencyScore: 94.2,
+    await _riderRef.set(
+      {
+        'status': status,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
     );
+    return getRiderProfile();
+  }
+
+  RiderEntity _riderFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return RiderEntity(
+      id: doc.id,
+      fullName: d['fullName'] as String? ?? 'Rider',
+      email: d['email'] as String? ?? '',
+      phoneNumber: d['phoneNumber'] as String? ?? '',
+      profilePhotoUrl: d['photoUrl'] as String? ?? d['profilePhotoUrl'] as String? ?? '',
+      vehicleType: d['vehicleType'] as String? ?? 'Motorbike',
+      licenseNumber: d['licenseNumber'] as String? ?? '',
+      nationalIdNumber: d['nationalIdNumber'] as String? ?? '',
+      status: d['status'] as String? ?? 'active',
+      rating: (d['rating'] as num?)?.toDouble() ?? 5.0,
+      totalCollections: (d['totalCollections'] as num?)?.toInt() ?? 0,
+      totalWeightKg: (d['totalWeightKg'] as num?)?.toDouble() ?? 0.0,
+      earningsThisMonth: (d['earningsThisMonth'] as num?)?.toDouble() ?? 0.0,
+      efficiencyScore: (d['efficiencyScore'] as num?)?.toDouble() ?? 100.0,
+    );
+  }
+
+  RiderEntity _fallbackProfile() => RiderEntity(
+        id: _uid,
+        fullName: _auth.currentUser?.displayName ?? 'Marcus Sterling',
+        email: _auth.currentUser?.email ?? 'marcus@ecowaste.com',
+        phoneNumber: '+1 (555) 234-5678',
+        profilePhotoUrl:
+            'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
+        vehicleType: 'compact_van',
+        licenseNumber: 'DL-GH-20240312',
+        nationalIdNumber: 'GHA-0012345678',
+        status: 'active',
+        rating: 4.8,
+        totalCollections: 12,
+        totalWeightKg: 450.0,
+        earningsThisMonth: 850.0,
+        efficiencyScore: 95.0,
+      );
+
+  // ── Active Route & Stops ──────────────────────────────────────────────────
+
+  @override
+  Stream<ActiveRouteEntity?> watchActiveRoute() {
+    return _routesRef
+        .where('assignedRiderId', isEqualTo: _uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .snapshots()
+        .asyncMap((snap) async {
+      if (snap.docs.isEmpty) return null;
+      final routeDoc = snap.docs.first;
+      return _buildActiveRoute(routeDoc);
+    });
   }
 
   @override
   Future<ActiveRouteEntity?> getActiveRoute() async {
-    await Future.delayed(const Duration(milliseconds: 700));
+    final snap = await _routesRef
+        .where('assignedRiderId', isEqualTo: _uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+
+    if (snap.docs.isEmpty) return null;
+    return _buildActiveRoute(snap.docs.first);
+  }
+
+  Future<ActiveRouteEntity> _buildActiveRoute(DocumentSnapshot routeDoc) async {
+    final d = routeDoc.data() as Map<String, dynamic>? ?? {};
+
+    // Fetch stops subcollection
+    final stopsSnap = await routeDoc.reference
+        .collection('stops')
+        .orderBy('stopOrder', descending: false)
+        .get();
+
+    final stops = stopsSnap.docs.map(_stopFromDoc).toList();
+
+    final completedCount = stops.where((s) => s.status == 'collected').length;
+
     return ActiveRouteEntity(
-      id: 'route_oct_15',
-      routeName: 'Zone A – Morning Run',
-      zone: 'North District',
-      totalDistanceKm: 18.4,
-      completedDistanceKm: 7.2,
-      totalStops: 14,
-      completedStops: 5,
-      startTime: DateTime.now().subtract(const Duration(hours: 1, minutes: 20)),
-      estimatedEndTime: DateTime.now().add(const Duration(hours: 2, minutes: 10)),
-      status: 'active',
-      stops: [
-        RouteStopEntity(
-          id: 'stop_01',
-          customerName: 'Sarah Johnson',
-          address: '12 Oak Street, North District',
-          binType: 'general',
-          status: 'collected',
-          estimatedWeightKg: 18.0,
-          actualWeightKg: 17.4,
-          latitude: 5.6037,
-          longitude: -0.1870,
-          stopOrder: 1,
-        ),
-        RouteStopEntity(
-          id: 'stop_02',
-          customerName: 'Mark & Elena Davis',
-          address: '45 Elm Avenue, North District',
-          binType: 'recycling',
-          status: 'collected',
-          estimatedWeightKg: 12.0,
-          actualWeightKg: 11.2,
-          latitude: 5.6050,
-          longitude: -0.1860,
-          stopOrder: 2,
-        ),
-        RouteStopEntity(
-          id: 'stop_03',
-          customerName: 'Maria Kowalski',
-          address: '78 Pine Road, North District',
-          binType: 'organic',
-          status: 'collected',
-          estimatedWeightKg: 20.0,
-          actualWeightKg: 19.8,
-          latitude: 5.6065,
-          longitude: -0.1845,
-          stopOrder: 3,
-        ),
-        RouteStopEntity(
-          id: 'stop_04',
-          customerName: 'Other Residence',
-          address: '90 Cedar Lane, North District',
-          binType: 'general',
-          status: 'collected',
-          estimatedWeightKg: 15.0,
-          actualWeightKg: 14.6,
-          latitude: 5.6080,
-          longitude: -0.1830,
-          stopOrder: 4,
-        ),
-        RouteStopEntity(
-          id: 'stop_05',
-          customerName: 'James Osei',
-          address: '102 Maple Close, North District',
-          binType: 'recycling',
-          status: 'collected',
-          estimatedWeightKg: 10.0,
-          actualWeightKg: 9.5,
-          latitude: 5.6095,
-          longitude: -0.1815,
-          stopOrder: 5,
-        ),
-        RouteStopEntity(
-          id: 'stop_06',
-          customerName: 'Abena Mensah',
-          address: '15 Baobab Street, North District',
-          binType: 'general',
-          status: 'pending',
-          estimatedWeightKg: 22.0,
-          latitude: 5.6110,
-          longitude: -0.1800,
-          stopOrder: 6,
-        ),
-        RouteStopEntity(
-          id: 'stop_07',
-          customerName: 'Kwame Asante',
-          address: '33 Acacia Drive, North District',
-          binType: 'recycling',
-          status: 'pending',
-          estimatedWeightKg: 14.0,
-          latitude: 5.6125,
-          longitude: -0.1790,
-          stopOrder: 7,
-        ),
-        RouteStopEntity(
-          id: 'stop_08',
-          customerName: 'Chen Family',
-          address: '55 Lotus Avenue, North District',
-          binType: 'organic',
-          status: 'pending',
-          estimatedWeightKg: 18.0,
-          latitude: 5.6140,
-          longitude: -0.1780,
-          stopOrder: 8,
-        ),
-        RouteStopEntity(
-          id: 'stop_09',
-          customerName: 'Fatima Al-Hassan',
-          address: '67 Mango Boulevard, North District',
-          binType: 'general',
-          status: 'pending',
-          estimatedWeightKg: 25.0,
-          latitude: 5.6155,
-          longitude: -0.1770,
-          stopOrder: 9,
-        ),
-        RouteStopEntity(
-          id: 'stop_10',
-          customerName: 'David & Rose Ntim',
-          address: '88 Palm Circle, North District',
-          binType: 'recycling',
-          status: 'pending',
-          estimatedWeightKg: 16.0,
-          latitude: 5.6170,
-          longitude: -0.1760,
-          stopOrder: 10,
-        ),
-        RouteStopEntity(
-          id: 'stop_11',
-          customerName: 'Grace Owusu',
-          address: '99 Tulip Lane, North District',
-          binType: 'general',
-          status: 'pending',
-          estimatedWeightKg: 20.0,
-          latitude: 5.6185,
-          longitude: -0.1750,
-          stopOrder: 11,
-        ),
-        RouteStopEntity(
-          id: 'stop_12',
-          customerName: 'Emmanuel Boateng',
-          address: '110 Orchid Street, North District',
-          binType: 'organic',
-          status: 'pending',
-          estimatedWeightKg: 17.0,
-          latitude: 5.6200,
-          longitude: -0.1740,
-          stopOrder: 12,
-        ),
-        RouteStopEntity(
-          id: 'stop_13',
-          customerName: 'Linda Acheampong',
-          address: '122 Rose Avenue, North District',
-          binType: 'general',
-          status: 'pending',
-          estimatedWeightKg: 21.0,
-          latitude: 5.6215,
-          longitude: -0.1730,
-          stopOrder: 13,
-        ),
-        RouteStopEntity(
-          id: 'stop_14',
-          customerName: 'Felix Darko',
-          address: '134 Sunflower Close, North District',
-          binType: 'recycling',
-          status: 'pending',
-          estimatedWeightKg: 13.0,
-          latitude: 5.6230,
-          longitude: -0.1720,
-          stopOrder: 14,
-        ),
-      ],
+      id: routeDoc.id,
+      routeName: d['routeName'] as String? ?? 'Daily Route',
+      zone: d['zone'] as String? ?? 'Central District',
+      totalDistanceKm: (d['totalDistanceKm'] as num?)?.toDouble() ?? 12.0,
+      completedDistanceKm: (d['completedDistanceKm'] as num?)?.toDouble() ?? 0.0,
+      totalStops: stops.isEmpty ? (d['totalStops'] as num?)?.toInt() ?? 0 : stops.length,
+      completedStops: completedCount,
+      startTime: d['startTime'] is Timestamp
+          ? (d['startTime'] as Timestamp).toDate()
+          : DateTime.now(),
+      estimatedEndTime: d['estimatedEndTime'] is Timestamp
+          ? (d['estimatedEndTime'] as Timestamp).toDate()
+          : DateTime.now().add(const Duration(hours: 3)),
+      status: d['status'] as String? ?? 'active',
+      stops: stops,
     );
   }
 
-  @override
-  Future<List<CollectionLogEntity>> getCollectionHistory() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    final now = DateTime.now();
-    return [
-      CollectionLogEntity(
-        id: 'col_001',
-        customerName: 'Sarah Johnson',
-        address: '12 Oak Street',
-        binType: 'general',
-        weightKg: 17.4,
-        collectedAt: now.subtract(const Duration(hours: 1, minutes: 5)),
-        status: 'verified',
-        qrCodeData: 'BIN-GEN-0023',
-      ),
-      CollectionLogEntity(
-        id: 'col_002',
-        customerName: 'Mark & Elena Davis',
-        address: '45 Elm Avenue',
-        binType: 'recycling',
-        weightKg: 11.2,
-        collectedAt: now.subtract(const Duration(hours: 1, minutes: 30)),
-        status: 'verified',
-        qrCodeData: 'BIN-REC-0041',
-      ),
-      CollectionLogEntity(
-        id: 'col_003',
-        customerName: 'Maria Kowalski',
-        address: '78 Pine Road',
-        binType: 'organic',
-        weightKg: 19.8,
-        collectedAt: now.subtract(const Duration(days: 1, hours: 2)),
-        status: 'verified',
-      ),
-      CollectionLogEntity(
-        id: 'col_004',
-        customerName: 'Other Residence',
-        address: '90 Cedar Lane',
-        binType: 'general',
-        weightKg: 14.6,
-        collectedAt: now.subtract(const Duration(days: 1, hours: 3)),
-        status: 'verified',
-      ),
-      CollectionLogEntity(
-        id: 'col_005',
-        customerName: 'James Osei',
-        address: '102 Maple Close',
-        binType: 'recycling',
-        weightKg: 9.5,
-        collectedAt: now.subtract(const Duration(days: 2)),
-        status: 'pending_review',
-        notes: 'Scale malfunction – estimated weight used',
-      ),
-      CollectionLogEntity(
-        id: 'col_006',
-        customerName: 'Yaa Asantewaa',
-        address: '55 Heritage Rd',
-        binType: 'general',
-        weightKg: 22.1,
-        collectedAt: now.subtract(const Duration(days: 2, hours: 4)),
-        status: 'verified',
-      ),
-      CollectionLogEntity(
-        id: 'col_007',
-        customerName: 'Peter Mensah',
-        address: '77 Accra Street',
-        binType: 'recycling',
-        weightKg: 8.3,
-        collectedAt: now.subtract(const Duration(days: 3)),
-        status: 'problem',
-        notes: 'Bin was contaminated – hazardous materials found',
-      ),
-    ];
-  }
-
-  @override
-  Future<RiderPerformanceEntity> getPerformanceStats() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return const RiderPerformanceEntity(
-      efficiencyScore: 94.2,
-      averageRating: 4.8,
-      collectionsThisWeek: 28,
-      weightThisWeek: 412.6,
-      earningsThisWeek: 287.50,
-      earningsThisMonth: 1248.50,
-      totalCollectionsAllTime: 312,
-      onTimeDeliveryRate: 0.982,
-      weeklyScores: [88.0, 91.5, 92.0, 94.2, 93.8, 95.1, 94.2],
+  RouteStopEntity _stopFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return RouteStopEntity(
+      id: doc.id,
+      customerName: d['customerName'] as String? ?? 'Customer',
+      address: d['address'] as String? ?? '',
+      binType: d['binType'] as String? ?? 'general',
+      status: d['status'] as String? ?? 'pending',
+      estimatedWeightKg: (d['estimatedWeightKg'] as num?)?.toDouble() ?? 15.0,
+      actualWeightKg: (d['actualWeightKg'] as num?)?.toDouble(),
+      notes: d['notes'] as String?,
+      latitude: (d['latitude'] as num?)?.toDouble() ?? 5.6037,
+      longitude: (d['longitude'] as num?)?.toDouble() ?? -0.1870,
+      stopOrder: (d['stopOrder'] as num?)?.toInt() ?? 1,
     );
-  }
-
-  @override
-  Future<List<RiderNotificationEntity>> getNotifications() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    final now = DateTime.now();
-    return [
-      RiderNotificationEntity(
-        id: 'notif_001',
-        title: 'Emergency Alert',
-        message:
-            'Traffic closure on Accra Ring Road. Alternate route via Liberation Rd suggested for stops 6–10.',
-        type: 'alert',
-        receivedAt: now.subtract(const Duration(minutes: 15)),
-        isRead: false,
-      ),
-      RiderNotificationEntity(
-        id: 'notif_002',
-        title: 'New instruction assigned',
-        message:
-            'Stop #7 – Kwame Asante has moved bin to back gate. Use alley entrance.',
-        type: 'new_route',
-        receivedAt: now.subtract(const Duration(minutes: 45)),
-        isRead: false,
-      ),
-      RiderNotificationEntity(
-        id: 'notif_003',
-        title: 'Route updated',
-        message:
-            'Stop #9 – Fatima Al-Hassan has been added to your route. Priority: HIGH.',
-        type: 'new_route',
-        receivedAt: now.subtract(const Duration(hours: 1)),
-        isRead: true,
-      ),
-      RiderNotificationEntity(
-        id: 'notif_004',
-        title: 'Admin message',
-        message:
-            'Reminder: Team meeting at 4 PM today at depot. Attendance mandatory.',
-        type: 'system',
-        receivedAt: now.subtract(const Duration(hours: 2, minutes: 30)),
-        isRead: true,
-      ),
-      RiderNotificationEntity(
-        id: 'notif_005',
-        title: 'Payment processed',
-        message:
-            'Your earnings of \$287.50 for this week have been transferred to your account.',
-        type: 'payment',
-        receivedAt: now.subtract(const Duration(days: 1)),
-        isRead: true,
-      ),
-    ];
-  }
-
-  @override
-  Future<void> markNotificationRead(String notificationId) async {
-    await Future.delayed(const Duration(milliseconds: 200));
   }
 
   @override
@@ -383,7 +171,45 @@ class RiderRepositoryImpl implements RiderRepository {
     String? qrCodeData,
     String? notes,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 600));
+    final route = await getActiveRoute();
+    if (route != null) {
+      final stopRef = _routesRef.doc(route.id).collection('stops').doc(stopId);
+      await stopRef.update({
+        'status': 'collected',
+        'actualWeightKg': weightKg,
+        if (notes != null) 'notes': notes,
+        'collectedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Find stop details to add to global collections log
+      final stopDoc = await stopRef.get();
+      final stopData = stopDoc.data() as Map<String, dynamic>? ?? {};
+
+      final riderProfile = await getRiderProfile();
+      final carbonOffset = weightKg * 0.52; // standard CO2 calculation factor
+
+      await _collectionsRef.add({
+        'riderId': _uid,
+        'riderName': riderProfile.fullName,
+        'customerName': stopData['customerName'] ?? 'Customer',
+        'address': stopData['address'] ?? '',
+        'binType': stopData['binType'] ?? 'general',
+        'weightKg': weightKg,
+        'carbonOffset': double.parse(carbonOffset.toStringAsFixed(1)),
+        'qrVerified': qrCodeData != null && qrCodeData.isNotEmpty,
+        'status': 'completed',
+        'routeId': route.id,
+        'collectedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Update rider stats atomically
+      await _riderRef.set({
+        'totalCollections': FieldValue.increment(1),
+        'totalWeightKg': FieldValue.increment(weightKg),
+        'earningsThisMonth': FieldValue.increment(weightKg * 0.15),
+      }, SetOptions(merge: true));
+    }
+
     return RouteStopEntity(
       id: stopId,
       customerName: 'Customer',
@@ -404,7 +230,13 @@ class RiderRepositoryImpl implements RiderRepository {
     required String reason,
     String? notes,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 400));
+    final route = await getActiveRoute();
+    if (route != null) {
+      await _routesRef.doc(route.id).collection('stops').doc(stopId).update({
+        'status': 'problem',
+        'notes': notes ?? reason,
+      });
+    }
     return RouteStopEntity(
       id: stopId,
       customerName: 'Customer',
@@ -420,6 +252,271 @@ class RiderRepositoryImpl implements RiderRepository {
 
   @override
   Future<void> completeRoute(String routeId) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    await _routesRef.doc(routeId).update({
+      'status': 'completed',
+      'completedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // ── Collection History ────────────────────────────────────────────────────
+
+  @override
+  Stream<List<CollectionLogEntity>> watchCollectionHistory() {
+    return _collectionsRef
+        .where('riderId', isEqualTo: _uid)
+        .orderBy('collectedAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(_collectionFromDoc).toList());
+  }
+
+  @override
+  Future<List<CollectionLogEntity>> getCollectionHistory() async {
+    final snap = await _collectionsRef
+        .where('riderId', isEqualTo: _uid)
+        .orderBy('collectedAt', descending: true)
+        .get();
+    return snap.docs.map(_collectionFromDoc).toList();
+  }
+
+  CollectionLogEntity _collectionFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return CollectionLogEntity(
+      id: doc.id,
+      customerName: d['customerName'] as String? ?? 'Customer',
+      address: d['address'] as String? ?? '',
+      binType: d['binType'] as String? ?? 'general',
+      weightKg: (d['weightKg'] as num?)?.toDouble() ?? 0.0,
+      collectedAt: d['collectedAt'] is Timestamp
+          ? (d['collectedAt'] as Timestamp).toDate()
+          : DateTime.now(),
+      status: d['status'] as String? ?? 'verified',
+      notes: d['notes'] as String?,
+      qrCodeData: d['qrVerified'] == true ? 'QR-VERIFIED' : null,
+    );
+  }
+
+  // ── Performance Stats ─────────────────────────────────────────────────────
+
+  @override
+  Stream<RiderPerformanceEntity> watchPerformanceStats() {
+    return _riderRef.snapshots().map((doc) => _performanceFromDoc(doc));
+  }
+
+  @override
+  Future<RiderPerformanceEntity> getPerformanceStats() async {
+    final doc = await _riderRef.get();
+    return _performanceFromDoc(doc);
+  }
+
+  RiderPerformanceEntity _performanceFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return RiderPerformanceEntity(
+      efficiencyScore: (d['efficiencyScore'] as num?)?.toDouble() ?? 94.2,
+      averageRating: (d['rating'] as num?)?.toDouble() ?? 4.8,
+      collectionsThisWeek: (d['totalCollections'] as num?)?.toInt() ?? 28,
+      weightThisWeek: (d['totalWeightKg'] as num?)?.toDouble() ?? 412.6,
+      earningsThisWeek: 287.50,
+      earningsThisMonth: (d['earningsThisMonth'] as num?)?.toDouble() ?? 1248.50,
+      totalCollectionsAllTime: (d['totalCollections'] as num?)?.toInt() ?? 312,
+      onTimeDeliveryRate: 0.982,
+      weeklyScores: const [88.0, 91.5, 92.0, 94.2, 93.8, 95.1, 94.2],
+    );
+  }
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+
+  @override
+  Stream<List<RiderNotificationEntity>> watchNotifications() {
+    return _notificationsRef
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(_notificationFromDoc).toList());
+  }
+
+  @override
+  Future<List<RiderNotificationEntity>> getNotifications() async {
+    final snap =
+        await _notificationsRef.orderBy('createdAt', descending: true).get();
+    return snap.docs.map(_notificationFromDoc).toList();
+  }
+
+  RiderNotificationEntity _notificationFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return RiderNotificationEntity(
+      id: doc.id,
+      title: d['title'] as String? ?? 'Notification',
+      message: d['message'] as String? ?? '',
+      type: d['type'] as String? ?? 'system',
+      receivedAt: d['createdAt'] is Timestamp
+          ? (d['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+      isRead: d['isRead'] as bool? ?? false,
+    );
+  }
+
+  @override
+  Future<void> markNotificationRead(String notificationId) async {
+    await _notificationsRef.doc(notificationId).update({'isRead': true});
+  }
+
+  @override
+  Future<void> markAllNotificationsRead() async {
+    final unread =
+        await _notificationsRef.where('isRead', isEqualTo: false).get();
+    final batch = _db.batch();
+    for (final doc in unread.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    await batch.commit();
+  }
+
+  // ── Available Pickup Requests ──────────────────────────────────────────────
+
+  @override
+  Stream<List<PickupRequestEntity>> watchAvailablePickups() {
+    // Listen to root pickupRequests collection, filter to 'pending' only
+    return _db
+        .collection('pickupRequests')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snap) => snap.docs.map(_pickupFromDoc).toList());
+  }
+
+  @override
+  Future<void> acceptPickup({
+    required String requestId,
+    required String customerId,
+  }) async {
+    final rider = await getRiderProfile();
+    final batch = _db.batch();
+
+    // 1. Update root pickupRequests doc
+    final rootRef = _db.collection('pickupRequests').doc(requestId);
+    batch.set(
+      rootRef,
+      {
+        'status': 'accepted',
+        'assignedRiderId': _uid,
+        'assignedRiderName': rider.fullName,
+        'acceptedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    // 2. Mirror update in customer's subcollection
+    final custRef = _db
+        .collection('customers')
+        .doc(customerId)
+        .collection('pickupRequests')
+        .doc(requestId);
+    batch.set(
+      custRef,
+      {
+        'status': 'accepted',
+        'assignedRiderId': _uid,
+        'assignedRiderName': rider.fullName,
+        'acceptedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    // 3. Push notification to admin
+    batch.set(
+      _db.collection('admin_notifications').doc(),
+      {
+        'title': 'Pickup Accepted',
+        'message': '${rider.fullName} accepted a pickup request.',
+        'type': 'pickup_accepted',
+        'riderId': _uid,
+        'riderName': rider.fullName,
+        'requestId': requestId,
+        'customerId': customerId,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+    );
+
+    await batch.commit();
+  }
+
+  @override
+  Future<void> rejectPickup({
+    required String requestId,
+    required String customerId,
+  }) async {
+    // Track that this rider rejected the request (array so multiple riders can reject)
+    await _db.collection('pickupRequests').doc(requestId).set(
+      {
+        'rejectedBy': FieldValue.arrayUnion([_uid]),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  PickupRequestEntity _pickupFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return PickupRequestEntity(
+      id: doc.id,
+      customerId: d['customerId'] as String? ?? '',
+      customerName: d['customerName'] as String? ?? 'Customer',
+      customerEmail: d['customerEmail'] as String? ?? '',
+      customerPhone: d['customerPhone'] as String? ?? '',
+      location: d['location'] as String? ?? d['address'] as String? ?? 'Unknown location',
+      timeSlot: d['timeSlot'] as String? ?? '',
+      binTypes: (d['binTypes'] as List<dynamic>?)?.cast<String>() ??
+          (d['binType'] != null ? [d['binType'] as String] : ['general']),
+      status: d['status'] as String? ?? 'pending',
+      assignedRiderId: d['assignedRiderId'] as String?,
+      assignedRiderName: d['assignedRiderName'] as String?,
+      createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      acceptedAt: (d['acceptedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  @override
+  Future<void> updateRiderLocation({
+    required double latitude,
+    required double longitude,
+    double? heading,
+    double? speed,
+    String? currentJobId,
+  }) async {
+    final batch = _db.batch();
+    final riderProfile = await getRiderProfile();
+
+    // 1. Update rider document in riders collection
+    batch.set(
+      _riderRef,
+      {
+        'id': _uid,
+        'fullName': riderProfile.fullName,
+        'currentLat': latitude,
+        'currentLng': longitude,
+        'latitude': latitude,
+        'longitude': longitude,
+        'heading': heading ?? 0.0,
+        'speed': speed ?? 0.0,
+        'lastLocationUpdate': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+
+    // 2. If rider is currently fulfilling a specific pickup request, mirror coordinates on that job
+    if (currentJobId != null && currentJobId.isNotEmpty) {
+      batch.set(
+        _db.collection('pickupRequests').doc(currentJobId),
+        {
+          'riderLat': latitude,
+          'riderLng': longitude,
+          'riderHeading': heading ?? 0.0,
+          'riderSpeed': speed ?? 0.0,
+          'riderLocationUpdatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
   }
 }

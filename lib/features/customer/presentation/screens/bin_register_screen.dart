@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -22,6 +24,7 @@ class BinRegisterScreen extends HookConsumerWidget {
     final serialController = useTextEditingController();
     final gpsLocation = useState('');
     final photoPath = useState<String?>(null);
+    final photoBytes = useState<Uint8List?>(null);
 
     // Step 2 inputs state
     final selectedFrequency = useState('Weekly'); // 'Weekly', 'Bi-weekly', 'Monthly'
@@ -58,13 +61,14 @@ class BinRegisterScreen extends HookConsumerWidget {
     Future<void> captureImage() async {
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(
-        source: ImageSource.camera,
+        source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
         maxWidth: 600,
         maxHeight: 600,
         imageQuality: 80,
       );
       if (pickedFile != null) {
         photoPath.value = pickedFile.path;
+        photoBytes.value = await pickedFile.readAsBytes();
       }
     }
 
@@ -251,7 +255,9 @@ class BinRegisterScreen extends HookConsumerWidget {
                             child: photoPath.value != null
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(16),
-                                    child: Image.file(File(photoPath.value!), fit: BoxFit.cover),
+                                    child: kIsWeb
+                                        ? Image.memory(photoBytes.value!, fit: BoxFit.cover)
+                                        : Image.file(File(photoPath.value!), fit: BoxFit.cover),
                                   )
                                 : const Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -442,12 +448,19 @@ class BinRegisterScreen extends HookConsumerWidget {
                                         const SizedBox(height: 8),
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(12),
-                                          child: Image.file(
-                                            File(photoPath.value!),
-                                            height: 100,
-                                            width: 150,
-                                            fit: BoxFit.cover,
-                                          ),
+                                          child: kIsWeb
+                                              ? Image.memory(
+                                                  photoBytes.value!,
+                                                  height: 100,
+                                                  width: 150,
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : Image.file(
+                                                  File(photoPath.value!),
+                                                  height: 100,
+                                                  width: 150,
+                                                  fit: BoxFit.cover,
+                                                ),
                                         ),
                                       ],
                                     ),

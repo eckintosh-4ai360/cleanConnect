@@ -39,7 +39,7 @@ class _RouteOptimizationScreenState
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 1),
+      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 2),
       appBar: AppBar(
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
@@ -542,6 +542,18 @@ class _StopTile extends StatelessWidget {
                     const SizedBox(height: 10),
                     Row(
                       children: [
+                        IconButton.outlined(
+                          style: IconButton.styleFrom(
+                            side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                            foregroundColor: Theme.of(context).colorScheme.primary,
+                          ),
+                          onPressed: () {
+                            context.push('/rider/navigation');
+                          },
+                          icon: const Icon(Icons.navigation_outlined, size: 18),
+                          tooltip: 'Navigate with Google Maps',
+                        ),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
@@ -559,7 +571,7 @@ class _StopTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(

@@ -238,65 +238,6 @@ class LoginScreen extends HookConsumerWidget {
                       onPressed: handleSignIn,
                       isLoading: isLoading,
                     ),
-                    const SizedBox(height: 24),
-                    // Or continue with Divider
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Divider(
-                            color: Colors.grey.withOpacity(0.3),
-                            thickness: 1,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            'Or continue with',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Divider(
-                            color: Colors.grey.withOpacity(0.3),
-                            thickness: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // Social Sign-ins
-                    EcoSocialButton(
-                      text: 'Continue with Google',
-                      logoWidget: const Icon(
-                        Icons.g_mobiledata,
-                        size: 32,
-                        color: Colors.redAccent,
-                      ),
-                      onPressed: () {
-                        // Mock Google login
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Connecting to Google accounts...')),
-                        );
-                      },
-                    ),
-                    EcoSocialButton(
-                      text: 'Continue with Apple',
-                      logoWidget: Icon(
-                        Icons.apple,
-                        size: 24,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
-                      onPressed: () {
-                        // Mock Apple login
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Connecting to Apple ID...')),
-                        );
-                      },
-                    ),
                     const SizedBox(height: 32),
                     // Register Footer Link
                     Center(

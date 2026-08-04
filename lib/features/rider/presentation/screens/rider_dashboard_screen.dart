@@ -34,39 +34,46 @@ class RiderDashboardScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Header ──────────────────────────────────────────────
+                //Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     profileAsync.when(
-                      data: (rider) => Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundImage: NetworkImage(
+                      data: (rider) {
+                        if (rider == null) return const Text('EcoWaste Rider');
+                        return Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundImage: NetworkImage(
                                 rider.profilePhotoUrl ??
-                                    'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200'),
-                            backgroundColor:
-                                theme.colorScheme.primaryContainer,
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hello, ${rider.fullName.split(' ').first}',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w900),
+                                    'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
                               ),
-                              _StatusBadge(status: rider.status),
-                            ],
-                          ),
-                        ],
-                      ),
+                              backgroundColor:
+                                  theme.colorScheme.primaryContainer,
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Hello, ${rider.fullName.split(' ').first}',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                _StatusBadge(status: rider.status),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
                       loading: () => const SizedBox(
-                          height: 48,
-                          child: Center(
-                              child: CircularProgressIndicator(strokeWidth: 2))),
+                        height: 48,
+                        child: Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
                       error: (_, _) => const Text('EcoWaste Rider'),
                     ),
                     Row(
@@ -77,15 +84,17 @@ class RiderDashboardScreen extends ConsumerWidget {
                           children: [
                             IconButton(
                               icon: const Icon(
-                                  Icons.notifications_none_outlined,
-                                  size: 28),
+                                Icons.notifications_none_outlined,
+                                size: 28,
+                              ),
                               onPressed: () =>
                                   context.push('/rider/notifications'),
                             ),
                             notifAsync.when(
                               data: (notifs) {
-                                final unread =
-                                    notifs.where((n) => !n.isRead).length;
+                                final unread = notifs
+                                    .where((n) => !n.isRead)
+                                    .length;
                                 if (unread == 0) return const SizedBox.shrink();
                                 return Positioned(
                                   right: 8,
@@ -101,9 +110,10 @@ class RiderDashboardScreen extends ConsumerWidget {
                                       child: Text(
                                         '$unread',
                                         style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold),
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -129,16 +139,22 @@ class RiderDashboardScreen extends ConsumerWidget {
                     return _ActiveRouteCard(route: route, theme: theme);
                   },
                   loading: () => const Center(
-                      child:
-                          Padding(padding: EdgeInsets.symmetric(vertical: 24), child: CircularProgressIndicator())),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
                   error: (_, _) => const SizedBox.shrink(),
                 ),
                 const SizedBox(height: 20),
 
                 // ── Quick Stats ──────────────────────────────────────────
-                Text("Today's Stats",
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  "Today's Stats",
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 profileAsync.when(
                   data: (rider) => Row(
@@ -183,9 +199,12 @@ class RiderDashboardScreen extends ConsumerWidget {
                 const SizedBox(height: 24),
 
                 // ── Quick Actions ────────────────────────────────────────
-                Text('Quick Actions',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Quick Actions',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 GridView.count(
                   shrinkWrap: true,
@@ -205,13 +224,13 @@ class RiderDashboardScreen extends ConsumerWidget {
                       onTap: () => context.push('/rider/collection'),
                     ),
                     _QuickActionCard(
-                      title: 'View Route',
-                      subtitle: 'Active stops',
-                      icon: Icons.map_outlined,
+                      title: 'Pickups',
+                      subtitle: 'Customer requests',
+                      icon: Icons.local_shipping_outlined,
                       color: const Color(0xFFE8F5E9),
                       iconColor: Colors.green,
                       isDark: isDark,
-                      onTap: () => context.push('/rider/route'),
+                      onTap: () => context.push('/rider/pickups'),
                     ),
                     _QuickActionCard(
                       title: 'Performance',
@@ -239,9 +258,12 @@ class RiderDashboardScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Recent Collections',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Recent Collections',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     TextButton(
                       onPressed: () => context.push('/rider/collection'),
                       child: const Text('View All'),
@@ -249,23 +271,26 @@ class RiderDashboardScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ref.watch(riderCollectionHistoryProvider).when(
-                  data: (logs) {
-                    final recent = logs.take(3).toList();
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: recent.length,
-                      itemBuilder: (context, index) {
-                        final log = recent[index];
-                        return _CollectionLogTile(log: log, theme: theme);
+                ref
+                    .watch(riderCollectionHistoryProvider)
+                    .when(
+                      data: (logs) {
+                        final recent = logs.take(3).toList();
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: recent.length,
+                          itemBuilder: (context, index) {
+                            final log = recent[index];
+                            return _CollectionLogTile(log: log, theme: theme);
+                          },
+                        );
                       },
-                    );
-                  },
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (_, _) => const Text('Failed to load collections.'),
-                ),
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (_, _) =>
+                          const Text('Failed to load collections.'),
+                    ),
               ],
             ),
           ),
@@ -321,7 +346,10 @@ class _StatusBadge extends StatelessWidget {
         Text(
           _label,
           style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.bold, color: _color),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: _color,
+          ),
         ),
       ],
     );
@@ -349,20 +377,26 @@ class _NoRouteCard extends StatelessWidget {
               color: Colors.grey.shade100,
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.route_outlined,
-                color: Colors.grey.shade500, size: 28),
+            child: Icon(
+              Icons.route_outlined,
+              color: Colors.grey.shade500,
+              size: 28,
+            ),
           ),
           const SizedBox(width: 16),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('No Active Route',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  'No Active Route',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
                 SizedBox(height: 4),
-                Text('Your next route will appear here once assigned.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey)),
+                Text(
+                  'Your next route will appear here once assigned.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
               ],
             ),
           ),
@@ -413,40 +447,54 @@ class _ActiveRouteCard extends StatelessWidget {
                         color: Colors.white.withOpacity(0.85),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.local_shipping_outlined,
-                          color: Color(0xFFF0A500), size: 24),
+                      child: const Icon(
+                        Icons.local_shipping_outlined,
+                        color: Color(0xFFF0A500),
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('ACTIVE ROUTE',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFFC78200),
-                                letterSpacing: 1.0)),
-                        Text(route.routeName,
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF2E2A24))),
+                        const Text(
+                          'ACTIVE ROUTE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFFC78200),
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        Text(
+                          route.routeName,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2E2A24),
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text('${route.zone}',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF6E685E))),
+                  child: Text(
+                    '${route.zone}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6E685E),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -455,15 +503,19 @@ class _ActiveRouteCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _RouteStatChip(
-                    label: '${route.completedStops}/${route.totalStops}',
-                    sublabel: 'Stops'),
+                  label: '${route.completedStops}/${route.totalStops}',
+                  sublabel: 'Stops',
+                ),
                 _RouteStatChip(
-                    label: '${route.totalDistanceKm.toStringAsFixed(1)} km',
-                    sublabel: 'Total'),
+                  label: '${route.totalDistanceKm.toStringAsFixed(1)} km',
+                  sublabel: 'Total',
+                ),
                 _RouteStatChip(
-                    label: DateFormat('h:mm a')
-                        .format(route.estimatedEndTime ?? DateTime.now()),
-                    sublabel: 'Est. End'),
+                  label: DateFormat(
+                    'h:mm a',
+                  ).format(route.estimatedEndTime ?? DateTime.now()),
+                  sublabel: 'Est. End',
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -474,16 +526,18 @@ class _ActiveRouteCard extends StatelessWidget {
                 minHeight: 8,
                 backgroundColor: Colors.white.withOpacity(0.6),
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFF0A500)),
+                  Color(0xFFF0A500),
+                ),
               ),
             ),
             const SizedBox(height: 6),
             Text(
               '${(progress * 100).toInt()}% complete',
               style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6E685E),
-                  fontWeight: FontWeight.w600),
+                fontSize: 12,
+                color: Color(0xFF6E685E),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -501,14 +555,18 @@ class _RouteStatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label,
-            style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-                color: Color(0xFF2E2A24))),
-        Text(sublabel,
-            style:
-                const TextStyle(fontSize: 11, color: Color(0xFF6E685E))),
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 16,
+            color: Color(0xFF2E2A24),
+          ),
+        ),
+        Text(
+          sublabel,
+          style: const TextStyle(fontSize: 11, color: Color(0xFF6E685E)),
+        ),
       ],
     );
   }
@@ -548,11 +606,14 @@ class _StatCard extends StatelessWidget {
         children: [
           Icon(icon, color: iconColor, size: 22),
           const SizedBox(height: 8),
-          Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w900, fontSize: 15)),
-          Text(label,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+          ),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
         ],
       ),
     );
@@ -605,12 +666,17 @@ class _QuickActionCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 13)),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade500)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
               ],
             ),
           ],
@@ -661,33 +727,48 @@ class _CollectionLogTile extends StatelessWidget {
                 color: _binColor(log.binType).withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.delete, color: _binColor(log.binType), size: 20),
+              child: Icon(
+                Icons.delete,
+                color: _binColor(log.binType),
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(log.customerName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text(log.address,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade500),
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    log.customerName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    log.address,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('${log.weightKg} kg',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 13)),
+                Text(
+                  '${log.weightKg} kg',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
                 Container(
                   margin: const EdgeInsets.only(top: 4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: _statusColor(log.status).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -695,9 +776,10 @@ class _CollectionLogTile extends StatelessWidget {
                   child: Text(
                     log.status == 'pending_review' ? 'Review' : log.status,
                     style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: _statusColor(log.status)),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: _statusColor(log.status),
+                    ),
                   ),
                 ),
               ],

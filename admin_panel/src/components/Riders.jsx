@@ -1,32 +1,147 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import {
+  collection,
+  onSnapshot,
+  doc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  where,
+} from 'firebase/firestore';
 
 export default function Riders() {
-  const [riders, setRiders] = useState([
-    { name: 'Kofi Mensah', id: 'RID-0024', phone: '0244558812', vehicle: 'Motorbike (M-20-AS)', location: 'Airport Residential', status: 'Active', color: '#0284c7' },
-    { name: 'Ama Osei', id: 'RID-0031', phone: '0208119934', vehicle: 'Tricycle (T-22-EX)', location: 'East Legon', status: 'Active', color: '#10b981' },
-    { name: 'Kwame Antwi', id: 'RID-0012', phone: '0554881122', vehicle: 'Motorbike (M-19-KO)', location: 'Cantonments', status: 'Active', color: '#f59e0b' },
-    { name: 'Abena Asare', id: 'RID-0044', phone: '0277338844', vehicle: 'Motorbike (M-21-LM)', location: 'Labadi Estate', status: 'Active', color: '#ef4444' },
-    { name: 'Yaw Preko', id: 'RID-0019', phone: '0243110022', vehicle: 'Tricycle (T-21-GA)', location: 'Off Duty', status: 'Offline', color: '#94a3b8' },
-  ]);
-
-  const [selectedRider, setSelectedRider] = useState(riders[0]);
+  const [riders, setRiders] = useState([]);
+  const [selectedRider, setSelectedRider] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const handleAddRider = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const newRider = {
-      name: formData.get('name'),
-      id: `RID-00${riders.length + 1}`,
-      phone: formData.get('phone'),
-      vehicle: formData.get('vehicle'),
-      location: 'Assigned',
-      status: 'Active',
-      color: '#06b6d4',
+  useEffect(() => {
+    let riderDocs = [];
+    let userDocs = [];
+
+    const updateCombined = () => {
+      const map = new Map();
+
+      userDocs.forEach((u) => {
+        const role = (u.role || '').toLowerCase();
+        if (role === 'rider') {
+          map.set(u.id, {
+            id: u.id,
+            fullName: u.fullName || u.displayName || 'Rider',
+            email: u.email || '—',
+            phoneNumber: u.phoneNumber || u.phone || '—',
+            vehicleType: u.vehicleType || 'Motorbike',
+            licenseNumber: u.licenseNumber || 'DL-GH-20240312',
+            nationalIdNumber: u.nationalIdNumber || 'GHA-0012345678',
+            status: u.status || 'active',
+            rating: u.rating || 5.0,
+            totalCollections: u.totalCollections || 0,
+            totalWeightKg: u.totalWeightKg || 0.0,
+            earningsThisMonth: u.earningsThisMonth || 0.0,
+            efficiencyScore: u.efficiencyScore || 100.0,
+            ...u,
+          });
+        }
+      });
+
+      riderDocs.forEach((r) => {
+        const existing = map.get(r.id) || {};
+        map.set(r.id, {
+          ...existing,
+          ...r,
+          fullName: r.fullName || r.displayName || existing.fullName || 'Rider',
+        });
+      });
+
+      const merged = Array.from(map.values());
+      setRiders(merged);
+      if (merged.length > 0 && !selectedRider) {
+        setSelectedRider(merged[0]);
+      }
+      setLoading(false);
     };
-    setRiders([...riders, newRider]);
-    setShowAddModal(false);
+
+    const unsubRiders = onSnapshot(collection(db, 'riders'), (snap) => {
+      riderDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      updateCombined();
+    }, (err) => {
+      console.warn('Riders listener:', err);
+      setLoading(false);
+    });
+
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      userDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      updateCombined();
+    }, (err) => {
+      console.warn('Users listener:', err);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubRiders();
+      unsubUsers();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep selectedRider in sync with live updates
+  useEffect(() => {
+    if (selectedRider) {
+      const updated = riders.find(r => r.id === selectedRider.id);
+      if (updated) setSelectedRider(updated);
+    }
+  }, [riders]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAddRider = async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    setActionLoading(true);
+    try {
+      await addDoc(collection(db, 'riders'), {
+        fullName: form.get('name'),
+        phoneNumber: form.get('phone'),
+        vehicleType: form.get('vehicle'),
+        licenseNumber: form.get('license') || '',
+        nationalIdNumber: '',
+        email: form.get('email') || '',
+        status: 'active',
+        rating: 0,
+        totalCollections: 0,
+        totalWeightKg: 0,
+        earningsThisMonth: 0,
+        efficiencyScore: 0,
+        createdAt: serverTimestamp(),
+      });
+      setShowAddModal(false);
+    } catch (err) {
+      alert('Failed to register rider: ' + err.message);
+    }
+    setActionLoading(false);
   };
+
+  const handleToggleStatus = async (rider) => {
+    const newStatus = rider.status === 'active' ? 'offline' : 'active';
+    try {
+      await updateDoc(doc(db, 'riders', rider.id), {
+        status: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      alert('Failed to update status: ' + err.message);
+    }
+  };
+
+  const activeCount = riders.filter(r => r.status === 'active').length;
+
+  // Map positions for live riders (deterministic from index)
+  const pinPositions = [
+    { x: 120, y: 80 }, { x: 260, y: 140 }, { x: 80, y: 220 },
+    { x: 310, y: 70 }, { x: 180, y: 200 }, { x: 340, y: 190 },
+  ];
+  const pinColors = ['#0284c7', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
 
   return (
     <div className="page-content">
@@ -38,51 +153,69 @@ export default function Riders() {
             Track active drivers, manage vehicle registrations, and deploy new routes.
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-          + Register New Rider
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            {activeCount} / {riders.length} Active
+          </span>
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+            + Register New Rider
+          </button>
+        </div>
       </div>
 
       {/* ── Main Split View ── */}
       <div className="split-layout">
         {/* Left: Riders List */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <h3 style={{ fontSize: '16px' }}>Active Driver Roster</h3>
+          <h3 style={{ fontSize: '16px' }}>Driver Roster</h3>
           <div className="table-container">
             <table className="custom-table">
               <thead>
                 <tr>
                   <th>Rider Name</th>
-                  <th>ID Code</th>
                   <th>Vehicle Info</th>
-                  <th>Last Reported</th>
+                  <th>Rating</th>
+                  <th>Collections</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {riders.map((r, idx) => (
-                  <tr
-                    key={idx}
-                    onClick={() => setSelectedRider(r)}
-                    style={{ cursor: 'pointer', background: selectedRider.id === r.id ? 'var(--border-divider)' : 'transparent' }}
-                  >
-                    <td style={{ fontWeight: '700' }}>{r.name}</td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{r.id}</td>
-                    <td style={{ fontSize: '12px' }}>{r.vehicle}</td>
-                    <td>{r.location}</td>
-                    <td>
-                      <span className={`badge ${r.status === 'Active' ? 'badge-active' : ''}`} style={{ background: r.status === 'Offline' ? 'rgba(0,0,0,0.05)' : '' }}>
-                        {r.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {loading ? (
+                  <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading riders...</td></tr>
+                ) : riders.length === 0 ? (
+                  <tr><td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No riders registered yet.</td></tr>
+                ) : (
+                  riders.map((r) => (
+                    <tr
+                      key={r.id}
+                      onClick={() => setSelectedRider(r)}
+                      style={{ cursor: 'pointer', background: selectedRider?.id === r.id ? 'var(--border-divider)' : 'transparent' }}
+                    >
+                      <td style={{ fontWeight: '700' }}>{r.fullName}</td>
+                      <td style={{ fontSize: '12px' }}>{r.vehicleType}</td>
+                      <td style={{ color: 'var(--color-accent)', fontWeight: '700' }}>
+                        {r.rating > 0 ? `★ ${r.rating.toFixed(1)}` : '—'}
+                      </td>
+                      <td>{r.totalCollections ?? 0}</td>
+                      <td>
+                        <span
+                          className={`badge ${r.status === 'active' ? 'badge-active' : ''}`}
+                          style={{ background: r.status !== 'active' ? 'rgba(0,0,0,0.05)' : '', cursor: 'pointer' }}
+                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(r); }}
+                          title="Click to toggle status"
+                        >
+                          {r.status === 'active' ? 'Active' : 'Offline'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Right: Fleet Tracking Map */}
+        {/* Right: Fleet Tracking Map + Details */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
             <h3 style={{ fontSize: '16px' }}>Live Fleet Tracking Map</h3>
@@ -91,40 +224,32 @@ export default function Riders() {
             </p>
           </div>
 
-          {/* SVG Map Layout */}
+          {/* SVG Map */}
           <div style={{ position: 'relative', width: '100%', height: '300px', background: 'var(--bg-app)', border: '1px solid var(--border-divider)', borderRadius: '12px', overflow: 'hidden' }}>
             <svg viewBox="0 0 400 300" width="100%" height="100%">
-              {/* Map grid lines */}
-              <line x1="100" y1="0" x2="100" y2="300" stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
-              <line x1="200" y1="0" x2="200" y2="300" stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
-              <line x1="300" y1="0" x2="300" y2="300" stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
-              <line x1="0" y1="100" x2="400" y2="100" stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
-              <line x1="0" y1="200" x2="400" y2="200" stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
-
-              {/* Map roads/routes */}
+              {/* Grid lines */}
+              {[100, 200, 300].map(x => (
+                <line key={`vl-${x}`} x1={x} y1="0" x2={x} y2="300" stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
+              ))}
+              {[100, 200].map(y => (
+                <line key={`hl-${y}`} x1="0" y1={y} x2="400" y2={y} stroke="var(--border-divider)" strokeWidth="1" strokeDasharray="4" />
+              ))}
+              {/* Roads */}
               <path d="M 50 0 L 50 300 M 0 150 L 400 150 M 250 0 C 250 100, 320 200, 320 300" fill="none" stroke="var(--border-glass)" strokeWidth="8" />
               <path d="M 50 0 L 50 300 M 0 150 L 400 150 M 250 0 C 250 100, 320 200, 320 300" fill="none" stroke="var(--bg-sidebar)" strokeWidth="4" />
-
-              {/* Vector pins for active riders */}
-              {riders.filter(r => r.status === 'Active').map((r, i) => {
-                // Approximate location positions for mapping visualization
-                const coords = [
-                  { x: 120, y: 80 },
-                  { x: 260, y: 140 },
-                  { x: 80, y: 220 },
-                  { x: 310, y: 70 },
-                ];
-                const pos = coords[i % coords.length];
-                const isSelected = selectedRider.id === r.id;
-
+              {/* Live rider pins */}
+              {riders.filter(r => r.status === 'active').map((r, i) => {
+                const pos = pinPositions[i % pinPositions.length];
+                const color = pinColors[i % pinColors.length];
+                const isSelected = selectedRider?.id === r.id;
                 return (
                   <g key={r.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedRider(r)}>
-                    <circle cx={pos.x} cy={pos.y} r={isSelected ? '12' : '8'} fill={r.color} opacity="0.3" />
-                    <circle cx={pos.x} cy={pos.y} r="6" fill={r.color} stroke="white" strokeWidth="1.5" />
+                    <circle cx={pos.x} cy={pos.y} r={isSelected ? '14' : '10'} fill={color} opacity="0.25" />
+                    <circle cx={pos.x} cy={pos.y} r="6" fill={color} stroke="white" strokeWidth="1.5" />
                     {isSelected && (
                       <foreignObject x={pos.x + 10} y={pos.y - 12} width="120" height="40">
-                        <div style={{ background: 'var(--bg-sidebar)', padding: '2px 6px', fontSize: '9px', borderRadius: '4px', border: '1px solid var(--border-divider)', fontWeight: 'bold', boxShadow: 'var(--shadow-card)', color: 'var(--text-primary)' }}>
-                          {r.name}
+                        <div style={{ background: 'var(--bg-sidebar)', padding: '2px 6px', fontSize: '9px', borderRadius: '4px', border: '1px solid var(--border-divider)', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                          {r.fullName}
                         </div>
                       </foreignObject>
                     )}
@@ -134,25 +259,26 @@ export default function Riders() {
             </svg>
           </div>
 
-          {/* Selected Rider Details Panel */}
+          {/* Selected Rider Details */}
           {selectedRider && (
             <div style={{ padding: '16px', background: 'var(--bg-app)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-divider)', paddingBottom: '8px' }}>
-                <span style={{ fontWeight: 'bold' }}>Rider Code:</span>
-                <span>{selectedRider.id}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-divider)', paddingBottom: '8px' }}>
-                <span style={{ fontWeight: 'bold' }}>Mobile Number:</span>
-                <span>{selectedRider.phone}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-divider)', paddingBottom: '8px' }}>
-                <span style={{ fontWeight: 'bold' }}>Vehicle Assigned:</span>
-                <span>{selectedRider.vehicle}</span>
-              </div>
+              {[
+                { label: 'Phone Number', value: selectedRider.phoneNumber || '—' },
+                { label: 'Vehicle', value: selectedRider.vehicleType || '—' },
+                { label: 'License No.', value: selectedRider.licenseNumber || '—' },
+                { label: 'Earnings This Month', value: selectedRider.earningsThisMonth ? `$${selectedRider.earningsThisMonth.toFixed(2)}` : '—' },
+                { label: 'Total Collections', value: selectedRider.totalCollections ?? 0 },
+                { label: 'Efficiency Score', value: selectedRider.efficiencyScore ? `${selectedRider.efficiencyScore}%` : '—' },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-divider)', paddingBottom: '6px' }}>
+                  <span style={{ fontWeight: 'bold' }}>{label}:</span>
+                  <span>{value}</span>
+                </div>
+              ))}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 'bold' }}>Status:</span>
-                <span style={{ color: selectedRider.status === 'Active' ? 'var(--color-success)' : 'var(--text-muted)', fontWeight: 'bold' }}>
-                  {selectedRider.status}
+                <span style={{ color: selectedRider.status === 'active' ? 'var(--color-success)' : 'var(--text-muted)', fontWeight: 'bold' }}>
+                  {selectedRider.status === 'active' ? 'Active' : 'Offline'}
                 </span>
               </div>
             </div>
@@ -171,16 +297,31 @@ export default function Riders() {
                 <input name="name" type="text" placeholder="e.g. John Doe" required />
               </div>
               <div className="form-group">
+                <label>Email Address</label>
+                <input name="email" type="email" placeholder="e.g. rider@cleanconnect.com" />
+              </div>
+              <div className="form-group">
                 <label>Mobile Number</label>
                 <input name="phone" type="text" placeholder="e.g. 0244000000" required />
               </div>
               <div className="form-group">
-                <label>Vehicle Type / Reg No</label>
-                <input name="vehicle" type="text" placeholder="e.g. Motorbike (M-24-AS)" required />
+                <label>Vehicle Type</label>
+                <select name="vehicle">
+                  <option value="Motorbike">Motorbike</option>
+                  <option value="Tricycle">Tricycle</option>
+                  <option value="Compact Van">Compact Van</option>
+                  <option value="Truck">Truck</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>License Number</label>
+                <input name="license" type="text" placeholder="e.g. DL-GH-20240312" />
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-outline" onClick={() => setShowAddModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Register Account</button>
+                <button type="submit" className="btn-primary" disabled={actionLoading}>
+                  {actionLoading ? 'Registering...' : 'Register Rider'}
+                </button>
               </div>
             </form>
           </div>

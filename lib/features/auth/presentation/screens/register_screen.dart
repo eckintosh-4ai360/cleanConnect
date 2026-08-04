@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -24,6 +26,7 @@ class RegisterScreen extends HookConsumerWidget {
 
     final agreedToTerms = useState(false);
     final profileImagePath = useState<String?>(null);
+    final profileImageBytes = useState<Uint8List?>(null);
     final formKey = useMemoized(() => GlobalKey<FormState>());
 
     // Listen to registration status
@@ -79,9 +82,11 @@ class RegisterScreen extends HookConsumerWidget {
 
     // Image Picker logic
     Future<void> pickImage() async {
-      final status = await Permission.photos.request();
-      if (status.isDenied) {
-        // Fallback for newer Android/iOS or custom handling
+      if (!kIsWeb) {
+        final status = await Permission.photos.request();
+        if (status.isDenied) {
+          // Fallback for newer Android/iOS or custom handling
+        }
       }
 
       final picker = ImagePicker();
@@ -94,6 +99,7 @@ class RegisterScreen extends HookConsumerWidget {
 
       if (pickedFile != null) {
         profileImagePath.value = pickedFile.path;
+        profileImageBytes.value = await pickedFile.readAsBytes();
       }
     }
 
@@ -366,10 +372,15 @@ class RegisterScreen extends HookConsumerWidget {
                             child: profileImagePath.value != null
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(16),
-                                    child: Image.file(
-                                      File(profileImagePath.value!),
-                                      fit: BoxFit.cover,
-                                    ),
+                                    child: kIsWeb
+                                        ? Image.memory(
+                                            profileImageBytes.value!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.file(
+                                            File(profileImagePath.value!),
+                                            fit: BoxFit.cover,
+                                          ),
                                   )
                                 : Column(
                                     mainAxisAlignment: MainAxisAlignment.center,

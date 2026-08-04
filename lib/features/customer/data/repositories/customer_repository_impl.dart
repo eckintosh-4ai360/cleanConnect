@@ -1,113 +1,43 @@
-import 'dart:convert';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/repositories/customer_repository.dart';
-import '../models/customer_models.dart';
 
+/// Firestore-backed implementation of [CustomerRepository].
+/// All data is scoped to the currently authenticated user's UID.
 class CustomerRepositoryImpl implements CustomerRepository {
-  // In-memory list cache to simulate persistent remote changes
-  static final List<BinEntity> _mockBins = [
-    BinEntity(
-      id: 'bin_1',
-      serialNumber: 'BSD-8824-U1',
-      type: 'general',
-      size: '240L',
-      fillLevelPercentage: 0.45,
-      scheduleFrequency: 'Weekly',
-      pickupDays: const ['Monday', 'Thursday'],
-      registeredDate: DateTime.now().subtract(const Duration(days: 30)),
-    ),
-    BinEntity(
-      id: 'bin_2',
-      serialNumber: 'BSD-9182-R2',
-      type: 'recycling',
-      size: '240L',
-      fillLevelPercentage: 0.20,
-      scheduleFrequency: 'Bi-weekly',
-      pickupDays: const ['Wednesday'],
-      registeredDate: DateTime.now().subtract(const Duration(days: 20)),
-    ),
-    BinEntity(
-      id: 'bin_3',
-      serialNumber: 'BSD-5541-O3',
-      type: 'organic',
-      size: '120L',
-      fillLevelPercentage: 0.10,
-      scheduleFrequency: 'Weekly',
-      pickupDays: const ['Friday'],
-      registeredDate: DateTime.now().subtract(const Duration(days: 10)),
-    ),
-  ];
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  static final List<PickupRequestEntity> _mockRequests = [
-    PickupRequestEntity(
-      id: 'req_1',
-      binTypes: const ['general', 'recycling'],
-      date: DateTime.now().add(const Duration(days: 3)),
-      timeSlot: '08:00 AM - 12:00 PM',
-      location: '123 Green St, Eco City',
-      instructions: 'Keep outside gate.',
-      status: 'scheduled',
-    )
-  ];
+  String get _uid => _auth.currentUser?.uid ?? '';
 
-  static final List<ServiceRecordEntity> _mockRecords = [
-    ServiceRecordEntity(
-      id: 'rec_1',
-      title: 'General & Recycling Collection',
-      type: 'collection',
-      date: DateTime.now().subtract(const Duration(days: 4)),
-      status: 'completed',
-      weightKg: 12.5,
-      co2OffsetKg: 8.2,
-      compositionPercentages: const {
-        'Plastics': 45.0,
-        'Paper': 35.0,
-        'Glass': 20.0,
-      },
-      amountPaid: 15.00,
-      receiptNumber: 'REC-2026-8841',
-    ),
-    ServiceRecordEntity(
-      id: 'rec_2',
-      title: 'Monthly Subscription Payment',
-      type: 'payment',
-      date: DateTime.now().subtract(const Duration(days: 12)),
-      status: 'completed',
-      amountPaid: 15.00,
-      receiptNumber: 'REC-2026-7712',
-    ),
-    ServiceRecordEntity(
-      id: 'rec_3',
-      title: 'Organic Waste Collection',
-      type: 'collection',
-      date: DateTime.now().subtract(const Duration(days: 18)),
-      status: 'completed',
-      weightKg: 8.4,
-      co2OffsetKg: 5.1,
-      compositionPercentages: const {
-        'Organic': 100.0,
-      },
-      amountPaid: 0.00,
-      receiptNumber: 'REC-2026-6632',
-    ),
-  ];
+  CollectionReference get _binsRef =>
+      _db.collection('customers').doc(_uid).collection('bins');
 
-  static SubscriptionEntity _mockSubscription = SubscriptionEntity(
-    currentPlan: 'Weekly Plan',
-    fee: 15.00,
-    status: 'active',
-    paymentMethod: 'Credit/Debit Card',
-    outstandingBalance: 15.00,
-    nextPickupDate: DateTime.now().add(const Duration(days: 3)),
-  );
+  CollectionReference get _requestsRef =>
+      _db.collection('customers').doc(_uid).collection('pickupRequests');
 
-  CustomerRepositoryImpl();
+  CollectionReference get _historyRef =>
+      _db.collection('customers').doc(_uid).collection('serviceHistory');
+
+  DocumentReference get _customerRef => _db.collection('customers').doc(_uid);
+
+  // ── Bins
+
+  @override
+  Stream<List<BinEntity>> watchBins() {
+    return _binsRef
+        .orderBy('registeredAt', descending: false)
+        .snapshots()
+        .map((snap) => snap.docs.map(_binFromDoc).toList());
+  }
 
   @override
   Future<List<BinEntity>> getBins() async {
-    await Future.delayed(const Duration(milliseconds: 1000));
-    return List.from(_mockBins);
+    final snap = await _binsRef
+        .orderBy('registeredAt', descending: false)
+        .get();
+    return snap.docs.map(_binFromDoc).toList();
   }
 
   @override
@@ -120,28 +50,106 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String gpsLocation,
     String? photoPath,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
+    final data = {
+      'serialNumber': serialNumber,
+      'type': type,
+      'size': size,
+      'fillLevelPercentage': 0.0,
+      'scheduleFrequency': frequency,
+      'pickupDays': pickupDays,
+      'gpsLocation': gpsLocation,
+      'verificationPhotoUrl': photoPath,
+      'registeredAt': FieldValue.serverTimestamp(),
+    };
+    final docRef = await _binsRef.add(data);
 
-    final newBin = BinEntity(
-      id: 'bin_${DateTime.now().millisecondsSinceEpoch}',
+    // Upsert customer profile document in 'customers' collection so Admin Panel sees it
+    try {
+      final custDoc = await _customerRef.get();
+      final custData = custDoc.data() as Map<String, dynamic>? ?? {};
+      final name =
+          _auth.currentUser?.displayName ??
+          custData['displayName'] ??
+          custData['fullName'] ??
+          'Customer';
+      final email = _auth.currentUser?.email ?? custData['email'] ?? '';
+
+      await _customerRef.set({
+        'displayName': name,
+        'fullName': name,
+        'email': email,
+        'phoneNumber':
+            custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '',
+        'contractType': 'Residential',
+        'subscriptionPlan': '$frequency Plan',
+        'subscriptionFee': 50.0,
+        'subscriptionStatus': 'active',
+        'paymentMethod': 'Mobile Money',
+        'outstandingBalance': 0.0,
+        'registeredBinsCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Push real-time notification to admin_notifications
+      await _db.collection('admin_notifications').add({
+        'title': 'New Bin Registered',
+        'message': '$name registered a $size $type bin.',
+        'type': 'bin_registered',
+        'customerId': _uid,
+        'customerName': name,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+
+    return BinEntity(
+      id: docRef.id,
       serialNumber: serialNumber,
       type: type,
       size: size,
-      fillLevelPercentage: 0.0, // newly registered bin starts empty
+      fillLevelPercentage: 0.0,
       scheduleFrequency: frequency,
       pickupDays: pickupDays,
       verificationPhotoUrl: photoPath,
       registeredDate: DateTime.now(),
     );
+  }
 
-    _mockBins.add(newBin);
-    return newBin;
+  BinEntity _binFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return BinEntity(
+      id: doc.id,
+      serialNumber: d['serialNumber'] as String? ?? '',
+      type: d['type'] as String? ?? 'general',
+      size: d['size'] as String? ?? '240L',
+      fillLevelPercentage:
+          (d['fillLevelPercentage'] as num?)?.toDouble() ?? 0.0,
+      scheduleFrequency: d['scheduleFrequency'] as String?,
+      pickupDays: (d['pickupDays'] as List<dynamic>?)?.cast<String>(),
+      verificationPhotoUrl: d['verificationPhotoUrl'] as String?,
+      registeredDate: d['registeredAt'] is Timestamp
+          ? (d['registeredAt'] as Timestamp).toDate()
+          : DateTime.now(),
+    );
+  }
+
+  // ── Pickup Requests ───────────────────────────────────────────────────────
+
+  @override
+  Stream<List<PickupRequestEntity>> watchPickupRequests() {
+    return _requestsRef
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(_requestFromDoc).toList());
   }
 
   @override
   Future<List<PickupRequestEntity>> getPickupRequests() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    return List.from(_mockRequests);
+    final snap = await _requestsRef
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs.map(_requestFromDoc).toList();
   }
 
   @override
@@ -152,10 +160,70 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String location,
     String? instructions,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
+    final custDoc = await _customerRef.get();
+    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
+    final name =
+        _auth.currentUser?.displayName ??
+        custData['displayName'] ??
+        custData['fullName'] ??
+        'Customer';
+    final email = _auth.currentUser?.email ?? custData['email'] ?? '';
 
-    final newRequest = PickupRequestEntity(
-      id: 'req_${DateTime.now().millisecondsSinceEpoch}',
+    final data = {
+      'binTypes': binTypes,
+      'date': Timestamp.fromDate(date),
+      'timeSlot': timeSlot,
+      'location': location,
+      'instructions': instructions,
+      'status': 'pending',
+      'customerId': _uid,
+      'customerName': name,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    final docRef = await _requestsRef.add(data);
+
+    try {
+      // 1. Also add to root 'pickupRequests' collection for Admin Panel overview
+      await _db.collection('pickupRequests').doc(docRef.id).set({
+        ...data,
+        'id': docRef.id,
+      });
+
+      // 2. Upsert customer profile in 'customers' collection
+      await _customerRef.set({
+        'displayName': name,
+        'fullName': name,
+        'email': email,
+        'phoneNumber':
+            custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '',
+        'contractType': 'Residential',
+        'subscriptionPlan': 'Weekly Plan',
+        'subscriptionFee': 50.0,
+        'subscriptionStatus': 'active',
+        'paymentMethod': 'Mobile Money',
+        'outstandingBalance': 0.0,
+        'activeRequestsCount': FieldValue.increment(1),
+        'lastPickupRequestDate': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 3. Add real-time notification to admin_notifications
+      await _db.collection('admin_notifications').add({
+        'title': 'Pickup Requested',
+        'message':
+            '$name requested pickup for ${binTypes.join(", ")} ($timeSlot at $location).',
+        'type': 'pickup_requested',
+        'customerId': _uid,
+        'customerName': name,
+        'requestId': docRef.id,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+
+    return PickupRequestEntity(
+      id: docRef.id,
       binTypes: binTypes,
       date: date,
       timeSlot: timeSlot,
@@ -163,22 +231,101 @@ class CustomerRepositoryImpl implements CustomerRepository {
       instructions: instructions,
       status: 'pending',
     );
+  }
 
-    _mockRequests.add(newRequest);
-    return newRequest;
+  PickupRequestEntity _requestFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return PickupRequestEntity(
+      id: doc.id,
+      binTypes: (d['binTypes'] as List<dynamic>?)?.cast<String>() ?? [],
+      date: d['date'] is Timestamp
+          ? (d['date'] as Timestamp).toDate()
+          : DateTime.now(),
+      timeSlot: d['timeSlot'] as String? ?? '',
+      location: d['location'] as String? ?? '',
+      instructions: d['instructions'] as String?,
+      status: d['status'] as String? ?? 'pending',
+    );
+  }
+
+  // ── Service History ───────────────────────────────────────────────────────
+
+  @override
+  Stream<List<ServiceRecordEntity>> watchServiceHistory() {
+    return _historyRef
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(_recordFromDoc).toList());
   }
 
   @override
   Future<List<ServiceRecordEntity>> getServiceHistory() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    return List.from(_mockRecords);
+    final snap = await _historyRef.orderBy('date', descending: true).get();
+    return snap.docs.map(_recordFromDoc).toList();
+  }
+
+  ServiceRecordEntity _recordFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return ServiceRecordEntity(
+      id: doc.id,
+      title: d['title'] as String? ?? 'Service Record',
+      type: d['type'] as String? ?? 'collection',
+      date: d['date'] is Timestamp
+          ? (d['date'] as Timestamp).toDate()
+          : DateTime.now(),
+      status: d['status'] as String? ?? 'completed',
+      weightKg: (d['weightKg'] as num?)?.toDouble(),
+      co2OffsetKg: (d['co2OffsetKg'] as num?)?.toDouble(),
+      compositionPercentages: d['compositionPercentages'] != null
+          ? Map<String, double>.from(
+              (d['compositionPercentages'] as Map).map(
+                (k, v) => MapEntry(k as String, (v as num).toDouble()),
+              ),
+            )
+          : null,
+      amountPaid: (d['amountPaid'] as num?)?.toDouble() ?? 0.0,
+      receiptNumber: d['receiptNumber'] as String?,
+    );
+  }
+
+  // ── Subscription ─────────────────────────────────────────────────────────
+
+  @override
+  Stream<SubscriptionEntity> watchSubscription() {
+    return _customerRef.snapshots().map((doc) {
+      if (!doc.exists) return _defaultSubscription();
+      return _subscriptionFromDoc(doc);
+    });
   }
 
   @override
   Future<SubscriptionEntity> getSubscription() async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    return _mockSubscription;
+    final doc = await _customerRef.get();
+    if (!doc.exists) return _defaultSubscription();
+    return _subscriptionFromDoc(doc);
   }
+
+  SubscriptionEntity _subscriptionFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return SubscriptionEntity(
+      currentPlan: d['subscriptionPlan'] as String? ?? 'Weekly Plan',
+      fee: (d['subscriptionFee'] as num?)?.toDouble() ?? 0.0,
+      status: d['subscriptionStatus'] as String? ?? 'active',
+      paymentMethod: d['paymentMethod'] as String? ?? 'Mobile Money',
+      outstandingBalance: (d['outstandingBalance'] as num?)?.toDouble() ?? 0.0,
+      nextPickupDate: d['nextPickupDate'] is Timestamp
+          ? (d['nextPickupDate'] as Timestamp).toDate()
+          : null,
+    );
+  }
+
+  SubscriptionEntity _defaultSubscription() => const SubscriptionEntity(
+    currentPlan: 'Weekly Plan',
+    fee: 0.0,
+    status: 'active',
+    paymentMethod: 'Mobile Money',
+    outstandingBalance: 0.0,
+  );
 
   @override
   Future<SubscriptionEntity> updateSubscription({
@@ -186,45 +333,37 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required double fee,
     required String paymentMethod,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    _mockSubscription = SubscriptionEntity(
-      currentPlan: newPlan,
-      fee: fee,
-      status: 'active',
-      paymentMethod: paymentMethod,
-      outstandingBalance: fee,
-      nextPickupDate: DateTime.now().add(const Duration(days: 3)),
-    );
-
-    return _mockSubscription;
+    await _customerRef.set({
+      'subscriptionPlan': newPlan,
+      'subscriptionFee': fee,
+      'paymentMethod': paymentMethod,
+      'subscriptionStatus': 'active',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    return getSubscription();
   }
 
   @override
   Future<void> payOutstandingBalance() async {
-    await Future.delayed(const Duration(milliseconds: 1500));
-    _mockSubscription = SubscriptionEntity(
-      currentPlan: _mockSubscription.currentPlan,
-      fee: _mockSubscription.fee,
-      status: _mockSubscription.status,
-      paymentMethod: _mockSubscription.paymentMethod,
-      outstandingBalance: 0.00,
-      nextPickupDate: _mockSubscription.nextPickupDate,
-    );
+    final current = await getSubscription();
+    final amountPaid = current.outstandingBalance;
 
-    // Add a receipt payment record to service history
-    _mockRecords.insert(
-      0,
-      ServiceRecordEntity(
-        id: 'rec_${DateTime.now().millisecondsSinceEpoch}',
-        title: 'Outstanding Balance Payment',
-        type: 'payment',
-        date: DateTime.now(),
-        status: 'completed',
-        amountPaid: 15.00,
-        receiptNumber: 'REC-${DateTime.now().year}-${DateTime.now().millisecond}',
-      ),
-    );
+    // Atomic: zero the balance + add service history record
+    final batch = _db.batch();
+    batch.set(_customerRef, {
+      'outstandingBalance': 0.0,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    batch.set(_historyRef.doc(), {
+      'title': 'Outstanding Balance Payment',
+      'type': 'payment',
+      'date': FieldValue.serverTimestamp(),
+      'status': 'completed',
+      'amountPaid': amountPaid,
+      'receiptNumber':
+          'REC-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 10000}',
+    });
+    await batch.commit();
   }
 
   @override
@@ -232,19 +371,13 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String category,
     required String description,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 1200));
-
-    // Add a support record to history
-    _mockRecords.insert(
-      0,
-      ServiceRecordEntity(
-        id: 'rec_${DateTime.now().millisecondsSinceEpoch}',
-        title: 'Support Ticket: $category',
-        type: 'support',
-        date: DateTime.now(),
-        status: 'pending',
-        amountPaid: 0.00,
-      ),
-    );
+    await _historyRef.add({
+      'title': 'Support Ticket: $category',
+      'type': 'support',
+      'date': FieldValue.serverTimestamp(),
+      'status': 'pending',
+      'amountPaid': 0.0,
+      'description': description,
+    });
   }
 }

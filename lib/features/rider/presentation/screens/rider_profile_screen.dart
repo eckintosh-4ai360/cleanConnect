@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/rider_nav_bar.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
@@ -16,7 +17,7 @@ class RiderProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 4),
+      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 5),
       appBar: AppBar(
         backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
@@ -35,8 +36,12 @@ class RiderProfileScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
           child: profileAsync.when(
-            data: (rider) => Column(
-              children: [
+            data: (rider) {
+              if (rider == null) {
+                return const Center(child: Text('Rider profile not found.'));
+              }
+              return Column(
+                children: [
                 // ── Profile Hero ─────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(24),
@@ -223,11 +228,17 @@ class RiderProfileScreen extends ConsumerWidget {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    onPressed: () => context.go('/login'),
+                    onPressed: () async {
+                      await ref.read(authStateControllerProvider.notifier).logout();
+                      if (context.mounted) {
+                        context.go('/login');
+                      }
+                    },
                   ),
                 ),
               ],
-            ),
+            );
+          },
             loading: () =>
                 const Center(child: CircularProgressIndicator()),
             error: (_, __) =>

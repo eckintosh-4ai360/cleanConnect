@@ -16,15 +16,18 @@ class RiderBottomNavBar extends StatelessWidget {
         context.go('/rider/dashboard');
         break;
       case 1:
-        context.go('/rider/route');
+        context.go('/rider/pickups');
         break;
       case 2:
-        context.go('/rider/collection');
+        context.go('/rider/route');
         break;
       case 3:
-        context.go('/rider/performance');
+        context.go('/rider/collection');
         break;
       case 4:
+        context.go('/rider/performance');
+        break;
+      case 5:
         context.go('/rider/profile');
         break;
     }
@@ -41,14 +44,19 @@ class RiderBottomNavBar extends StatelessWidget {
       selectedItemColor: theme.colorScheme.primary,
       unselectedItemColor: Colors.grey.shade400,
       selectedLabelStyle:
-          const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+          const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
       unselectedLabelStyle:
-          const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+          const TextStyle(fontWeight: FontWeight.w500, fontSize: 10),
       items: const [
         BottomNavigationBarItem(
           icon: Icon(Icons.dashboard_outlined),
           activeIcon: Icon(Icons.dashboard),
           label: 'Home',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.local_shipping_outlined),
+          activeIcon: Icon(Icons.local_shipping),
+          label: 'Pickups',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.map_outlined),

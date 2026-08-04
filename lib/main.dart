@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:device_preview/device_preview.dart';
 import 'core/config/router.dart';
 import 'core/config/theme.dart';
 import 'core/config/theme_provider.dart';
@@ -36,7 +37,12 @@ void main() async {
   await Hive.openBox('auth_box');
   await Hive.openBox('settings_box');
 
-  runApp(const ProviderScope(child: EcoWasteApp()));
+  runApp(
+    DevicePreview(
+      enabled: !kReleaseMode,
+      builder: (context) => const ProviderScope(child: EcoWasteApp()),
+    ),
+  );
 }
 
 class EcoWasteApp extends ConsumerWidget {
@@ -46,15 +52,19 @@ class EcoWasteApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeControllerProvider);
     final router = ref.watch(routerProvider);
-    
+
     return MaterialApp.router(
       title: 'CleanConnect',
       debugShowCheckedModeBanner: false,
+      locale: DevicePreview.locale(context),
+      builder: (context, child) => DevicePreview.appBuilder(
+        context,
+        SafeArea(child: child!),
+      ),
       theme: EcoTheme.lightTheme,
       darkTheme: EcoTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
-      builder: (context, child) => SafeArea(child: child!),
     );
   }
 }

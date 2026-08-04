@@ -55,7 +55,7 @@ String _$riderRepositoryHash() => r'65f496f9a2da583de6644786f2e138350e8764a9';
 final riderProfileProvider = RiderProfileProvider._();
 
 final class RiderProfileProvider
-    extends $AsyncNotifierProvider<RiderProfile, RiderEntity> {
+    extends $StreamNotifierProvider<RiderProfile, RiderEntity?> {
   RiderProfileProvider._()
     : super(
         from: null,
@@ -75,19 +75,19 @@ final class RiderProfileProvider
   RiderProfile create() => RiderProfile();
 }
 
-String _$riderProfileHash() => r'414b1341dd001f1a1ec8a4edf6908f3696950637';
+String _$riderProfileHash() => r'a5e5b01f1cf7dca2f4f1d08ce331b935f99dedd1';
 
-abstract class _$RiderProfile extends $AsyncNotifier<RiderEntity> {
-  FutureOr<RiderEntity> build();
+abstract class _$RiderProfile extends $StreamNotifier<RiderEntity?> {
+  Stream<RiderEntity?> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
-    final ref = this.ref as $Ref<AsyncValue<RiderEntity>, RiderEntity>;
+    final ref = this.ref as $Ref<AsyncValue<RiderEntity?>, RiderEntity?>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<AsyncValue<RiderEntity>, RiderEntity>,
-              AsyncValue<RiderEntity>,
+              AnyNotifier<AsyncValue<RiderEntity?>, RiderEntity?>,
+              AsyncValue<RiderEntity?>,
               Object?,
               Object?
             >;
@@ -99,7 +99,7 @@ abstract class _$RiderProfile extends $AsyncNotifier<RiderEntity> {
 final riderActiveRouteProvider = RiderActiveRouteProvider._();
 
 final class RiderActiveRouteProvider
-    extends $AsyncNotifierProvider<RiderActiveRoute, ActiveRouteEntity?> {
+    extends $StreamNotifierProvider<RiderActiveRoute, ActiveRouteEntity?> {
   RiderActiveRouteProvider._()
     : super(
         from: null,
@@ -119,10 +119,10 @@ final class RiderActiveRouteProvider
   RiderActiveRoute create() => RiderActiveRoute();
 }
 
-String _$riderActiveRouteHash() => r'71d169b828239afde880d66ebf26706185055f31';
+String _$riderActiveRouteHash() => r'66bfebdcf6a1dee9fb09bed6271fdf47d36319e8';
 
-abstract class _$RiderActiveRoute extends $AsyncNotifier<ActiveRouteEntity?> {
-  FutureOr<ActiveRouteEntity?> build();
+abstract class _$RiderActiveRoute extends $StreamNotifier<ActiveRouteEntity?> {
+  Stream<ActiveRouteEntity?> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -145,7 +145,7 @@ final riderCollectionHistoryProvider = RiderCollectionHistoryProvider._();
 
 final class RiderCollectionHistoryProvider
     extends
-        $AsyncNotifierProvider<
+        $StreamNotifierProvider<
           RiderCollectionHistory,
           List<CollectionLogEntity>
         > {
@@ -169,11 +169,11 @@ final class RiderCollectionHistoryProvider
 }
 
 String _$riderCollectionHistoryHash() =>
-    r'c5e2b2d2bde3bce1565a0896b5f2a1810b778d2f';
+    r'30f7aaf93e3314639b8274a7daeeb3acc933cefb';
 
 abstract class _$RiderCollectionHistory
-    extends $AsyncNotifier<List<CollectionLogEntity>> {
-  FutureOr<List<CollectionLogEntity>> build();
+    extends $StreamNotifier<List<CollectionLogEntity>> {
+  Stream<List<CollectionLogEntity>> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -202,7 +202,7 @@ abstract class _$RiderCollectionHistory
 final riderPerformanceProvider = RiderPerformanceProvider._();
 
 final class RiderPerformanceProvider
-    extends $AsyncNotifierProvider<RiderPerformance, RiderPerformanceEntity> {
+    extends $StreamNotifierProvider<RiderPerformance, RiderPerformanceEntity> {
   RiderPerformanceProvider._()
     : super(
         from: null,
@@ -222,11 +222,11 @@ final class RiderPerformanceProvider
   RiderPerformance create() => RiderPerformance();
 }
 
-String _$riderPerformanceHash() => r'3611c0041b809b421cb2b772e68504e589056ed9';
+String _$riderPerformanceHash() => r'd52148bd5249fc1eeac8647d13ac6944b1298648';
 
 abstract class _$RiderPerformance
-    extends $AsyncNotifier<RiderPerformanceEntity> {
-  FutureOr<RiderPerformanceEntity> build();
+    extends $StreamNotifier<RiderPerformanceEntity> {
+  Stream<RiderPerformanceEntity> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -253,7 +253,7 @@ final riderNotificationsProvider = RiderNotificationsProvider._();
 
 final class RiderNotificationsProvider
     extends
-        $AsyncNotifierProvider<
+        $StreamNotifierProvider<
           RiderNotifications,
           List<RiderNotificationEntity>
         > {
@@ -277,11 +277,11 @@ final class RiderNotificationsProvider
 }
 
 String _$riderNotificationsHash() =>
-    r'18ca25e46c6c3975290f1e38932228c284743f06';
+    r'7b15af80d7a3f7fba09d00a6ebd4f89e076f386e';
 
 abstract class _$RiderNotifications
-    extends $AsyncNotifier<List<RiderNotificationEntity>> {
-  FutureOr<List<RiderNotificationEntity>> build();
+    extends $StreamNotifier<List<RiderNotificationEntity>> {
+  Stream<List<RiderNotificationEntity>> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -299,6 +299,60 @@ abstract class _$RiderNotifications
                 List<RiderNotificationEntity>
               >,
               AsyncValue<List<RiderNotificationEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+@ProviderFor(AvailablePickups)
+final availablePickupsProvider = AvailablePickupsProvider._();
+
+final class AvailablePickupsProvider
+    extends
+        $StreamNotifierProvider<AvailablePickups, List<PickupRequestEntity>> {
+  AvailablePickupsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'availablePickupsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$availablePickupsHash();
+
+  @$internal
+  @override
+  AvailablePickups create() => AvailablePickups();
+}
+
+String _$availablePickupsHash() => r'68819a5ef273b141b3182e4a4474b2d32dc29f77';
+
+abstract class _$AvailablePickups
+    extends $StreamNotifier<List<PickupRequestEntity>> {
+  Stream<List<PickupRequestEntity>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<List<PickupRequestEntity>>,
+              List<PickupRequestEntity>
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<List<PickupRequestEntity>>,
+                List<PickupRequestEntity>
+              >,
+              AsyncValue<List<PickupRequestEntity>>,
               Object?,
               Object?
             >;

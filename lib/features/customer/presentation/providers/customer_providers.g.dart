@@ -61,7 +61,7 @@ String _$customerRepositoryHash() =>
 final customerBinsProvider = CustomerBinsProvider._();
 
 final class CustomerBinsProvider
-    extends $AsyncNotifierProvider<CustomerBins, List<BinEntity>> {
+    extends $StreamNotifierProvider<CustomerBins, List<BinEntity>> {
   CustomerBinsProvider._()
     : super(
         from: null,
@@ -81,10 +81,10 @@ final class CustomerBinsProvider
   CustomerBins create() => CustomerBins();
 }
 
-String _$customerBinsHash() => r'339f7cd4b3c8f268c0bf51dcc751e620ff908b03';
+String _$customerBinsHash() => r'881dcff919ef829a55410644a3f0cd96ed417d16';
 
-abstract class _$CustomerBins extends $AsyncNotifier<List<BinEntity>> {
-  FutureOr<List<BinEntity>> build();
+abstract class _$CustomerBins extends $StreamNotifier<List<BinEntity>> {
+  Stream<List<BinEntity>> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -106,7 +106,7 @@ final customerPickupRequestsProvider = CustomerPickupRequestsProvider._();
 
 final class CustomerPickupRequestsProvider
     extends
-        $AsyncNotifierProvider<
+        $StreamNotifierProvider<
           CustomerPickupRequests,
           List<PickupRequestEntity>
         > {
@@ -130,11 +130,11 @@ final class CustomerPickupRequestsProvider
 }
 
 String _$customerPickupRequestsHash() =>
-    r'2a58128346bfadd1ff14a16097d7d7c4f1eff549';
+    r'ae69f51b5a7a24805fa571b49420fca945cbfcb7';
 
 abstract class _$CustomerPickupRequests
-    extends $AsyncNotifier<List<PickupRequestEntity>> {
-  FutureOr<List<PickupRequestEntity>> build();
+    extends $StreamNotifier<List<PickupRequestEntity>> {
+  Stream<List<PickupRequestEntity>> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -163,7 +163,7 @@ abstract class _$CustomerPickupRequests
 final customerSubscriptionProvider = CustomerSubscriptionProvider._();
 
 final class CustomerSubscriptionProvider
-    extends $AsyncNotifierProvider<CustomerSubscription, SubscriptionEntity> {
+    extends $StreamNotifierProvider<CustomerSubscription, SubscriptionEntity> {
   CustomerSubscriptionProvider._()
     : super(
         from: null,
@@ -184,11 +184,11 @@ final class CustomerSubscriptionProvider
 }
 
 String _$customerSubscriptionHash() =>
-    r'bf1ad37f081b046eff850de5b9a39e58f6d7c6e5';
+    r'f6a8650f0c053673027c898e39af4c95d03baeb9';
 
 abstract class _$CustomerSubscription
-    extends $AsyncNotifier<SubscriptionEntity> {
-  FutureOr<SubscriptionEntity> build();
+    extends $StreamNotifier<SubscriptionEntity> {
+  Stream<SubscriptionEntity> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
@@ -210,7 +210,8 @@ abstract class _$CustomerSubscription
 final customerHistoryProvider = CustomerHistoryProvider._();
 
 final class CustomerHistoryProvider
-    extends $AsyncNotifierProvider<CustomerHistory, List<ServiceRecordEntity>> {
+    extends
+        $StreamNotifierProvider<CustomerHistory, List<ServiceRecordEntity>> {
   CustomerHistoryProvider._()
     : super(
         from: null,
@@ -230,11 +231,11 @@ final class CustomerHistoryProvider
   CustomerHistory create() => CustomerHistory();
 }
 
-String _$customerHistoryHash() => r'c0d323447a04bc26ddd0cbdc7eb72ecf3f88168e';
+String _$customerHistoryHash() => r'3be04df8c9164993e2f8c83e6106a458e865b57a';
 
 abstract class _$CustomerHistory
-    extends $AsyncNotifier<List<ServiceRecordEntity>> {
-  FutureOr<List<ServiceRecordEntity>> build();
+    extends $StreamNotifier<List<ServiceRecordEntity>> {
+  Stream<List<ServiceRecordEntity>> build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {

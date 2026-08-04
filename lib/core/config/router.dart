@@ -11,8 +11,16 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
-import '../../features/customer/presentation/screens/customer_home_page.dart';
-import '../../features/rider/presentation/screens/rider_home_page.dart';
+import '../../features/customer/presentation/screens/customer_dashboard_screen.dart';
+import '../../features/customer/presentation/screens/bin_management_screen.dart';
+import '../../features/customer/presentation/screens/bin_register_screen.dart';
+import '../../features/customer/presentation/screens/pickup_request_screen.dart';
+import '../../features/customer/presentation/screens/pickup_confirmed_screen.dart';
+import '../../features/customer/presentation/screens/service_history_screen.dart';
+import '../../features/customer/presentation/screens/collection_detail_screen.dart';
+import '../../features/customer/presentation/screens/subscription_screen.dart';
+import '../../features/customer/presentation/screens/profile_settings_screen.dart';
+import '../../features/customer/presentation/screens/support_home_screen.dart';
 import '../../features/rider/presentation/screens/rider_register_screen.dart';
 import '../../features/rider/presentation/screens/rider_dashboard_screen.dart';
 import '../../features/rider/presentation/screens/route_optimization_screen.dart';
@@ -20,6 +28,8 @@ import '../../features/rider/presentation/screens/rider_collection_screen.dart';
 import '../../features/rider/presentation/screens/performance_analytics_screen.dart';
 import '../../features/rider/presentation/screens/rider_profile_screen.dart';
 import '../../features/rider/presentation/screens/rider_notifications_screen.dart';
+import '../../features/rider/presentation/screens/available_pickups_screen.dart';
+import '../../features/rider/presentation/screens/rider_navigation_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard.dart';
 
 part 'router.g.dart';
@@ -126,7 +136,54 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: '/customer/home',
-        builder: (context, state) => const CustomerHomePage(),
+        builder: (context, state) => const CustomerDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/customer/dashboard',
+        builder: (context, state) => const CustomerDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard',
+        builder: (context, state) => const CustomerDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/customer/bins',
+        builder: (context, state) => const BinManagementScreen(),
+      ),
+      GoRoute(
+        path: '/customer/register-bin',
+        builder: (context, state) => const BinRegisterScreen(),
+      ),
+      GoRoute(
+        path: '/customer/request-pickup',
+        builder: (context, state) => const PickupRequestScreen(),
+      ),
+      GoRoute(
+        path: '/customer/pickup-confirmed',
+        builder: (context, state) => const PickupConfirmedScreen(),
+      ),
+      GoRoute(
+        path: '/customer/history',
+        builder: (context, state) => const ServiceHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/customer/collection-detail',
+        builder: (context, state) {
+          final recordId = state.extra as String? ?? 'REC-001';
+          return CollectionDetailScreen(recordId: recordId);
+        },
+      ),
+      GoRoute(
+        path: '/customer/subscription',
+        builder: (context, state) => const SubscriptionScreen(),
+      ),
+      GoRoute(
+        path: '/customer/profile',
+        builder: (context, state) => const ProfileSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/customer/support',
+        builder: (context, state) => const SupportHomeScreen(),
       ),
       GoRoute(
         path: '/rider/home',
@@ -155,6 +212,17 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: '/rider/notifications',
         builder: (context, state) => const RiderNotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/rider/pickups',
+        builder: (context, state) => const AvailablePickupsScreen(),
+      ),
+      GoRoute(
+        path: '/rider/navigation',
+        builder: (context, state) {
+          final pickup = state.extra as PickupRequestEntity?;
+          return RiderNavigationScreen(pickup: pickup);
+        },
       ),
       GoRoute(
         path: '/admin/home',

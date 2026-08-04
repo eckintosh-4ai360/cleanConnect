@@ -1,11 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // ── Helper Functions ──────────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ── Users Collection ──────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // ── Customers Collection & Subcollections ─────────────────────────────────
+    match /customers/{customerId} {
+      allow read, write: if true;
+
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // ── Riders Collection & Subcollections ────────────────────────────────────
+    match /riders/{riderId} {
+      allow read, write: if true;
+
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // ── Routes & Route Stops ──────────────────────────────────────────────────
+    match /routes/{routeId} {
+      allow read, write: if true;
+
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // ── Collections Audits ────────────────────────────────────────────────────
+    match /collections/{collectionId} {
+      allow read, write: if true;
+    }
+
+    // ── Payments & Invoicing ──────────────────────────────────────────────────
+    match /payments/{paymentId} {
+      allow read, write: if true;
+    }
+
+    // ── Platform / Admin Notifications ────────────────────────────────────────
+    match /admin_notifications/{notifId} {
+      allow read, write: if true;
+    }
+
+    // ── Root Pickup Requests ──────────────────────────────────────────────────
+    match /pickupRequests/{requestId} {
+      allow read, write: if true;
     }
   }
 }
