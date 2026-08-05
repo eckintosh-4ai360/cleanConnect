@@ -250,8 +250,8 @@ export default function App() {
       {/* ── Left Sidebar Navigation ── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="sidebar-logo">EF</div>
-          <span className="sidebar-title">EcoFlow Admin</span>
+          <div className="sidebar-logo">CC</div>
+          <span className="sidebar-title">CleanConnect Admin</span>
         </div>
 
         <nav className="sidebar-menu">

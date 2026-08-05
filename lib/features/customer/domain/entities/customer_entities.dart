@@ -68,15 +68,18 @@ class PickupRequestEntity {
 
 class ServiceRecordEntity {
   final String id;
-  final String title; // 'General Waste Collection', 'Monthly Subscription Payment'
+  // 'General Waste Collection', 'Monthly Subscription Payment'
+  final String title;
   final String type; // 'collection', 'payment', 'support'
   final DateTime date;
   final String status; // 'completed', 'failed', 'pending'
   final double? weightKg;
   final double? co2OffsetKg;
-  final Map<String, double>? compositionPercentages; // {'Plastics': 45.0, 'Paper': 35.0, 'Glass': 20.0}
+  // {'Plastics': 45.0, 'Paper': 35.0, 'Glass': 20.0}
+  final Map<String, double>? compositionPercentages;
   final double amountPaid;
   final String? receiptNumber;
+  final String? paymentMethod;
 
   const ServiceRecordEntity({
     required this.id,
@@ -89,14 +92,17 @@ class ServiceRecordEntity {
     this.compositionPercentages,
     required this.amountPaid,
     this.receiptNumber,
+    this.paymentMethod,
   });
 }
 
 class SubscriptionEntity {
-  final String currentPlan; // 'Weekly Plan', 'Bi-weekly Plan', 'Monthly Plan', 'Pay-As-You-Go'
+  // 'Weekly Plan', 'Bi-weekly Plan', 'Monthly Plan', 'Pay-As-You-Go'
+  final String currentPlan;
   final double fee;
   final String status; // 'active', 'expired', 'paused'
-  final String paymentMethod; // 'Credit/Debit Card', 'Mobile Money', 'Apple Pay'
+  // 'Credit/Debit Card', 'Mobile Money', 'Apple Pay'
+  final String paymentMethod;
   final double outstandingBalance;
   final DateTime? nextPickupDate;
 

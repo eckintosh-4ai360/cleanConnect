@@ -26,7 +26,9 @@ class CustomerBins extends _$CustomerBins {
     required String gpsLocation,
     String? photoPath,
   }) async {
-    await ref.read(customerRepositoryProvider).registerBin(
+    await ref
+        .read(customerRepositoryProvider)
+        .registerBin(
           type: type,
           size: size,
           serialNumber: serialNumber,
@@ -50,13 +52,19 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
     required DateTime date,
     required String timeSlot,
     required String location,
+    required double amountPaid,
+    required String paymentMethod,
     String? instructions,
   }) async {
-    await ref.read(customerRepositoryProvider).schedulePickup(
+    await ref
+        .read(customerRepositoryProvider)
+        .schedulePickup(
           binTypes: binTypes,
           date: date,
           timeSlot: timeSlot,
           location: location,
+          amountPaid: amountPaid,
+          paymentMethod: paymentMethod,
           instructions: instructions,
         );
   }
@@ -74,7 +82,9 @@ class CustomerSubscription extends _$CustomerSubscription {
     required double fee,
     required String paymentMethod,
   }) async {
-    await ref.read(customerRepositoryProvider).updateSubscription(
+    await ref
+        .read(customerRepositoryProvider)
+        .updateSubscription(
           newPlan: newPlan,
           fee: fee,
           paymentMethod: paymentMethod,
@@ -97,9 +107,8 @@ class CustomerHistory extends _$CustomerHistory {
     required String category,
     required String description,
   }) async {
-    await ref.read(customerRepositoryProvider).reportProblem(
-          category: category,
-          description: description,
-        );
+    await ref
+        .read(customerRepositoryProvider)
+        .reportProblem(category: category, description: description);
   }
 }

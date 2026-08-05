@@ -158,6 +158,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required DateTime date,
     required String timeSlot,
     required String location,
+    required double amountPaid,
+    required String paymentMethod,
     String? instructions,
   }) async {
     final custDoc = await _customerRef.get();
@@ -176,6 +178,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'location': location,
       'instructions': instructions,
       'status': 'pending',
+      'paymentStatus': 'paid',
+      'amountPaid': amountPaid,
+      'paymentMethod': paymentMethod,
+      'paidAt': FieldValue.serverTimestamp(),
       'customerId': _uid,
       'customerName': name,
       'createdAt': FieldValue.serverTimestamp(),
@@ -189,6 +195,18 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'id': docRef.id,
       });
 
+      await _historyRef.add({
+        'title': 'Pickup Request Payment',
+        'type': 'payment',
+        'date': FieldValue.serverTimestamp(),
+        'status': 'completed',
+        'amountPaid': amountPaid,
+        'paymentMethod': paymentMethod,
+        'receiptNumber':
+            'PU-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 100000}',
+        'pickupRequestId': docRef.id,
+      });
+
       // 2. Upsert customer profile in 'customers' collection
       await _customerRef.set({
         'displayName': name,
@@ -200,7 +218,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'subscriptionPlan': 'Weekly Plan',
         'subscriptionFee': 50.0,
         'subscriptionStatus': 'active',
-        'paymentMethod': 'Mobile Money',
+        'paymentMethod': paymentMethod,
         'outstandingBalance': 0.0,
         'activeRequestsCount': FieldValue.increment(1),
         'lastPickupRequestDate': FieldValue.serverTimestamp(),
@@ -212,7 +230,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       await _db.collection('admin_notifications').add({
         'title': 'Pickup Requested',
         'message':
-            '$name requested pickup for ${binTypes.join(", ")} ($timeSlot at $location).',
+            '$name paid \$${amountPaid.toStringAsFixed(2)} and requested pickup for ${binTypes.join(", ")} ($timeSlot at $location).',
         'type': 'pickup_requested',
         'customerId': _uid,
         'customerName': name,
@@ -285,6 +303,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
           : null,
       amountPaid: (d['amountPaid'] as num?)?.toDouble() ?? 0.0,
       receiptNumber: d['receiptNumber'] as String?,
+      paymentMethod: d['paymentMethod'] as String?,
     );
   }
 

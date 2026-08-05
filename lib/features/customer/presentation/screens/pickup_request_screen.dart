@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 
+const double _pickupFeePerBin = 3.0;
+
 class PickupRequestScreen extends HookConsumerWidget {
   const PickupRequestScreen({super.key});
 
@@ -13,28 +15,37 @@ class PickupRequestScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // State of requested pickup details
     final selectedBins = useState<List<String>>(['general']);
-    final selectedDate = useState<DateTime>(DateTime.now().add(const Duration(days: 1)));
+    final selectedDate = useState<DateTime>(
+      DateTime.now().add(const Duration(days: 1)),
+    );
     final selectedTimeSlot = useState('08:00 AM - 12:00 PM');
     final driverNotesController = useTextEditingController();
     final addressSelection = useState('Home: 123 Green St, Eco City');
+    final selectedPaymentMethod = useState('Mobile Money');
 
     final isSubmitting = useState(false);
 
     // List of date options (next 7 days)
     final dateOptions = useMemoized(() {
-      return List.generate(7, (index) => DateTime.now().add(Duration(days: index + 1)));
+      return List.generate(
+        7,
+        (index) => DateTime.now().add(Duration(days: index + 1)),
+      );
     });
 
     final timeSlots = [
       '08:00 AM - 12:00 PM', // Morning
       '12:00 PM - 04:00 PM', // Afternoon
     ];
+    final pickupTotal = selectedBins.value.length * _pickupFeePerBin;
 
     Future<void> handleConfirmPickup() async {
       if (selectedBins.value.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please select at least one bin type to schedule collection.'),
+            content: Text(
+              'Please select at least one bin type to schedule collection.',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -43,11 +54,15 @@ class PickupRequestScreen extends HookConsumerWidget {
 
       isSubmitting.value = true;
       try {
-        await ref.read(customerPickupRequestsProvider.notifier).requestPickup(
+        await ref
+            .read(customerPickupRequestsProvider.notifier)
+            .requestPickup(
               binTypes: selectedBins.value,
               date: selectedDate.value,
               timeSlot: selectedTimeSlot.value,
               location: addressSelection.value,
+              amountPaid: pickupTotal,
+              paymentMethod: selectedPaymentMethod.value,
               instructions: driverNotesController.text,
             );
         if (!context.mounted) return;
@@ -55,7 +70,10 @@ class PickupRequestScreen extends HookConsumerWidget {
         context.go('/customer/pickup-confirmed');
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to request pickup: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Failed to request pickup: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       } finally {
         isSubmitting.value = false;
@@ -68,7 +86,10 @@ class PickupRequestScreen extends HookConsumerWidget {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Request Pickup', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Request Pickup',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -77,7 +98,10 @@ class PickupRequestScreen extends HookConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Select Bin Types', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Select Bin Types',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // Bins selection check lists
@@ -128,7 +152,10 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
               const SizedBox(height: 24),
 
-              const Text('Select Pickup Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Select Pickup Date',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // Horizontal Date slider list
@@ -139,7 +166,8 @@ class PickupRequestScreen extends HookConsumerWidget {
                   itemCount: dateOptions.length,
                   itemBuilder: (context, index) {
                     final date = dateOptions[index];
-                    final isSelected = DateFormat('yyyy-MM-dd').format(selectedDate.value) ==
+                    final isSelected =
+                        DateFormat('yyyy-MM-dd').format(selectedDate.value) ==
                         DateFormat('yyyy-MM-dd').format(date);
                     return GestureDetector(
                       onTap: () => selectedDate.value = date,
@@ -147,17 +175,23 @@ class PickupRequestScreen extends HookConsumerWidget {
                         width: 64,
                         margin: const EdgeInsets.only(right: 12),
                         decoration: BoxDecoration(
-                          color: isSelected ? theme.colorScheme.primary : (isDark ? Colors.grey.shade900 : Colors.white),
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : (isDark ? Colors.grey.shade900 : Colors.white),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isSelected ? theme.colorScheme.primary : Colors.grey.shade200,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.grey.shade200,
                           ),
                         ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              DateFormat('E').format(date).toUpperCase(), // e.g. MON
+                              DateFormat(
+                                'E',
+                              ).format(date).toUpperCase(), // e.g. MON
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -168,9 +202,11 @@ class PickupRequestScreen extends HookConsumerWidget {
                             Text(
                               DateFormat('d').format(date), // e.g. 15
                               style: TextStyle(
-                                 fontSize: 18,
-                                 fontWeight: FontWeight.w900,
-                                 color: isSelected ? Colors.white : theme.colorScheme.onBackground,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: isSelected
+                                    ? Colors.white
+                                    : theme.colorScheme.onSurface,
                               ),
                             ),
                           ],
@@ -182,7 +218,10 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
 
               const SizedBox(height: 24),
-              const Text('Select Pickup Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Select Pickup Time',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // Grid of timeslots
@@ -197,9 +236,13 @@ class PickupRequestScreen extends HookConsumerWidget {
                         margin: const EdgeInsets.symmetric(horizontal: 4),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         decoration: BoxDecoration(
-                          color: isSelected ? theme.colorScheme.primaryContainer : Colors.transparent,
+                          color: isSelected
+                              ? theme.colorScheme.primaryContainer
+                              : Colors.transparent,
                           border: Border.all(
-                            color: isSelected ? theme.colorScheme.primary : Colors.grey.shade300,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.grey.shade300,
                             width: 1.5,
                           ),
                           borderRadius: BorderRadius.circular(16),
@@ -207,8 +250,12 @@ class PickupRequestScreen extends HookConsumerWidget {
                         child: Column(
                           children: [
                             Icon(
-                              isMorning ? Icons.wb_sunny_outlined : Icons.wb_twilight_outlined,
-                              color: isSelected ? theme.colorScheme.primary : Colors.grey,
+                              isMorning
+                                  ? Icons.wb_sunny_outlined
+                                  : Icons.wb_twilight_outlined,
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : Colors.grey,
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -216,15 +263,21 @@ class PickupRequestScreen extends HookConsumerWidget {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onBackground,
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              slot.split(' ').first + ' - ' + slot.split(' - ').last.split(' ').first,
+                              '${slot.split(' ').first} - ${slot.split(' - ').last.split(' ').first}',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: isSelected ? theme.colorScheme.primary.withOpacity(0.8) : Colors.grey,
+                                color: isSelected
+                                    ? theme.colorScheme.primary.withValues(
+                                        alpha: 0.8,
+                                      )
+                                    : Colors.grey,
                               ),
                             ),
                           ],
@@ -236,16 +289,27 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
 
               const SizedBox(height: 24),
-              const Text('Pickup Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Text(
+                'Pickup Location',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
               const SizedBox(height: 12),
 
               // Location Dropdown
               DropdownButtonFormField<String>(
-                value: addressSelection.value,
-                decoration: const InputDecoration(prefixIcon: Icon(Icons.location_on_outlined)),
+                initialValue: addressSelection.value,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.location_on_outlined),
+                ),
                 items: const [
-                  DropdownMenuItem(value: 'Home: 123 Green St, Eco City', child: Text('Home: 123 Green St, Eco City')),
-                  DropdownMenuItem(value: 'Office: 456 Corporate Way, Eco City', child: Text('Office: 456 Corporate Way')),
+                  DropdownMenuItem(
+                    value: 'Home: 123 Green St, Eco City',
+                    child: Text('Home: 123 Green St, Eco City'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Office: 456 Corporate Way, Eco City',
+                    child: Text('Office: 456 Corporate Way'),
+                  ),
                 ],
                 onChanged: (val) {
                   if (val != null) addressSelection.value = val;
@@ -253,7 +317,92 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
 
               const SizedBox(height: 24),
-              const Text('Instructions for the driver (optional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const Text(
+                'Payment',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.grey.shade900
+                      : const Color(0xFFFFF8E1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Pickup Charge',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '\$${pickupTotal.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x \$${_pickupFeePerBin.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const Text(
+                          'Pay before pickup',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFC78200),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PaymentMethodTile(
+                            label: 'Mobile Money',
+                            icon: Icons.phone_android_outlined,
+                            isSelected:
+                                selectedPaymentMethod.value == 'Mobile Money',
+                            onTap: () =>
+                                selectedPaymentMethod.value = 'Mobile Money',
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _PaymentMethodTile(
+                            label: 'Card',
+                            icon: Icons.credit_card_outlined,
+                            isSelected: selectedPaymentMethod.value == 'Card',
+                            onTap: () => selectedPaymentMethod.value = 'Card',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+              const Text(
+                'Instructions for the driver (optional)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
               const SizedBox(height: 12),
 
               // Instructions field
@@ -267,12 +416,72 @@ class PickupRequestScreen extends HookConsumerWidget {
 
               const SizedBox(height: 32),
               EcoButton(
-                text: 'Confirm Pickup',
+                text: 'Pay & Confirm Pickup',
                 onPressed: handleConfirmPickup,
                 isLoading: isSubmitting.value,
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentMethodTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _PaymentMethodTile({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? theme.colorScheme.primaryContainer : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : Colors.grey.shade300,
+            width: 1.4,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? theme.colorScheme.primary : Colors.grey,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -6,9 +6,13 @@ import {
   doc,
   updateDoc,
   addDoc,
+  writeBatch,
+  getDocs,
   serverTimestamp,
+  increment,
   query,
   orderBy,
+  where,
 } from 'firebase/firestore';
 
 export default function Payments() {
@@ -17,6 +21,7 @@ export default function Payments() {
   const [loading, setLoading] = useState(true);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [billingCycle, setBillingCycle] = useState('current');
 
   useEffect(() => {
     const q = query(collection(db, 'payments'), orderBy('invoiceDate', 'desc'));
@@ -64,10 +69,105 @@ export default function Payments() {
   };
 
   const handleGenerateBatch = async () => {
-    // In a production system, this would be a Cloud Function.
-    // For now we log the intent and close modal.
-    alert('Batch invoice generation dispatched. Each customer will receive an email invoice.');
-    setShowBatchModal(false);
+    setActionLoading(true);
+    try {
+      const customersSnap = await getDocs(collection(db, 'customers'));
+      const customers = customersSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((customer) => customer.subscriptionStatus !== 'suspended');
+
+      if (customers.length === 0) {
+        alert('No active customers found to invoice.');
+        setActionLoading(false);
+        return;
+      }
+
+      const now = new Date();
+      const cycleDate =
+        billingCycle === 'previous'
+          ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
+          : new Date(now.getFullYear(), now.getMonth(), 1);
+      const cycleKey = `${cycleDate.getFullYear()}-${String(cycleDate.getMonth() + 1).padStart(2, '0')}`;
+      const cycleLabel = cycleDate.toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
+
+      const existingSnap = await getDocs(
+        query(collection(db, 'payments'), where('billingCycle', '==', cycleKey)),
+      );
+      const alreadyInvoiced = new Set(
+        existingSnap.docs.map((invoiceDoc) => invoiceDoc.data().customerId),
+      );
+
+      const invoiceCustomers = customers.filter(
+        (customer) => !alreadyInvoiced.has(customer.id),
+      );
+
+      if (invoiceCustomers.length === 0) {
+        alert(`All active customers already have ${cycleLabel} invoices.`);
+        setActionLoading(false);
+        setShowBatchModal(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      invoiceCustomers.forEach((customer) => {
+        const amount = Number(customer.subscriptionFee ?? 0) || 50;
+        const customerName =
+          customer.displayName || customer.fullName || customer.email || 'Customer';
+        const invoiceRef = doc(collection(db, 'payments'));
+        const invoice = {
+          customerId: customer.id,
+          customerName,
+          customerEmail: customer.email ?? '',
+          amount,
+          billingCycle: cycleKey,
+          invoiceDate: serverTimestamp(),
+          dueDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14),
+          status: 'unpaid',
+          method: customer.paymentMethod ?? 'Mobile Money',
+          description: `${cycleLabel} waste collection service invoice`,
+          sentAt: serverTimestamp(),
+        };
+
+        batch.set(invoiceRef, invoice);
+        batch.set(
+          doc(db, 'customers', customer.id),
+          {
+            outstandingBalance: increment(amount),
+            lastInvoiceId: invoiceRef.id,
+            lastInvoiceDate: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+        batch.set(doc(collection(db, 'customers', customer.id, 'serviceHistory')), {
+          title: `${cycleLabel} Service Invoice`,
+          type: 'payment',
+          date: serverTimestamp(),
+          status: 'pending',
+          amountPaid: amount,
+          receiptNumber: invoiceRef.id,
+          invoiceId: invoiceRef.id,
+        });
+      });
+
+      await batch.commit();
+      await addDoc(collection(db, 'admin_notifications'), {
+        title: 'Batch Invoices Sent',
+        message: `${invoiceCustomers.length} ${cycleLabel} invoice${invoiceCustomers.length === 1 ? '' : 's'} sent to customers.`,
+        type: 'payment',
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+
+      alert(`Sent ${invoiceCustomers.length} ${cycleLabel} invoice${invoiceCustomers.length === 1 ? '' : 's'} to customers.`);
+      setShowBatchModal(false);
+    } catch (err) {
+      alert('Failed to send batch invoices: ' + err.message);
+    }
+    setActionLoading(false);
   };
 
   // Derived metrics
@@ -216,18 +316,20 @@ export default function Payments() {
           <div className="modal-content">
             <h3 style={{ fontSize: '18px' }}>Send Batch Invoices</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Generate and deliver monthly trash collection invoices to all registered customer emails.
+              Generate monthly trash collection invoices and deliver them to customer app accounts.
             </p>
             <div className="form-group">
               <label>Billing Cycle</label>
-              <select defaultValue="current">
+              <select value={billingCycle} onChange={(e) => setBillingCycle(e.target.value)}>
                 <option value="current">Current Month</option>
                 <option value="previous">Previous Month</option>
               </select>
             </div>
             <div className="modal-actions">
-              <button className="btn-outline" onClick={() => setShowBatchModal(false)}>Cancel</button>
-              <button className="btn-primary" onClick={handleGenerateBatch}>Generate & Dispatch</button>
+              <button className="btn-outline" onClick={() => setShowBatchModal(false)} disabled={actionLoading}>Cancel</button>
+              <button className="btn-primary" onClick={handleGenerateBatch} disabled={actionLoading}>
+                {actionLoading ? 'Sending...' : 'Generate & Dispatch'}
+              </button>
             </div>
           </div>
         </div>

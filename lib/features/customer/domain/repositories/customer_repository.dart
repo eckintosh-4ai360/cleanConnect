@@ -22,6 +22,8 @@ abstract class CustomerRepository {
     required DateTime date,
     required String timeSlot,
     required String location,
+    required double amountPaid,
+    required String paymentMethod,
     String? instructions,
   });
 

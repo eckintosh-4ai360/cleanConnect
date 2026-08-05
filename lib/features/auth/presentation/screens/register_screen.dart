@@ -41,10 +41,7 @@ class RegisterScreen extends HookConsumerWidget {
         context.go('/customer/home');
       } else if (next is AuthError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.message),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(next.message), backgroundColor: Colors.red),
         );
       }
     });
@@ -58,7 +55,9 @@ class RegisterScreen extends HookConsumerWidget {
         final permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
           final requested = await Geolocator.requestPermission();
-          if (requested == LocationPermission.denied || requested == LocationPermission.deniedForever) {
+          if (requested == LocationPermission.denied ||
+              requested == LocationPermission.deniedForever) {
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Location permission is denied.')),
             );
@@ -68,12 +67,19 @@ class RegisterScreen extends HookConsumerWidget {
 
         gpsController.text = 'Fetching current location...';
         final position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 8),
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 8),
+          ),
         );
-        gpsController.text = '${position.latitude.toStringAsFixed(4)}° N, ${position.longitude.toStringAsFixed(4)}° W';
+        gpsController.text = _formatMapCoordinates(
+          position.latitude,
+          position.longitude,
+        );
       } catch (e) {
-        gpsController.text = '5.6037° N, 0.1870° W (Fallback)';
+        gpsController.text =
+            '${_formatMapCoordinates(5.6037, -0.1870)} (Fallback)';
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not fetch GPS location: $e')),
         );
@@ -107,7 +113,9 @@ class RegisterScreen extends HookConsumerWidget {
       if (!agreedToTerms.value) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please accept the Terms & Conditions and Privacy Policy.'),
+            content: Text(
+              'Please accept the Terms & Conditions and Privacy Policy.',
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -115,13 +123,17 @@ class RegisterScreen extends HookConsumerWidget {
       }
 
       if (formKey.currentState?.validate() ?? false) {
-        ref.read(authStateControllerProvider.notifier).register(
+        ref
+            .read(authStateControllerProvider.notifier)
+            .register(
               fullName: fullNameController.text.trim(),
               email: emailController.text.trim(),
               phoneNumber: phoneController.text.trim(),
               password: passwordController.text,
               address: addressController.text.trim(),
-              gpsLocation: gpsController.text.isEmpty ? '5.6037° N, 0.1870° W' : gpsController.text,
+              gpsLocation: gpsController.text.isEmpty
+                  ? _formatMapCoordinates(5.6037, -0.1870)
+                  : gpsController.text,
               profilePicturePath: profileImagePath.value,
             );
       }
@@ -143,7 +155,10 @@ class RegisterScreen extends HookConsumerWidget {
                 Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: Color(0xFF1A1A1A),
+                      ),
                       onPressed: () => context.pop(),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -164,15 +179,19 @@ class RegisterScreen extends HookConsumerWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: isDark ? theme.cardTheme.color : const Color(0xFFFFFDF9),
+                    color: isDark
+                        ? theme.cardTheme.color
+                        : const Color(0xFFFFFDF9),
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: isDark ? Colors.grey.shade800 : const Color(0xFFFFF7EA),
+                      color: isDark
+                          ? Colors.grey.shade800
+                          : const Color(0xFFFFF7EA),
                       width: 1.5,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
+                        color: Colors.black.withValues(alpha: 0.02),
                         blurRadius: 16,
                         offset: const Offset(0, 8),
                       ),
@@ -211,7 +230,10 @@ class RegisterScreen extends HookConsumerWidget {
                           labelText: 'Full Name',
                           hintText: 'Jane Doe',
                           controller: fullNameController,
-                          prefixIcon: const Icon(Icons.person_outline, size: 20),
+                          prefixIcon: const Icon(
+                            Icons.person_outline,
+                            size: 20,
+                          ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your full name';
@@ -224,12 +246,17 @@ class RegisterScreen extends HookConsumerWidget {
                           hintText: 'jane.doe@example.com',
                           controller: emailController,
                           keyboardType: TextInputType.emailAddress,
-                          prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                          prefixIcon: const Icon(
+                            Icons.email_outlined,
+                            size: 20,
+                          ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your email';
                             }
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                            if (!RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            ).hasMatch(value)) {
                               return 'Please enter a valid email address';
                             }
                             return null;
@@ -240,7 +267,10 @@ class RegisterScreen extends HookConsumerWidget {
                           hintText: '+1 (555) 000-0000',
                           controller: phoneController,
                           keyboardType: TextInputType.phone,
-                          prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                          prefixIcon: const Icon(
+                            Icons.phone_outlined,
+                            size: 20,
+                          ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your phone number';
@@ -270,9 +300,15 @@ class RegisterScreen extends HookConsumerWidget {
                           controller: gpsController,
                           readOnly: true,
                           onTap: detectLocation,
-                          prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
+                          prefixIcon: const Icon(
+                            Icons.location_on_outlined,
+                            size: 20,
+                          ),
                           suffixIcon: IconButton(
-                            icon: const Icon(Icons.my_location, color: Color(0xFFF0A500)),
+                            icon: const Icon(
+                              Icons.my_location,
+                              color: Color(0xFFF0A500),
+                            ),
                             onPressed: detectLocation,
                           ),
                           validator: (value) {
@@ -305,13 +341,15 @@ class RegisterScreen extends HookConsumerWidget {
                               child: Checkbox(
                                 value: agreedToTerms.value,
                                 activeColor: const Color(0xFFF0A500),
-                                onChanged: (value) => agreedToTerms.value = value ?? false,
+                                onChanged: (value) =>
+                                    agreedToTerms.value = value ?? false,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => agreedToTerms.value = !agreedToTerms.value,
+                                onTap: () =>
+                                    agreedToTerms.value = !agreedToTerms.value,
                                 child: RichText(
                                   text: TextSpan(
                                     style: TextStyle(
@@ -361,10 +399,14 @@ class RegisterScreen extends HookConsumerWidget {
                             width: double.infinity,
                             height: 140,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.black26 : const Color(0xFFFFF7EA),
+                              color: isDark
+                                  ? Colors.black26
+                                  : const Color(0xFFFFF7EA),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: const Color(0xFFF0A500).withOpacity(0.4),
+                                color: const Color(
+                                  0xFFF0A500,
+                                ).withValues(alpha: 0.4),
                                 width: 1.5,
                                 style: BorderStyle.solid,
                               ),
@@ -446,4 +488,8 @@ class RegisterScreen extends HookConsumerWidget {
       ),
     );
   }
+}
+
+String _formatMapCoordinates(double latitude, double longitude) {
+  return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
 }

@@ -15,6 +15,7 @@ class RiderDashboardScreen extends ConsumerWidget {
     final profileAsync = ref.watch(riderProfileProvider);
     final routeAsync = ref.watch(riderActiveRouteProvider);
     final notifAsync = ref.watch(riderNotificationsProvider);
+    final collectionHistoryAsync = ref.watch(riderCollectionHistoryProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -28,6 +29,7 @@ class RiderDashboardScreen extends ConsumerWidget {
             ref.invalidate(riderProfileProvider);
             ref.invalidate(riderActiveRouteProvider);
             ref.invalidate(riderNotificationsProvider);
+            ref.invalidate(riderCollectionHistoryProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -49,15 +51,24 @@ class RiderDashboardScreen extends ConsumerWidget {
                               onTap: () => context.push('/rider/profile'),
                               child: CircleAvatar(
                                 radius: 24,
-                                backgroundColor: theme.colorScheme.primaryContainer,
-                                backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                                backgroundColor:
+                                    theme.colorScheme.primaryContainer,
+                                backgroundImage:
+                                    photoUrl != null && photoUrl.isNotEmpty
                                     ? (photoUrl.startsWith('data:image')
-                                        ? MemoryImage(base64Decode(photoUrl.split(',').last)) as ImageProvider
-                                        : NetworkImage(photoUrl))
+                                          ? MemoryImage(
+                                                  base64Decode(
+                                                    photoUrl.split(',').last,
+                                                  ),
+                                                )
+                                                as ImageProvider
+                                          : NetworkImage(photoUrl))
                                     : null,
                                 child: photoUrl == null || photoUrl.isEmpty
                                     ? Text(
-                                        rider.fullName.isNotEmpty ? rider.fullName[0].toUpperCase() : 'R',
+                                        rider.fullName.isNotEmpty
+                                            ? rider.fullName[0].toUpperCase()
+                                            : 'R',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           color: theme.colorScheme.primary,
@@ -170,45 +181,16 @@ class RiderDashboardScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                profileAsync.when(
-                  data: (rider) => Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          label: 'Collections',
-                          value: '5',
-                          icon: Icons.recycling,
-                          color: const Color(0xFFE8F5E9),
-                          iconColor: Colors.green,
-                          isDark: isDark,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          label: 'Weight',
-                          value: '72.5 kg',
-                          icon: Icons.scale_outlined,
-                          color: const Color(0xFFE3F2FD),
-                          iconColor: Colors.blue,
-                          isDark: isDark,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          label: 'Earnings',
-                          value: '\$41.20',
-                          icon: Icons.payments_outlined,
-                          color: const Color(0xFFFFF8E1),
-                          iconColor: Colors.amber.shade800,
-                          isDark: isDark,
-                        ),
-                      ),
-                    ],
+                collectionHistoryAsync.when(
+                  data: (logs) {
+                    final stats = _TodayStats.fromLogs(logs);
+                    return _TodayStatsRow(stats: stats, isDark: isDark);
+                  },
+                  loading: () => const _TodayStatsSkeleton(),
+                  error: (_, _) => _TodayStatsRow(
+                    stats: const _TodayStats.empty(),
+                    isDark: isDark,
                   ),
-                  loading: () => const SizedBox(height: 80),
-                  error: (_, _) => const SizedBox.shrink(),
                 ),
                 const SizedBox(height: 24),
 
@@ -285,26 +267,23 @@ class RiderDashboardScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ref
-                    .watch(riderCollectionHistoryProvider)
-                    .when(
-                      data: (logs) {
-                        final recent = logs.take(3).toList();
-                        return ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: recent.length,
-                          itemBuilder: (context, index) {
-                            final log = recent[index];
-                            return _CollectionLogTile(log: log, theme: theme);
-                          },
-                        );
+                collectionHistoryAsync.when(
+                  data: (logs) {
+                    final recent = logs.take(3).toList();
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: recent.length,
+                      itemBuilder: (context, index) {
+                        final log = recent[index];
+                        return _CollectionLogTile(log: log, theme: theme);
                       },
-                      loading: () =>
-                          const Center(child: CircularProgressIndicator()),
-                      error: (_, _) =>
-                          const Text('Failed to load collections.'),
-                    ),
+                    );
+                  },
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (_, _) => const Text('Failed to load collections.'),
+                ),
               ],
             ),
           ),
@@ -315,6 +294,113 @@ class RiderDashboardScreen extends ConsumerWidget {
 }
 
 // ── Helper Widgets ────────────────────────────────────────────────────────────
+
+const double _riderEarningsPerKg = 0.15;
+
+class _TodayStats {
+  final int collections;
+  final double weightKg;
+  final double earnings;
+
+  const _TodayStats({
+    required this.collections,
+    required this.weightKg,
+    required this.earnings,
+  });
+
+  const _TodayStats.empty() : collections = 0, weightKg = 0, earnings = 0;
+
+  factory _TodayStats.fromLogs(List<dynamic> logs) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final todayLogs = logs.where((log) {
+      final collectedAt = log.collectedAt as DateTime;
+      return !collectedAt.isBefore(today) && collectedAt.isBefore(tomorrow);
+    }).toList();
+    final weightKg = todayLogs.fold<double>(
+      0,
+      (sum, log) => sum + (log.weightKg as double),
+    );
+
+    return _TodayStats(
+      collections: todayLogs.length,
+      weightKg: weightKg,
+      earnings: weightKg * _riderEarningsPerKg,
+    );
+  }
+
+  String get weightLabel {
+    if (weightKg == 0) return '0 kg';
+    return '${weightKg.toStringAsFixed(weightKg >= 100 ? 0 : 1)} kg';
+  }
+
+  String get earningsLabel => '\$${earnings.toStringAsFixed(2)}';
+}
+
+class _TodayStatsRow extends StatelessWidget {
+  final _TodayStats stats;
+  final bool isDark;
+
+  const _TodayStatsRow({required this.stats, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            label: 'Collections',
+            value: '${stats.collections}',
+            icon: Icons.recycling,
+            color: const Color(0xFFE8F5E9),
+            iconColor: Colors.green,
+            isDark: isDark,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCard(
+            label: 'Weight',
+            value: stats.weightLabel,
+            icon: Icons.scale_outlined,
+            color: const Color(0xFFE3F2FD),
+            iconColor: Colors.blue,
+            isDark: isDark,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCard(
+            label: 'Earnings',
+            value: stats.earningsLabel,
+            icon: Icons.payments_outlined,
+            color: const Color(0xFFFFF8E1),
+            iconColor: Colors.amber.shade800,
+            isDark: isDark,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayStatsSkeleton extends StatelessWidget {
+  const _TodayStatsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        Expanded(child: SizedBox(height: 92)),
+        SizedBox(width: 12),
+        Expanded(child: SizedBox(height: 92)),
+        SizedBox(width: 12),
+        Expanded(child: SizedBox(height: 92)),
+      ],
+    );
+  }
+}
 
 class _StatusBadge extends StatelessWidget {
   final String status;
@@ -441,7 +527,7 @@ class _ActiveRouteCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFF0A500).withOpacity(0.15),
+              color: const Color(0xFFF0A500).withValues(alpha: 0.15),
               blurRadius: 16,
               offset: const Offset(0, 8),
             ),
@@ -458,7 +544,7 @@ class _ActiveRouteCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -498,7 +584,7 @@ class _ActiveRouteCard extends StatelessWidget {
                     vertical: 5,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -538,7 +624,7 @@ class _ActiveRouteCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 8,
-                backgroundColor: Colors.white.withOpacity(0.6),
+                backgroundColor: Colors.white.withValues(alpha: 0.6),
                 valueColor: const AlwaysStoppedAnimation<Color>(
                   Color(0xFFF0A500),
                 ),
@@ -738,7 +824,7 @@ class _CollectionLogTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _binColor(log.binType).withOpacity(0.12),
+                color: _binColor(log.binType).withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -784,7 +870,7 @@ class _CollectionLogTile extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: _statusColor(log.status).withOpacity(0.1),
+                    color: _statusColor(log.status).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(

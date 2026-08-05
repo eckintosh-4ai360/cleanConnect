@@ -13,7 +13,9 @@ class ServiceHistoryScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(customerHistoryProvider);
-    final selectedTab = useState('All'); // 'All', 'Collections', 'Payments', 'Support'
+    final selectedTab = useState(
+      'All',
+    ); // 'All', 'Collections', 'Payments', 'Support'
     final searchController = useTextEditingController();
     final searchQuery = useState('');
 
@@ -21,6 +23,7 @@ class ServiceHistoryScreen extends HookConsumerWidget {
       void listener() {
         searchQuery.value = searchController.text.trim();
       }
+
       searchController.addListener(listener);
       return () => searchController.removeListener(listener);
     }, []);
@@ -32,7 +35,10 @@ class ServiceHistoryScreen extends HookConsumerWidget {
       backgroundColor: theme.scaffoldBackgroundColor,
       extendBody: true,
       appBar: AppBar(
-        title: const Text('History', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'History',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -43,7 +49,10 @@ class ServiceHistoryScreen extends HookConsumerWidget {
           children: [
             // Search Input Field
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 8.0,
+              ),
               child: TextField(
                 controller: searchController,
                 decoration: InputDecoration(
@@ -66,18 +75,27 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: ['All', 'Collections', 'Payments', 'Support'].map((tab) {
+                  children: ['All', 'Collections', 'Payments', 'Support'].map((
+                    tab,
+                  ) {
                     final isSelected = selectedTab.value == tab;
                     return GestureDetector(
                       onTap: () => selectedTab.value = tab,
                       child: Container(
                         margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: isSelected ? theme.colorScheme.primary : (isDark ? Colors.grey.shade900 : Colors.white),
+                          color: isSelected
+                              ? theme.colorScheme.primary
+                              : (isDark ? Colors.grey.shade900 : Colors.white),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: isSelected ? theme.colorScheme.primary : Colors.grey.shade200,
+                            color: isSelected
+                                ? theme.colorScheme.primary
+                                : Colors.grey.shade200,
                           ),
                         ),
                         child: Text(
@@ -101,13 +119,26 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                   // Filter by tab
                   var filtered = records;
                   if (selectedTab.value != 'All') {
-                    filtered = filtered.where((r) => r.type == selectedTab.value.toLowerCase().replaceAll('s', '')).toList();
+                    filtered = filtered
+                        .where(
+                          (r) =>
+                              r.type ==
+                              selectedTab.value.toLowerCase().replaceAll(
+                                's',
+                                '',
+                              ),
+                        )
+                        .toList();
                   }
 
                   // Filter by search query
                   if (searchQuery.value.isNotEmpty) {
                     filtered = filtered
-                        .where((r) => r.title.toLowerCase().contains(searchQuery.value.toLowerCase()))
+                        .where(
+                          (r) => r.title.toLowerCase().contains(
+                            searchQuery.value.toLowerCase(),
+                          ),
+                        )
                         .toList();
                   }
 
@@ -116,22 +147,38 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.history_toggle_off, size: 64, color: Colors.grey),
+                          const Icon(
+                            Icons.history_toggle_off,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
                           const SizedBox(height: 16),
-                          Text('No records found', style: theme.textTheme.titleMedium),
+                          Text(
+                            'No records found',
+                            style: theme.textTheme.titleMedium,
+                          ),
                           const SizedBox(height: 8),
-                          const Text('Make requests or payments to populate your history.'),
+                          const Text(
+                            'Make requests or payments to populate your history.',
+                          ),
                         ],
                       ),
                     );
                   }
 
                   return ListView.builder(
-                    padding: const EdgeInsets.only(left: 20, right: 20, top: 8, bottom: 100),
+                    padding: const EdgeInsets.only(
+                      left: 20,
+                      right: 20,
+                      top: 8,
+                      bottom: 100,
+                    ),
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final record = filtered[index];
-                      final formattedDate = DateFormat('MMM dd, yyyy').format(record.date);
+                      final formattedDate = DateFormat(
+                        'MMM dd, yyyy',
+                      ).format(record.date);
                       final isCompleted = record.status == 'completed';
 
                       return Card(
@@ -139,7 +186,9 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                         child: ListTile(
                           onTap: () {
                             if (record.type == 'collection') {
-                              context.push('/customer/service-record?id=${record.id}');
+                              context.push(
+                                '/customer/service-record?id=${record.id}',
+                              );
                             } else {
                               _showRecordReceipt(context, record);
                             }
@@ -147,26 +196,37 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                           leading: CircleAvatar(
                             backgroundColor: record.type == 'collection'
                                 ? Colors.green.shade50
-                                : (record.type == 'payment' ? Colors.orange.shade50 : Colors.red.shade50),
+                                : (record.type == 'payment'
+                                      ? Colors.orange.shade50
+                                      : Colors.red.shade50),
                             child: Icon(
                               record.type == 'collection'
                                   ? Icons.delete_outline
-                                  : (record.type == 'payment' ? Icons.payment : Icons.support_agent),
+                                  : (record.type == 'payment'
+                                        ? Icons.payment
+                                        : Icons.support_agent),
                               color: record.type == 'collection'
                                   ? Colors.green
-                                  : (record.type == 'payment' ? Colors.orange : Colors.red),
+                                  : (record.type == 'payment'
+                                        ? Colors.orange
+                                        : Colors.red),
                             ),
                           ),
                           title: Text(
                             record.title,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
                           subtitle: Text(
                             '$formattedDate • ${record.status.toUpperCase()}',
                             style: TextStyle(
                               color: isCompleted ? Colors.grey : Colors.orange,
                               fontSize: 11,
-                              fontWeight: isCompleted ? FontWeight.normal : FontWeight.bold,
+                              fontWeight: isCompleted
+                                  ? FontWeight.normal
+                                  : FontWeight.bold,
                             ),
                           ),
                           trailing: Column(
@@ -176,12 +236,20 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                               if (record.type == 'payment') ...[
                                 Text(
                                   '\$${record.amountPaid.toStringAsFixed(2)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ] else if (record.type == 'collection') ...[
                                 Text(
-                                  record.weightKg != null ? '${record.weightKg} kg' : '0.0 kg',
-                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                                  record.weightKg != null
+                                      ? '${record.weightKg} kg'
+                                      : '0.0 kg',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ] else ...[
                                 const Icon(Icons.chevron_right),
@@ -193,7 +261,8 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                     },
                   );
                 },
-                error: (_, __) => const Center(child: Text('Error loading history.')),
+                error: (_, _) =>
+                    const Center(child: Text('Error loading history.')),
                 loading: () => const Center(child: CircularProgressIndicator()),
               ),
             ),
@@ -204,61 +273,111 @@ class ServiceHistoryScreen extends HookConsumerWidget {
   }
 
   void _showRecordReceipt(BuildContext context, ServiceRecordEntity record) {
+    final serviceCharge = record.amountPaid;
+    const tax = 0.0;
+
     showDialog(
       context: context,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Service Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Lock Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Service Receipt',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
                   ),
-                  child: const Text('COMPLETED', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11)),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '\$${record.amountPaid.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF1A1A1A)),
-                ),
-                const SizedBox(height: 20),
-                const Divider(),
-                const SizedBox(height: 12),
-                _ReceiptRow(label: 'Receipt Number', value: record.receiptNumber ?? 'REC-2026-MOCK'),
-                const SizedBox(height: 8),
-                _ReceiptRow(label: 'Payment Date', value: DateFormat('MMM dd, yyyy').format(record.date)),
-                const SizedBox(height: 8),
-                const _ReceiptRow(label: 'Service Charge', value: '\$12.00'),
-                const SizedBox(height: 8),
-                const _ReceiptRow(label: 'Tax', value: '\$3.00'),
-                const SizedBox(height: 8),
-                const _ReceiptRow(label: 'Payment Method', style: TextStyle(fontWeight: FontWeight.bold), value: 'Mobile Money (Ending 4241)'),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Downloading invoice receipt...'), backgroundColor: Colors.green),
-                    );
-                  },
-                  icon: const Icon(Icons.download_outlined),
-                  label: const Text('Download PDF'),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  // Lock Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'COMPLETED',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '\$${record.amountPaid.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 12),
+                  _ReceiptRow(
+                    label: 'Receipt Number',
+                    value: record.receiptNumber ?? 'REC-2026-MOCK',
+                  ),
+                  const SizedBox(height: 8),
+                  _ReceiptRow(
+                    label: 'Payment Date',
+                    value: DateFormat('MMM dd, yyyy').format(record.date),
+                  ),
+                  const SizedBox(height: 8),
+                  _ReceiptRow(
+                    label: 'Service Charge',
+                    value: '\$${serviceCharge.toStringAsFixed(2)}',
+                  ),
+                  const SizedBox(height: 8),
+                  _ReceiptRow(
+                    label: 'Tax',
+                    value: '\$${tax.toStringAsFixed(2)}',
+                  ),
+                  const SizedBox(height: 8),
+                  _ReceiptRow(
+                    label: 'Payment Method',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    value: record.paymentMethod ?? 'Mobile Money',
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Downloading invoice receipt...'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.download_outlined),
+                    label: const Text('Download PDF'),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -272,19 +391,32 @@ class _ReceiptRow extends StatelessWidget {
   final String value;
   final TextStyle? style;
 
-  const _ReceiptRow({
-    required this.label,
-    required this.value,
-    this.style,
-  });
+  const _ReceiptRow({required this.label, required this.value, this.style});
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-        Text(value, style: style ?? const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+        Expanded(
+          flex: 4,
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 5,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            softWrap: true,
+            style:
+                style ??
+                const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+        ),
       ],
     );
   }

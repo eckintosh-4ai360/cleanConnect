@@ -19,7 +19,9 @@ class BinRegisterScreen extends HookConsumerWidget {
     final currentStep = useState(0);
 
     // Form inputs state
-    final selectedType = useState('general'); // 'general', 'recycling', 'organic'
+    final selectedType = useState(
+      'general',
+    ); // 'general', 'recycling', 'organic'
     final selectedSize = useState('240L'); // '120L', '240L', '360L'
     final serialController = useTextEditingController();
     final gpsLocation = useState('');
@@ -27,7 +29,9 @@ class BinRegisterScreen extends HookConsumerWidget {
     final photoBytes = useState<Uint8List?>(null);
 
     // Step 2 inputs state
-    final selectedFrequency = useState('Weekly'); // 'Weekly', 'Bi-weekly', 'Monthly'
+    final selectedFrequency = useState(
+      'Weekly',
+    ); // 'Weekly', 'Bi-weekly', 'Monthly'
     final preferredDays = useState<List<String>>(['Monday']);
 
     final formKey1 = useMemoized(() => GlobalKey<FormState>());
@@ -38,7 +42,9 @@ class BinRegisterScreen extends HookConsumerWidget {
         final permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
           final requested = await Geolocator.requestPermission();
-          if (requested == LocationPermission.denied || requested == LocationPermission.deniedForever) {
+          if (requested == LocationPermission.denied ||
+              requested == LocationPermission.deniedForever) {
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Location permission is denied.')),
             );
@@ -47,12 +53,18 @@ class BinRegisterScreen extends HookConsumerWidget {
         }
         gpsLocation.value = 'Fetching GPS coordinates...';
         final position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 8),
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 8),
+          ),
         );
-        gpsLocation.value = '${position.latitude.toStringAsFixed(4)}° N, ${position.longitude.toStringAsFixed(4)}° W';
+        gpsLocation.value = _formatMapCoordinates(
+          position.latitude,
+          position.longitude,
+        );
       } catch (e) {
-        gpsLocation.value = '5.6037° N, 0.1870° W (Fallback)';
+        gpsLocation.value =
+            '${_formatMapCoordinates(5.6037, -0.1870)} (Fallback)';
       }
     }
 
@@ -76,7 +88,10 @@ class BinRegisterScreen extends HookConsumerWidget {
         if (formKey1.currentState?.validate() ?? false) {
           if (gpsLocation.value.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Please detect your GPS location.'), backgroundColor: Colors.orange),
+              const SnackBar(
+                content: Text('Please detect your GPS location.'),
+                backgroundColor: Colors.orange,
+              ),
             );
             return;
           }
@@ -96,7 +111,9 @@ class BinRegisterScreen extends HookConsumerWidget {
     }
 
     Future<void> handleConfirm() async {
-      ref.read(customerBinsProvider.notifier).registerNewBin(
+      ref
+          .read(customerBinsProvider.notifier)
+          .registerNewBin(
             type: selectedType.value,
             size: selectedSize.value,
             serialNumber: serialController.text.trim(),
@@ -121,7 +138,10 @@ class BinRegisterScreen extends HookConsumerWidget {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Register Bin', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Register Bin',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: handleBackStep,
@@ -133,7 +153,10 @@ class BinRegisterScreen extends HookConsumerWidget {
           children: [
             // Linear Progress Steps Indicator
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
               child: Row(
                 children: List.generate(3, (index) {
                   final isActive = currentStep.value >= index;
@@ -142,7 +165,9 @@ class BinRegisterScreen extends HookConsumerWidget {
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       height: 6,
                       decoration: BoxDecoration(
-                        color: isActive ? theme.colorScheme.primary : Colors.grey.shade200,
+                        color: isActive
+                            ? theme.colorScheme.primary
+                            : Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
@@ -162,7 +187,10 @@ class BinRegisterScreen extends HookConsumerWidget {
                       children: [
                         const Text(
                           'Select Bin Type',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -192,17 +220,31 @@ class BinRegisterScreen extends HookConsumerWidget {
                         const SizedBox(height: 24),
                         const Text(
                           'Bin Specifications',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         // Dropdown for capacity
                         DropdownButtonFormField<String>(
-                          value: selectedSize.value,
-                          decoration: const InputDecoration(labelText: 'Bin Capacity'),
+                          initialValue: selectedSize.value,
+                          decoration: const InputDecoration(
+                            labelText: 'Bin Capacity',
+                          ),
                           items: const [
-                            DropdownMenuItem(value: '120L', child: Text('120L Small')),
-                            DropdownMenuItem(value: '240L', child: Text('240L Large')),
-                            DropdownMenuItem(value: '360L', child: Text('360L Extra Large')),
+                            DropdownMenuItem(
+                              value: '120L',
+                              child: Text('120L Small'),
+                            ),
+                            DropdownMenuItem(
+                              value: '240L',
+                              child: Text('240L Large'),
+                            ),
+                            DropdownMenuItem(
+                              value: '360L',
+                              child: Text('360L Extra Large'),
+                            ),
                           ],
                           onChanged: (val) {
                             if (val != null) selectedSize.value = val;
@@ -225,12 +267,17 @@ class BinRegisterScreen extends HookConsumerWidget {
                         EcoTextField(
                           labelText: 'Location Assignment',
                           hintText: 'Detecting location...',
-                          controller: TextEditingController(text: gpsLocation.value),
+                          controller: TextEditingController(
+                            text: gpsLocation.value,
+                          ),
                           readOnly: true,
                           onTap: detectLocation,
                           prefixIcon: const Icon(Icons.location_on_outlined),
                           suffixIcon: IconButton(
-                            icon: const Icon(Icons.my_location, color: Color(0xFFF0A500)),
+                            icon: const Icon(
+                              Icons.my_location,
+                              color: Color(0xFFF0A500),
+                            ),
                             onPressed: detectLocation,
                           ),
                         ),
@@ -238,7 +285,10 @@ class BinRegisterScreen extends HookConsumerWidget {
                         // Photo Verification card
                         const Text(
                           'Photo Verification',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         GestureDetector(
@@ -247,25 +297,44 @@ class BinRegisterScreen extends HookConsumerWidget {
                             height: 120,
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.black26 : const Color(0xFFFFF7EA),
+                              color: isDark
+                                  ? Colors.black26
+                                  : const Color(0xFFFFF7EA),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.amber.shade200, style: BorderStyle.solid),
+                              border: Border.all(
+                                color: Colors.amber.shade200,
+                                style: BorderStyle.solid,
+                              ),
                             ),
                             child: photoPath.value != null
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(16),
                                     child: kIsWeb
-                                        ? Image.memory(photoBytes.value!, fit: BoxFit.cover)
-                                        : Image.file(File(photoPath.value!), fit: BoxFit.cover),
+                                        ? Image.memory(
+                                            photoBytes.value!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.file(
+                                            File(photoPath.value!),
+                                            fit: BoxFit.cover,
+                                          ),
                                   )
                                 : const Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.camera_alt_outlined, color: Color(0xFFF0A500), size: 30),
+                                      Icon(
+                                        Icons.camera_alt_outlined,
+                                        color: Color(0xFFF0A500),
+                                        size: 30,
+                                      ),
                                       SizedBox(height: 6),
                                       Text(
                                         'Take Photo of Bin',
-                                        style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -287,7 +356,10 @@ class BinRegisterScreen extends HookConsumerWidget {
                     children: [
                       const Text(
                         'Collection Schedule',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       const Text(
@@ -297,7 +369,10 @@ class BinRegisterScreen extends HookConsumerWidget {
                       const SizedBox(height: 24),
                       const Text(
                         'Select Collection Frequency',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _FrequencyTile(
@@ -330,7 +405,10 @@ class BinRegisterScreen extends HookConsumerWidget {
                       const SizedBox(height: 24),
                       const Text(
                         'Preferred Pickup Day',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
@@ -340,17 +418,25 @@ class BinRegisterScreen extends HookConsumerWidget {
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) {
+                        children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((
+                          day,
+                        ) {
                           final dayFullName = day == 'M'
                               ? 'Monday'
                               : (day == 'T' && day == 'T'
-                                  ? 'Tuesday'
-                                  : (day == 'W'
-                                      ? 'Wednesday'
-                                      : (day == 'T'
-                                          ? 'Thursday'
-                                          : (day == 'F' ? 'Friday' : (day == 'S' ? 'Saturday' : 'Sunday')))));
-                          final isSelected = preferredDays.value.contains(dayFullName);
+                                    ? 'Tuesday'
+                                    : (day == 'W'
+                                          ? 'Wednesday'
+                                          : (day == 'T'
+                                                ? 'Thursday'
+                                                : (day == 'F'
+                                                      ? 'Friday'
+                                                      : (day == 'S'
+                                                            ? 'Saturday'
+                                                            : 'Sunday')))));
+                          final isSelected = preferredDays.value.contains(
+                            dayFullName,
+                          );
                           return GestureDetector(
                             onTap: () {
                               preferredDays.value = [dayFullName];
@@ -359,7 +445,9 @@ class BinRegisterScreen extends HookConsumerWidget {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: isSelected ? theme.colorScheme.primary : Colors.transparent,
+                                color: isSelected
+                                    ? theme.colorScheme.primary
+                                    : Colors.transparent,
                                 shape: BoxShape.circle,
                                 border: Border.all(color: Colors.grey.shade300),
                               ),
@@ -368,7 +456,9 @@ class BinRegisterScreen extends HookConsumerWidget {
                                   day,
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: isSelected ? Colors.white : theme.colorScheme.onBackground,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ),
@@ -377,10 +467,7 @@ class BinRegisterScreen extends HookConsumerWidget {
                         }).toList(),
                       ),
                       const SizedBox(height: 32),
-                      EcoButton(
-                        text: 'Next',
-                        onPressed: handleNextStep,
-                      ),
+                      EcoButton(text: 'Next', onPressed: handleNextStep),
                       const SizedBox(height: 20),
                     ],
                   ),
@@ -391,7 +478,10 @@ class BinRegisterScreen extends HookConsumerWidget {
                     children: [
                       const Text(
                         'Review & Confirm',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
@@ -412,7 +502,8 @@ class BinRegisterScreen extends HookConsumerWidget {
                             _SummaryRow(
                               icon: Icons.delete,
                               label: 'Bin Details',
-                              value: '${selectedType.value.toUpperCase()} (${selectedSize.value})',
+                              value:
+                                  '${selectedType.value.toUpperCase()} (${selectedSize.value})',
                             ),
                             const Divider(height: 24),
                             _SummaryRow(
@@ -430,23 +521,36 @@ class BinRegisterScreen extends HookConsumerWidget {
                             _SummaryRow(
                               icon: Icons.calendar_today_outlined,
                               label: 'Collection Schedule',
-                              value: '${selectedFrequency.value} (${preferredDays.value.first})',
+                              value:
+                                  '${selectedFrequency.value} (${preferredDays.value.first})',
                             ),
                             if (photoPath.value != null) ...[
                               const Divider(height: 24),
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.image_outlined, color: Colors.grey),
+                                  const Icon(
+                                    Icons.image_outlined,
+                                    color: Colors.grey,
+                                  ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        const Text('Verification Photo', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                        const Text(
+                                          'Verification Photo',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
                                         const SizedBox(height: 8),
                                         ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           child: kIsWeb
                                               ? Image.memory(
                                                   photoBytes.value!,
@@ -488,6 +592,10 @@ class BinRegisterScreen extends HookConsumerWidget {
   }
 }
 
+String _formatMapCoordinates(double latitude, double longitude) {
+  return '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
+}
+
 class _TypeButton extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -510,23 +618,32 @@ class _TypeButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: isSelected ? theme.colorScheme.primaryContainer : Colors.transparent,
+            color: isSelected
+                ? theme.colorScheme.primaryContainer
+                : Colors.transparent,
             border: Border.all(
-              color: isSelected ? theme.colorScheme.primary : Colors.grey.shade300,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : Colors.grey.shade300,
               width: 1.5,
             ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
             children: [
-              Icon(icon, color: isSelected ? theme.colorScheme.primary : Colors.grey),
+              Icon(
+                icon,
+                color: isSelected ? theme.colorScheme.primary : Colors.grey,
+              ),
               const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
-                  color: isSelected ? theme.colorScheme.primary : Colors.grey.shade600,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : Colors.grey.shade600,
                 ),
               ),
             ],
@@ -596,9 +713,18 @@ class _SummaryRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
               const SizedBox(height: 4),
-              Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
             ],
           ),
         ),
