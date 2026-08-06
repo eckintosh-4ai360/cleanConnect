@@ -35,10 +35,7 @@ class LoginScreen extends HookConsumerWidget {
         }
       } else if (next is AuthError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.message),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(next.message), backgroundColor: Colors.red),
         );
       }
     });
@@ -48,10 +45,9 @@ class LoginScreen extends HookConsumerWidget {
 
     void handleSignIn() {
       if (formKey.currentState?.validate() ?? false) {
-        ref.read(authStateControllerProvider.notifier).login(
-              emailController.text.trim(),
-              passwordController.text,
-            );
+        ref
+            .read(authStateControllerProvider.notifier)
+            .login(emailController.text.trim(), passwordController.text);
       }
     }
 
@@ -102,7 +98,10 @@ class LoginScreen extends HookConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
                             borderRadius: BorderRadius.circular(8),
@@ -150,7 +149,7 @@ class LoginScreen extends HookConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Sign in to manage your EcoWaste account.',
+                      'Sign in to manage your CleanConnectaccount.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontSize: 15,
                         color: isDark ? Colors.grey : Colors.grey.shade600,
@@ -158,7 +157,10 @@ class LoginScreen extends HookConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(12),
@@ -168,7 +170,11 @@ class LoginScreen extends HookConsumerWidget {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.lightbulb_outline, size: 16, color: theme.colorScheme.primary),
+                          Icon(
+                            Icons.lightbulb_outline,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(

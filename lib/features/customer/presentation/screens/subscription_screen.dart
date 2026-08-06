@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/services/paystack_service.dart';
 
 class SubscriptionScreen extends HookConsumerWidget {
   const SubscriptionScreen({super.key});
@@ -13,15 +15,10 @@ class SubscriptionScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final subState = ref.watch(customerSubscriptionProvider);
 
-    // Selected plan and payment details local state
     final selectedPlan = useState('Weekly Plan');
     final selectedFee = useState(15.0);
-    final selectedPaymentMethod = useState('Credit/Debit Card');
-
-    // Controllers for payment details bottom sheet
-    final cardNumberController = useTextEditingController();
-    final expiryController = useTextEditingController();
-    final cvvController = useTextEditingController();
+    final selectedPaymentMethod = useState('Mobile Money');
+    final isProcessing = useState(false);
 
     final plans = [
       _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
@@ -30,31 +27,86 @@ class SubscriptionScreen extends HookConsumerWidget {
       _PlanData(title: 'Pay-As-You-Go', price: 3.0, description: 'Pay only when you request collection'),
     ];
 
-    void handleSubscribe() {
-      if (selectedPaymentMethod.value == 'Credit/Debit Card' && cardNumberController.text.isEmpty) {
-        // Open card modal first
-        _showCardDetailsSheet(
-          context,
-          cardNumberController,
-          expiryController,
-          cvvController,
-          () {
-            ref.read(customerSubscriptionProvider.notifier).changePlan(
-                  newPlan: selectedPlan.value,
-                  fee: selectedPlan.value == 'Pay-As-You-Go' ? 0.0 : selectedFee.value,
-                  paymentMethod: selectedPaymentMethod.value,
-                );
-            Navigator.pop(context);
-            _showSuccessDialog(context, selectedPlan.value);
+    Future<void> handleSubscribe() async {
+      if (isProcessing.value) return;
+
+      final isPAYG = selectedPlan.value == 'Pay-As-You-Go';
+      final fee = isPAYG ? 0.0 : selectedFee.value;
+
+      // Pay-As-You-Go plans have no upfront fee — skip payment
+      if (!isPAYG && fee > 0) {
+        isProcessing.value = true;
+
+        final currentUser = FirebaseAuth.instance.currentUser;
+        final email = currentUser?.email ?? '';
+
+        if (email.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not retrieve your email. Please sign in again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          isProcessing.value = false;
+          return;
+        }
+
+        // Amount in pesewas (GHS smallest unit): GHS 1 = 100 pesewas
+        final amountInPesewas = (fee * 100).round();
+
+        final result = await PaystackService.instance.initiatePayment(
+          email: email,
+          amountInSmallest: amountInPesewas,
+          currency: 'GHS',
+          metadata: {
+            'plan': selectedPlan.value,
+            'payment_method': selectedPaymentMethod.value,
+            'type': 'subscription',
           },
         );
-      } else {
-        ref.read(customerSubscriptionProvider.notifier).changePlan(
+
+        isProcessing.value = false;
+
+        if (!context.mounted) return;
+
+        if (result.status == PaymentStatus.cancelled) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment cancelled.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+
+        if (!result.isSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.errorMessage ?? 'Payment failed. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
+      // Payment succeeded (or PAYG) — update the subscription in Firestore
+      try {
+        await ref.read(customerSubscriptionProvider.notifier).changePlan(
               newPlan: selectedPlan.value,
-              fee: selectedPlan.value == 'Pay-As-You-Go' ? 0.0 : selectedFee.value,
+              fee: fee,
               paymentMethod: selectedPaymentMethod.value,
             );
+        if (!context.mounted) return;
         _showSuccessDialog(context, selectedPlan.value);
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Subscription update failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
 
@@ -76,13 +128,13 @@ class SubscriptionScreen extends HookConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Current Plan info banner
+                // Current Plan banner
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: isDark ? Colors.grey.shade900 : const Color(0xFFFFF7EA),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFF0A500).withOpacity(0.3)),
+                    border: Border.all(color: const Color(0xFFF0A500).withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -94,7 +146,7 @@ class SubscriptionScreen extends HookConsumerWidget {
                           const SizedBox(height: 4),
                           Text(
                             currentSub.currentPlan,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A)),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -144,11 +196,11 @@ class SubscriptionScreen extends HookConsumerWidget {
                           children: [
                             Text(
                               plan.title == 'Pay-As-You-Go'
-                                  ? '\$${plan.price.toInt()}/pickup'
-                                  : '\$${plan.price.toInt()}/mo',
+                                  ? 'GHS ${plan.price.toInt()}/pickup'
+                                  : 'GHS ${plan.price.toInt()}/mo',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
-                                color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onBackground,
+                                color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
                                 fontSize: 15,
                               ),
                             ),
@@ -181,115 +233,69 @@ class SubscriptionScreen extends HookConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+
+                // Paystack badge
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_outline, size: 14, color: Colors.grey.shade500),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Secured by Paystack',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 32),
 
-                // Subscribe Action Button
-                EcoButton(
-                  text: 'Confirm & Subscribe',
-                  onPressed: handleSubscribe,
-                ),
+                // Subscribe Button
+                isProcessing.value
+                    ? const Center(child: CircularProgressIndicator())
+                    : EcoButton(
+                        text: 'Confirm & Subscribe via Paystack',
+                        onPressed: handleSubscribe,
+                      ),
               ],
             ),
           ),
-          error: (_, __) => const Center(child: Text('Error loading subscription state.')),
+          error: (_, _) => const Center(child: Text('Error loading subscription state.')),
           loading: () => const Center(child: CircularProgressIndicator()),
         ),
       ),
     );
   }
 
-  void _showCardDetailsSheet(
-    BuildContext context,
-    TextEditingController cardController,
-    TextEditingController expiryController,
-    TextEditingController cvvController,
-    VoidCallback onSubmit,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 24,
-            left: 24,
-            right: 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Enter Card Details',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: cardController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Card Number',
-                  hintText: 'XXXX XXXX XXXX XXXX',
-                  prefixIcon: Icon(Icons.credit_card),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: expiryController,
-                      keyboardType: TextInputType.datetime,
-                      decoration: const InputDecoration(
-                        labelText: 'Expiry Date',
-                        hintText: 'MM/YY',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextField(
-                      controller: cvvController,
-                      keyboardType: TextInputType.number,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'CVV',
-                        hintText: 'XXX',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              EcoButton(
-                text: 'Pay Securely',
-                onPressed: onSubmit,
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _showSuccessDialog(BuildContext context, String planName) {
+    final isPAYG = planName == 'Pay-As-You-Go';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 8),
-            Text('Success!', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Icon(Icons.check_circle, color: Colors.green, size: 28),
+            const SizedBox(width: 8),
+            Text(
+              isPAYG ? 'Plan Activated!' : 'Payment Successful!',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ],
         ),
-        content: Text('You have successfully subscribed to the $planName.'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('You have successfully selected the $planName.'),
+            const SizedBox(height: 8),
+            Text(
+              isPAYG
+                  ? 'Paystack payment will be required whenever you request a pickup.'
+                  : 'Your payment was processed securely via Paystack.',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () {

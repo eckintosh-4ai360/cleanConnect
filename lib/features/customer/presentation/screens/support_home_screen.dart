@@ -144,7 +144,7 @@ class SupportHomeScreen extends HookConsumerWidget {
       final Uri uri = Uri(
         scheme: 'mailto',
         path: 'support@ecowaste.com',
-        queryParameters: {'subject': 'EcoWaste Customer Support Request'},
+        queryParameters: {'subject': 'CleanConnectCustomer Support Request'},
       );
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/services/paystack_service.dart';
 
 const double _pickupFeePerBin = 3.0;
 
@@ -24,6 +26,11 @@ class PickupRequestScreen extends HookConsumerWidget {
     final selectedPaymentMethod = useState('Mobile Money');
 
     final isSubmitting = useState(false);
+
+    // Subscription state to check if user is on Pay-As-You-Go
+    final subState = ref.watch(customerSubscriptionProvider);
+    final currentPlan = subState.value?.currentPlan ?? 'Pay-As-You-Go';
+    final isPayAsYouGo = currentPlan == 'Pay-As-You-Go';
 
     // List of date options (next 7 days)
     final dateOptions = useMemoized(() {
@@ -53,7 +60,70 @@ class PickupRequestScreen extends HookConsumerWidget {
       }
 
       isSubmitting.value = true;
+
       try {
+        String paymentMethodToSave = 'Covered by $currentPlan';
+        double finalAmountPaid = 0.0;
+
+        // ── Step 1: Process Paystack payment if user is on Pay-As-You-Go ────
+        if (isPayAsYouGo) {
+          final currentUser = FirebaseAuth.instance.currentUser;
+          final email = currentUser?.email ?? '';
+
+          if (email.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not retrieve your account email. Please sign in again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            isSubmitting.value = false;
+            return;
+          }
+
+          final amountInPesewas = (pickupTotal * 100).round();
+
+          final paymentResult = await PaystackService.instance.initiatePayment(
+            email: email,
+            amountInSmallest: amountInPesewas,
+            currency: 'GHS',
+            metadata: {
+              'type': 'pickup_request_pay_as_you_go',
+              'bin_types': selectedBins.value.join(', '),
+              'pickup_date': DateFormat('yyyy-MM-dd').format(selectedDate.value),
+              'time_slot': selectedTimeSlot.value,
+            },
+          );
+
+          if (!context.mounted) return;
+
+          if (paymentResult.status == PaymentStatus.cancelled) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Payment cancelled. Your pickup was not scheduled.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            isSubmitting.value = false;
+            return;
+          }
+
+          if (!paymentResult.isSuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(paymentResult.errorMessage ?? 'Payment failed. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            isSubmitting.value = false;
+            return;
+          }
+
+          paymentMethodToSave = 'Paystack (${selectedPaymentMethod.value})';
+          finalAmountPaid = pickupTotal;
+        }
+
+        // ── Step 2: Save pickup request to Firestore ──────────────────────
         await ref
             .read(customerPickupRequestsProvider.notifier)
             .requestPickup(
@@ -61,12 +131,12 @@ class PickupRequestScreen extends HookConsumerWidget {
               date: selectedDate.value,
               timeSlot: selectedTimeSlot.value,
               location: addressSelection.value,
-              amountPaid: pickupTotal,
-              paymentMethod: selectedPaymentMethod.value,
+              amountPaid: finalAmountPaid,
+              paymentMethod: paymentMethodToSave,
               instructions: driverNotesController.text,
             );
+
         if (!context.mounted) return;
-        // Direct route to the confirmation landing screen
         context.go('/customer/pickup-confirmed');
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -189,9 +259,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              DateFormat(
-                                'E',
-                              ).format(date).toUpperCase(), // e.g. MON
+                              DateFormat('E').format(date).toUpperCase(),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -200,7 +268,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              DateFormat('d').format(date), // e.g. 15
+                              DateFormat('d').format(date),
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w900,
@@ -317,86 +385,126 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
 
               const SizedBox(height: 24),
-              const Text(
-                'Payment',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              Text(
+                isPayAsYouGo ? 'Payment (Pay-As-You-Go)' : 'Payment Status',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.grey.shade900
-                      : const Color(0xFFFFF8E1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.amber.shade200),
+
+              if (isPayAsYouGo)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.grey.shade900
+                        : const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Pickup Charge',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'GHS ${pickupTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x GHS ${_pickupFeePerBin.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const Text(
+                            'Paystack payment required',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFC78200),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _PaymentMethodTile(
+                              label: 'Mobile Money',
+                              icon: Icons.phone_android_outlined,
+                              isSelected:
+                                  selectedPaymentMethod.value == 'Mobile Money',
+                              onTap: () =>
+                                  selectedPaymentMethod.value = 'Mobile Money',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _PaymentMethodTile(
+                              label: 'Card',
+                              icon: Icons.credit_card_outlined,
+                              isSelected: selectedPaymentMethod.value == 'Card',
+                              onTap: () => selectedPaymentMethod.value = 'Card',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.grey.shade900
+                        : const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.green.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline,
+                          color: Colors.green, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Covered by $currentPlan',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                  fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'No additional per-pickup charge required.',
+                              style:
+                                  TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Pickup Charge',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          '\$${pickupTotal.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x \$${_pickupFeePerBin.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const Text(
-                          'Pay before pickup',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFC78200),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _PaymentMethodTile(
-                            label: 'Mobile Money',
-                            icon: Icons.phone_android_outlined,
-                            isSelected:
-                                selectedPaymentMethod.value == 'Mobile Money',
-                            onTap: () =>
-                                selectedPaymentMethod.value = 'Mobile Money',
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _PaymentMethodTile(
-                            label: 'Card',
-                            icon: Icons.credit_card_outlined,
-                            isSelected: selectedPaymentMethod.value == 'Card',
-                            onTap: () => selectedPaymentMethod.value = 'Card',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
 
               const SizedBox(height: 24),
               const Text(
@@ -416,7 +524,9 @@ class PickupRequestScreen extends HookConsumerWidget {
 
               const SizedBox(height: 32),
               EcoButton(
-                text: 'Pay & Confirm Pickup',
+                text: isPayAsYouGo
+                    ? 'Pay GHS ${pickupTotal.toStringAsFixed(2)} & Confirm Pickup'
+                    : 'Confirm Pickup',
                 onPressed: handleConfirmPickup,
                 isLoading: isSubmitting.value,
               ),

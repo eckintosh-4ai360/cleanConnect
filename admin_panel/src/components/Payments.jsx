@@ -174,6 +174,7 @@ export default function Payments() {
   const totalInvoiced = invoices.reduce((s, i) => s + (i.amount ?? 0), 0);
   const totalPaid = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount ?? 0), 0);
   const totalUnpaid = invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + (i.amount ?? 0), 0);
+  const paystackCount = invoices.filter(i => (i.method ?? '').toLowerCase().includes('paystack')).length;
 
   const formatDate = (date) => {
     if (!date) return '—';
@@ -184,6 +185,15 @@ export default function Payments() {
     if (status === 'paid') return 'badge-active';
     if (status === 'overdue') return 'badge-defaulter';
     return 'badge-pending';
+  };
+
+  const methodIcon = (method) => {
+    if (!method) return '💳';
+    const m = method.toLowerCase();
+    if (m.includes('mobile')) return '📱';
+    if (m.includes('card') || m.includes('credit') || m.includes('debit')) return '💳';
+    if (m.includes('paystack')) return '🔒';
+    return '💳';
   };
 
   return (
@@ -206,20 +216,27 @@ export default function Payments() {
         <div className="card-glass metric-card">
           <span className="metric-title" style={{ fontSize: '10px' }}>Total Invoiced</span>
           <span className="metric-value" style={{ fontSize: '24px' }}>
-            ${totalInvoiced.toFixed(2)}
+            GHS {totalInvoiced.toFixed(2)}
           </span>
         </div>
         <div className="card-glass metric-card" style={{ borderLeft: '4px solid var(--color-success)' }}>
           <span className="metric-title" style={{ fontSize: '10px' }}>Invoices Paid</span>
           <span className="metric-value" style={{ fontSize: '24px', color: 'var(--color-success)' }}>
-            ${totalPaid.toFixed(2)}
+            GHS {totalPaid.toFixed(2)}
           </span>
         </div>
         <div className="card-glass metric-card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
           <span className="metric-title" style={{ fontSize: '10px' }}>Unpaid Balances</span>
           <span className="metric-value" style={{ fontSize: '24px', color: 'var(--color-danger)' }}>
-            ${totalUnpaid.toFixed(2)}
+            GHS {totalUnpaid.toFixed(2)}
           </span>
+        </div>
+        <div className="card-glass metric-card" style={{ borderLeft: '4px solid var(--color-primary)' }}>
+          <span className="metric-title" style={{ fontSize: '10px' }}>Paystack Payments</span>
+          <span className="metric-value" style={{ fontSize: '24px', color: 'var(--color-primary)' }}>
+            {paystackCount}
+          </span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>transactions</span>
         </div>
       </div>
 
@@ -236,6 +253,7 @@ export default function Payments() {
                   <th>Client</th>
                   <th>Bill Amount</th>
                   <th>Billing Date</th>
+                  <th>Method</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -253,8 +271,17 @@ export default function Payments() {
                     >
                       <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{inv.id.slice(0, 8).toUpperCase()}</td>
                       <td style={{ fontWeight: '600' }}>{inv.customerName ?? '—'}</td>
-                      <td>${(inv.amount ?? 0).toFixed(2)}</td>
+                      <td>GHS {(inv.amount ?? 0).toFixed(2)}</td>
                       <td>{formatDate(inv.invoiceDate)}</td>
+                      <td>
+                        <span title={inv.method ?? '—'} style={{ fontSize: '16px' }}>
+                          {methodIcon(inv.method)}
+                        </span>
+                        {' '}
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          {inv.method?.includes('Paystack') ? 'Paystack' : (inv.method ?? '—')}
+                        </span>
+                      </td>
                       <td>
                         <span className={`badge ${statusBadge(inv.status)}`}>
                           {inv.status ? inv.status.charAt(0).toUpperCase() + inv.status.slice(1) : '—'}
@@ -285,9 +312,36 @@ export default function Payments() {
                   <span>{value}</span>
                 </div>
               ))}
+
+              {/* Paystack Reference Row */}
+              {selectedInvoice.paymentReference && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>Paystack Ref:</span>
+                  <span
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      background: 'var(--border-divider)',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      color: 'var(--color-primary)',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    {selectedInvoice.paymentReference}
+                  </span>
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-divider)', paddingTop: '10px' }}>
                 <span style={{ fontWeight: 'bold', fontSize: '13px' }}>Total Amount:</span>
-                <strong style={{ fontSize: '15px', color: 'var(--color-primary)' }}>${(selectedInvoice.amount ?? 0).toFixed(2)}</strong>
+                <strong style={{ fontSize: '15px', color: 'var(--color-primary)' }}>GHS {(selectedInvoice.amount ?? 0).toFixed(2)}</strong>
+              </div>
+
+              {/* Paystack Secured badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', paddingTop: '4px' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Secured by Paystack</span>
               </div>
             </div>
 

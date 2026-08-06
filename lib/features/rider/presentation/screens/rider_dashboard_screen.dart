@@ -43,7 +43,8 @@ class RiderDashboardScreen extends ConsumerWidget {
                   children: [
                     profileAsync.when(
                       data: (rider) {
-                        if (rider == null) return const Text('EcoWaste Rider');
+                        if (rider == null)
+                          return const Text('CleanConnectRider');
                         final photoUrl = rider.profilePhotoUrl;
                         return Row(
                           children: [
@@ -99,7 +100,7 @@ class RiderDashboardScreen extends ConsumerWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       ),
-                      error: (_, _) => const Text('EcoWaste Rider'),
+                      error: (_, _) => const Text('CleanConnectRider'),
                     ),
                     Row(
                       children: [

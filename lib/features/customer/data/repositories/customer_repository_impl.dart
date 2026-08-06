@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/customer_entities.dart';
@@ -8,6 +10,7 @@ import '../../domain/repositories/customer_repository.dart';
 class CustomerRepositoryImpl implements CustomerRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final Random _random = Random();
 
   String get _uid => _auth.currentUser?.uid ?? '';
 
@@ -16,6 +19,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
   CollectionReference get _requestsRef =>
       _db.collection('customers').doc(_uid).collection('pickupRequests');
+
+  CollectionReference get _binRequestsRef =>
+      _db.collection('customers').doc(_uid).collection('binRequests');
 
   CollectionReference get _historyRef =>
       _db.collection('customers').doc(_uid).collection('serviceHistory');
@@ -44,16 +50,17 @@ class CustomerRepositoryImpl implements CustomerRepository {
   Future<BinEntity> registerBin({
     required String type,
     required String size,
-    required String serialNumber,
     required String frequency,
     required List<String> pickupDays,
     required String gpsLocation,
     String? photoPath,
   }) async {
+    final serialNumber = _generatePersonalBinSerial();
     final data = {
       'serialNumber': serialNumber,
       'type': type,
       'size': size,
+      'ownership': 'personal',
       'fillLevelPercentage': 0.0,
       'scheduleFrequency': frequency,
       'pickupDays': pickupDays,
@@ -114,6 +121,64 @@ class CustomerRepositoryImpl implements CustomerRepository {
       verificationPhotoUrl: photoPath,
       registeredDate: DateTime.now(),
     );
+  }
+
+  @override
+  Future<void> requestCompanyBin({
+    required String type,
+    required String size,
+    required String gpsLocation,
+  }) async {
+    final custDoc = await _customerRef.get();
+    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
+    final name =
+        _auth.currentUser?.displayName ??
+        custData['displayName'] ??
+        custData['fullName'] ??
+        'Customer';
+    final email = _auth.currentUser?.email ?? custData['email'] ?? '';
+
+    final data = {
+      'type': type,
+      'size': size,
+      'gpsLocation': gpsLocation,
+      'status': 'pending',
+      'requestType': 'company_bin',
+      'customerId': _uid,
+      'customerName': name,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    final requestRef = await _binRequestsRef.add(data);
+
+    await _customerRef.set({
+      'displayName': name,
+      'fullName': name,
+      'email': email,
+      'phoneNumber':
+          custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '',
+      'pendingBinRequestsCount': FieldValue.increment(1),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await _db.collection('admin_notifications').add({
+      'title': 'New Bin Requested',
+      'message':
+          '$name requested a company-owned $size $type bin. Admin should assign a bin with a serial number.',
+      'type': 'bin_requested',
+      'customerId': _uid,
+      'customerName': name,
+      'requestId': requestRef.id,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  String _generatePersonalBinSerial() {
+    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final suffix = 1000 + _random.nextInt(9000);
+    return 'PB-${timestamp.toRadixString(36).toUpperCase()}-$suffix';
   }
 
   BinEntity _binFromDoc(DocumentSnapshot doc) {

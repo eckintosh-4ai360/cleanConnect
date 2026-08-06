@@ -310,14 +310,7 @@ class CustomerDashboardScreen extends ConsumerWidget {
                   childAspectRatio: 1.4,
                   children: [
                     _ActionCard(
-                      title: 'Request Pickup',
-                      icon: Icons.add_alarm_outlined,
-                      color: const Color(0xFFE8F5E9),
-                      iconColor: Colors.green,
-                      onTap: () => context.push('/customer/request-pickup'),
-                    ),
-                    _ActionCard(
-                      title: 'Register Bin',
+                      title: 'Request Bin',
                       icon: Icons.delete_outline,
                       color: const Color(0xFFE3F2FD),
                       iconColor: Colors.blue,
@@ -329,6 +322,13 @@ class CustomerDashboardScreen extends ConsumerWidget {
                       color: const Color(0xFFFFF8E1),
                       iconColor: Colors.amber.shade800,
                       onTap: () => context.push('/customer/subscription'),
+                    ),
+                    _ActionCard(
+                      title: 'Request Pickup',
+                      icon: Icons.add_alarm_outlined,
+                      color: const Color(0xFFE8F5E9),
+                      iconColor: Colors.green,
+                      onTap: () => context.push('/customer/request-pickup'),
                     ),
                     _ActionCard(
                       title: 'Customer Support',

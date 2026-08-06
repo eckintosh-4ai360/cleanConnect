@@ -10,7 +10,8 @@ class RiderRegisterScreen extends ConsumerStatefulWidget {
   const RiderRegisterScreen({super.key});
 
   @override
-  ConsumerState<RiderRegisterScreen> createState() => _RiderRegisterScreenState();
+  ConsumerState<RiderRegisterScreen> createState() =>
+      _RiderRegisterScreenState();
 }
 
 class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
@@ -55,7 +56,9 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
     if (_currentStep < 2) {
       setState(() => _currentStep++);
       _pageController.nextPage(
-          duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     } else {
       _submit();
     }
@@ -65,7 +68,9 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
     if (_currentStep > 0) {
       setState(() => _currentStep--);
       _pageController.previousPage(
-          duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
@@ -86,7 +91,9 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await ref.read(authStateControllerProvider.notifier).register(
+      await ref
+          .read(authStateControllerProvider.notifier)
+          .register(
             fullName: _nameCtrl.text.trim(),
             email: _emailCtrl.text.trim(),
             phoneNumber: _phoneCtrl.text.trim(),
@@ -120,10 +127,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -151,29 +155,29 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
                 icon: const Icon(Icons.close),
                 onPressed: () => context.go('/login'),
               ),
-        title: Text('Join the Fleet',
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w900)),
-        actions: const [
-          ThemeToggleButton(),
-          SizedBox(width: 12),
-        ],
+        title: Text(
+          'Join the Fleet',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        actions: const [ThemeToggleButton(), SizedBox(width: 12)],
       ),
       body: Column(
         children: [
           // ── Step progress indicator ──────────────────────────────────
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Step ${_currentStep + 1} of 3',
                   style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade500,
-                      fontWeight: FontWeight.w500),
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -203,27 +207,29 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _Step1PersonalInfo(
-                    nameCtrl: _nameCtrl,
-                    emailCtrl: _emailCtrl,
-                    phoneCtrl: _phoneCtrl,
-                    passwordCtrl: _passwordCtrl,
-                    addressCtrl: _addressCtrl),
+                  nameCtrl: _nameCtrl,
+                  emailCtrl: _emailCtrl,
+                  phoneCtrl: _phoneCtrl,
+                  passwordCtrl: _passwordCtrl,
+                  addressCtrl: _addressCtrl,
+                ),
                 _Step2CredentialsVehicle(
-                    licenseCtrl: _licenseCtrl,
-                    nationalIdCtrl: _nationalIdCtrl,
-                    vehicleRegCtrl: _vehicleRegCtrl,
-                    selectedVehicle: _selectedVehicle,
-                    onVehicleChanged: (v) =>
-                        setState(() => _selectedVehicle = v)),
+                  licenseCtrl: _licenseCtrl,
+                  nationalIdCtrl: _nationalIdCtrl,
+                  vehicleRegCtrl: _vehicleRegCtrl,
+                  selectedVehicle: _selectedVehicle,
+                  onVehicleChanged: (v) => setState(() => _selectedVehicle = v),
+                ),
                 _Step3Documents(
-                    licenseUploaded: _licenseUploaded,
-                    idUploaded: _idUploaded,
-                    photoUploaded: _photoUploaded,
-                    onUpload: (type) => setState(() {
-                          if (type == 'license') _licenseUploaded = true;
-                          if (type == 'id') _idUploaded = true;
-                          if (type == 'photo') _photoUploaded = true;
-                        })),
+                  licenseUploaded: _licenseUploaded,
+                  idUploaded: _idUploaded,
+                  photoUploaded: _photoUploaded,
+                  onUpload: (type) => setState(() {
+                    if (type == 'license') _licenseUploaded = true;
+                    if (type == 'id') _idUploaded = true;
+                    if (type == 'photo') _photoUploaded = true;
+                  }),
+                ),
               ],
             ),
           ),
@@ -240,12 +246,14 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
                     : Text(
-                        _currentStep == 2
-                            ? 'Submit Application'
-                            : 'Continue',
-                        style: const TextStyle(fontSize: 16)),
+                        _currentStep == 2 ? 'Submit Application' : 'Continue',
+                        style: const TextStyle(fontSize: 16),
+                      ),
               ),
             ),
           ),
@@ -279,13 +287,15 @@ class _Step1PersonalInfo extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Personal Details',
-              style:
-                  TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const Text(
+            'Personal Details',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+          ),
           const SizedBox(height: 4),
           const Text(
-              'Enter your personal information to get started as an EcoWaste Rider.',
-              style: TextStyle(color: Colors.grey, fontSize: 14)),
+            'Enter your personal information to get started as an CleanConnectRider.',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
           const SizedBox(height: 24),
           // Avatar placeholder
           Center(
@@ -294,8 +304,11 @@ class _Step1PersonalInfo extends StatelessWidget {
                 CircleAvatar(
                   radius: 48,
                   backgroundColor: Colors.grey.shade200,
-                  child: Icon(Icons.person,
-                      size: 48, color: Colors.grey.shade400),
+                  child: Icon(
+                    Icons.person,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
                 ),
                 Positioned(
                   right: 0,
@@ -306,8 +319,11 @@ class _Step1PersonalInfo extends StatelessWidget {
                       color: Color(0xFFF0A500),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.camera_alt,
-                        size: 16, color: Colors.white),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      size: 16,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
@@ -322,7 +338,8 @@ class _Step1PersonalInfo extends StatelessWidget {
               hintText: 'e.g. Marcus Sterling',
               prefixIcon: const Icon(Icons.person_outline),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -335,7 +352,8 @@ class _Step1PersonalInfo extends StatelessWidget {
               hintText: 'e.g. rider@ecowaste.com',
               prefixIcon: const Icon(Icons.email_outlined),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -348,7 +366,8 @@ class _Step1PersonalInfo extends StatelessWidget {
               hintText: '+1 (555) 000-0000',
               prefixIcon: const Icon(Icons.phone_outlined),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -361,7 +380,8 @@ class _Step1PersonalInfo extends StatelessWidget {
               hintText: '••••••••',
               prefixIcon: const Icon(Icons.lock_outline),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -373,7 +393,8 @@ class _Step1PersonalInfo extends StatelessWidget {
               hintText: 'e.g. 12 Oak Street, North District',
               prefixIcon: const Icon(Icons.home_outlined),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ],
@@ -406,13 +427,15 @@ class _Step2CredentialsVehicle extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Credentials & Vehicle',
-              style:
-                  TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const Text(
+            'Credentials & Vehicle',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+          ),
           const SizedBox(height: 4),
           const Text(
-              'Step 2 of 3. Verify your rider credentials and select your vehicle type.',
-              style: TextStyle(color: Colors.grey, fontSize: 14)),
+            'Step 2 of 3. Verify your rider credentials and select your vehicle type.',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
           const SizedBox(height: 24),
           _FormLabel('Driver License Number'),
           const SizedBox(height: 6),
@@ -422,7 +445,8 @@ class _Step2CredentialsVehicle extends StatelessWidget {
               hintText: 'e.g. DL-GH-20240312',
               prefixIcon: const Icon(Icons.credit_card_outlined),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -434,7 +458,8 @@ class _Step2CredentialsVehicle extends StatelessWidget {
               hintText: 'e.g. GHA-0012345678',
               prefixIcon: const Icon(Icons.badge_outlined),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -446,7 +471,8 @@ class _Step2CredentialsVehicle extends StatelessWidget {
               hintText: 'e.g. GH-1234-23',
               prefixIcon: const Icon(Icons.directions_car_outlined),
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -539,29 +565,32 @@ class _VehicleCard extends StatelessWidget {
               : (isDark ? theme.cardTheme.color : Colors.grey.shade50),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: selected
-                ? theme.colorScheme.primary
-                : Colors.grey.shade200,
+            color: selected ? theme.colorScheme.primary : Colors.grey.shade200,
             width: selected ? 2 : 1,
           ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
+            Icon(
+              icon,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : Colors.grey.shade500,
+              size: 28,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
                 color: selected
                     ? theme.colorScheme.primary
-                    : Colors.grey.shade500,
-                size: 28),
-            const SizedBox(height: 6),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: selected
-                        ? theme.colorScheme.primary
-                        : Colors.grey.shade600)),
+                    : Colors.grey.shade600,
+              ),
+            ),
           ],
         ),
       ),
@@ -591,13 +620,15 @@ class _Step3Documents extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Document Verification',
-              style:
-                  TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const Text(
+            'Document Verification',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+          ),
           const SizedBox(height: 4),
           const Text(
-              'To ensure the safety of our operations, please upload clear photos of your identity documents.',
-              style: TextStyle(color: Colors.grey, fontSize: 14)),
+            'To ensure the safety of our operations, please upload clear photos of your identity documents.',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
           const SizedBox(height: 24),
           _UploadTile(
             title: 'Proof of Identity',
@@ -637,14 +668,20 @@ class _Step3Documents extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.blue.shade700, size: 18),
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.blue.shade700,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
-                    Text('Upload Requirements',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade700,
-                            fontSize: 13)),
+                    Text(
+                      'Upload Requirements',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade700,
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -658,14 +695,21 @@ class _Step3Documents extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       children: [
-                        Icon(Icons.check_circle_outline,
-                            color: Colors.blue.shade600, size: 14),
+                        Icon(
+                          Icons.check_circle_outline,
+                          color: Colors.blue.shade600,
+                          size: 14,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
-                            child: Text(req,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.blue.shade700))),
+                          child: Text(
+                            req,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -733,33 +777,43 @@ class _UploadTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.grey)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
             if (uploaded)
-              const Icon(Icons.check_circle,
-                  color: Colors.green, size: 22)
+              const Icon(Icons.check_circle, color: Colors.green, size: 22)
             else
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0A500).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: const Color(0xFFF0A500).withOpacity(0.4)),
+                    color: const Color(0xFFF0A500).withOpacity(0.4),
+                  ),
                 ),
-                child: const Text('Upload',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFF0A500))),
+                child: const Text(
+                  'Upload',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFF0A500),
+                  ),
+                ),
               ),
           ],
         ),
@@ -774,8 +828,9 @@ class _FormLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-            fontWeight: FontWeight.w600, fontSize: 14));
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+    );
   }
 }

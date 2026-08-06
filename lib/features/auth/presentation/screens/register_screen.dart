@@ -215,7 +215,7 @@ class RegisterScreen extends HookConsumerWidget {
                         const SizedBox(height: 6),
                         Center(
                           child: Text(
-                            'Join EcoWaste to manage your sustainability goals.',
+                            'Join CleanConnectto manage your sustainability goals.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14,

@@ -7,11 +7,16 @@ abstract class CustomerRepository {
   Future<BinEntity> registerBin({
     required String type,
     required String size,
-    required String serialNumber,
     required String frequency,
     required List<String> pickupDays,
     required String gpsLocation,
     String? photoPath,
+  });
+
+  Future<void> requestCompanyBin({
+    required String type,
+    required String size,
+    required String gpsLocation,
   });
 
   Stream<List<PickupRequestEntity>> watchPickupRequests();

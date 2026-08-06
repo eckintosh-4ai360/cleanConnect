@@ -17,25 +17,37 @@ class CustomerBins extends _$CustomerBins {
     return ref.watch(customerRepositoryProvider).watchBins();
   }
 
-  Future<void> registerNewBin({
+  Future<BinEntity> registerNewBin({
     required String type,
     required String size,
-    required String serialNumber,
     required String frequency,
     required List<String> pickupDays,
     required String gpsLocation,
     String? photoPath,
   }) async {
-    await ref
+    return ref
         .read(customerRepositoryProvider)
         .registerBin(
           type: type,
           size: size,
-          serialNumber: serialNumber,
           frequency: frequency,
           pickupDays: pickupDays,
           gpsLocation: gpsLocation,
           photoPath: photoPath,
+        );
+  }
+
+  Future<void> requestCompanyBin({
+    required String type,
+    required String size,
+    required String gpsLocation,
+  }) async {
+    await ref
+        .read(customerRepositoryProvider)
+        .requestCompanyBin(
+          type: type,
+          size: size,
+          gpsLocation: gpsLocation,
         );
   }
 }
