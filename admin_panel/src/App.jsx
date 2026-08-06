@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import Dashboard from './components/Dashboard';
 import Customers from './components/Customers';
+import Bins from './components/Bins';
 import Riders from './components/Riders';
 import Sites from './components/Sites';
 import Collections from './components/Collections';
@@ -102,11 +103,9 @@ export default function App() {
         await updateDoc(doc(db, 'admin_notifications', n.id), { isRead: true });
       } catch (_) {}
     }
-    if (
-      n.type === 'bin_registered' ||
-      n.type === 'pickup_requested' ||
-      n.type === 'customer_registered'
-    ) {
+    if (n.type === 'bin_registered' || n.type === 'bin_requested') {
+      setActiveTab('Bins');
+    } else if (n.type === 'pickup_requested' || n.type === 'customer_registered') {
       setActiveTab('Customers');
     } else if (n.type === 'collection_completed') {
       setActiveTab('Collections');
@@ -138,6 +137,14 @@ export default function App() {
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      )
+    },
+    {
+      name: 'Bins',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 4h10l-1 17H8L7 4z" /><path d="M5 4h14" /><path d="M9 4V2h6v2" /><path d="M10 9h4" /><path d="M10 13h4" />
         </svg>
       )
     },
@@ -222,6 +229,8 @@ export default function App() {
         return <Dashboard />;
       case 'Customers':
         return <Customers />;
+      case 'Bins':
+        return <Bins />;
       case 'Riders':
         return <Riders />;
       case 'Sites':

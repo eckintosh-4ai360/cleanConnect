@@ -56,29 +56,34 @@ class CustomerRepositoryImpl implements CustomerRepository {
     String? photoPath,
   }) async {
     final serialNumber = _generatePersonalBinSerial();
+    final custDoc = await _customerRef.get();
+    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
+    final name =
+        _auth.currentUser?.displayName ??
+        custData['displayName'] ??
+        custData['fullName'] ??
+        'Customer';
+
     final data = {
       'serialNumber': serialNumber,
       'type': type,
       'size': size,
       'ownership': 'personal',
+      'status': 'active',
       'fillLevelPercentage': 0.0,
       'scheduleFrequency': frequency,
       'pickupDays': pickupDays,
       'gpsLocation': gpsLocation,
       'verificationPhotoUrl': photoPath,
+      'customerId': _uid,
+      'customerName': name,
       'registeredAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     };
     final docRef = await _binsRef.add(data);
 
     // Upsert customer profile document in 'customers' collection so Admin Panel sees it
     try {
-      final custDoc = await _customerRef.get();
-      final custData = custDoc.data() as Map<String, dynamic>? ?? {};
-      final name =
-          _auth.currentUser?.displayName ??
-          custData['displayName'] ??
-          custData['fullName'] ??
-          'Customer';
       final email = _auth.currentUser?.email ?? custData['email'] ?? '';
 
       await _customerRef.set({

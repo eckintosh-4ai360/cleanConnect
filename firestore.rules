@@ -7,6 +7,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // ── CollectionGroup Rules (required for cross-collection queries) ──────────
+    // The admin panel uses collectionGroup('bins') and collectionGroup('binRequests')
+    // to fetch all bins/requests across every customer. Firestore requires these
+    // top-level wildcard rules in addition to the nested customer subcollection rules.
+    match /{path=**}/bins/{binId} {
+      allow read, write: if true;
+    }
+
+    match /{path=**}/binRequests/{requestId} {
+      allow read, write: if true;
+    }
+
     // ── Users Collection ──────────────────────────────────────────────────────
     match /users/{userId} {
       allow read, write: if true;

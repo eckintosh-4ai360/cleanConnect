@@ -336,7 +336,7 @@ class _RegistrationChoiceView extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         _RegistrationModeCard(
-          title: 'Request Bin',
+          title: 'Request for Bin',
           subtitle: 'Ask admin to assign a company-owned bin with a serial number.',
           icon: Icons.inventory_2_outlined,
           iconColor: Colors.blue,
