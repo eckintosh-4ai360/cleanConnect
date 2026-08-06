@@ -408,6 +408,30 @@ class CustomerRepositoryImpl implements CustomerRepository {
     );
   }
 
+  @override
+  Stream<List<PricingPlanEntity>> watchPricingPlans() {
+    return _db
+        .collection('pricingPlans')
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) {
+              final d = doc.data();
+              final rawPrices = d['prices'] as Map<String, dynamic>? ?? {};
+              final pricesMap = <String, double>{};
+              rawPrices.forEach((k, v) {
+                pricesMap[k] = (v as num).toDouble();
+              });
+              return PricingPlanEntity(
+                id: doc.id,
+                name: d['name'] as String? ?? '',
+                frequency: d['frequency'] as String? ?? 'Weekly',
+                description: d['description'] as String? ?? '',
+                isPayg: d['isPayg'] as bool? ?? false,
+                prices: pricesMap,
+              );
+            }).toList());
+  }
+
   SubscriptionEntity _defaultSubscription() => const SubscriptionEntity(
     currentPlan: 'Weekly Plan',
     fee: 0.0,

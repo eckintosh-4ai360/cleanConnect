@@ -115,3 +115,32 @@ class SubscriptionEntity {
     this.nextPickupDate,
   });
 }
+
+class PricingPlanEntity {
+  final String id;
+  final String name;
+  final String frequency;
+  final String description;
+  final bool isPayg;
+  final Map<String, double> prices; // e.g. {'120L': 10.0, '240L': 15.0, '360L': 20.0}
+
+  const PricingPlanEntity({
+    required this.id,
+    required this.name,
+    required this.frequency,
+    required this.description,
+    required this.isPayg,
+    required this.prices,
+  });
+
+  double getPriceForSize(String size) {
+    if (prices.containsKey(size)) {
+      return prices[size]!;
+    }
+    // Fallback to 240L if available, or first available price, or 0.0
+    if (prices.containsKey('240L')) {
+      return prices['240L']!;
+    }
+    return prices.values.isNotEmpty ? prices.values.first : 0.0;
+  }
+}

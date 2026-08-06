@@ -70,5 +70,10 @@ service cloud.firestore {
     match /pickupRequests/{requestId} {
       allow read, write: if true;
     }
+
+    // ── Pricing Plans ─────────────────────────────────────────────────────────
+    match /pricingPlans/{planId} {
+      allow read, write: if true;
+    }
   }
 }

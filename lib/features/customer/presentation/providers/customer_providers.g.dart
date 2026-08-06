@@ -159,6 +159,64 @@ abstract class _$CustomerPickupRequests
   }
 }
 
+@ProviderFor(CustomerPricingPlans)
+final customerPricingPlansProvider = CustomerPricingPlansProvider._();
+
+final class CustomerPricingPlansProvider
+    extends
+        $StreamNotifierProvider<
+          CustomerPricingPlans,
+          List<PricingPlanEntity>
+        > {
+  CustomerPricingPlansProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'customerPricingPlansProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$customerPricingPlansHash();
+
+  @$internal
+  @override
+  CustomerPricingPlans create() => CustomerPricingPlans();
+}
+
+String _$customerPricingPlansHash() =>
+    r'a1b2c3d4e5f67890123456789abcdef012345678';
+
+abstract class _$CustomerPricingPlans
+    extends $StreamNotifier<List<PricingPlanEntity>> {
+  Stream<List<PricingPlanEntity>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<List<PricingPlanEntity>>,
+              List<PricingPlanEntity>
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<List<PricingPlanEntity>>,
+                List<PricingPlanEntity>
+              >,
+              AsyncValue<List<PricingPlanEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(CustomerSubscription)
 final customerSubscriptionProvider = CustomerSubscriptionProvider._();
 

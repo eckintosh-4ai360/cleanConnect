@@ -1,4 +1,26 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { db } from '../firebase';
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp,
+  orderBy,
+  query,
+} from 'firebase/firestore';
+
+const BIN_SIZES = ['120L', '240L', '360L'];
+
+const defaultPlanForm = {
+  name: '',
+  frequency: 'Weekly',
+  description: '',
+  isPayg: false,
+  prices: { '120L': '', '240L': '', '360L': '' },
+};
 
 export default function Settings() {
   const [superAdminAccess, setSuperAdminAccess] = useState(true);
@@ -11,21 +33,109 @@ export default function Settings() {
 
   const [showZoneModal, setShowZoneModal] = useState(false);
 
-  // Admin profile state persisted in localStorage
-  const [adminPhoto, setAdminPhoto] = useState(
-    () => localStorage.getItem('adminPhoto') || null
-  );
-  const [adminName, setAdminName] = useState(
-    () => localStorage.getItem('adminName') || 'Super Admin'
-  );
-  const [adminEmail, setAdminEmail] = useState(
-    () => localStorage.getItem('adminEmail') || 'admin@cleanconnect.com'
-  );
+  // Admin profile
+  const [adminPhoto, setAdminPhoto] = useState(() => localStorage.getItem('adminPhoto') || null);
+  const [adminName, setAdminName] = useState(() => localStorage.getItem('adminName') || 'Super Admin');
+  const [adminEmail, setAdminEmail] = useState(() => localStorage.getItem('adminEmail') || 'admin@cleanconnect.com');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [nameInput, setNameInput] = useState(adminName);
   const [emailInput, setEmailInput] = useState(adminEmail);
   const photoInputRef = useRef(null);
 
+  // ── Pricing Plans State ──────────────────────────────────────────────────
+  const [pricingPlans, setPricingPlans] = useState([]);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState(null); // null = create mode
+  const [planForm, setPlanForm] = useState(defaultPlanForm);
+  const [planLoading, setPlanLoading] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'pricingPlans'), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setPricingPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    }, (err) => console.warn('pricingPlans listener:', err));
+    return () => unsub();
+  }, []);
+
+  const openCreatePlan = () => {
+    setEditingPlan(null);
+    setPlanForm(defaultPlanForm);
+    setShowPlanModal(true);
+  };
+
+  const openEditPlan = (plan) => {
+    setEditingPlan(plan);
+    setPlanForm({
+      name: plan.name || '',
+      frequency: plan.frequency || 'Weekly',
+      description: plan.description || '',
+      isPayg: plan.isPayg || false,
+      prices: {
+        '120L': plan.prices?.['120L'] ?? '',
+        '240L': plan.prices?.['240L'] ?? '',
+        '360L': plan.prices?.['360L'] ?? '',
+      },
+    });
+    setShowPlanModal(true);
+  };
+
+  const handlePlanFormChange = (field, value) => {
+    setPlanForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePriceChange = (size, value) => {
+    setPlanForm((prev) => ({
+      ...prev,
+      prices: { ...prev.prices, [size]: value },
+    }));
+  };
+
+  const handleSavePlan = async (e) => {
+    e.preventDefault();
+    if (!planForm.name.trim()) { alert('Plan name is required.'); return; }
+
+    const prices = {};
+    BIN_SIZES.forEach((size) => {
+      const val = parseFloat(planForm.prices[size]);
+      prices[size] = isNaN(val) ? 0 : val;
+    });
+
+    const payload = {
+      name: planForm.name.trim(),
+      frequency: planForm.isPayg ? 'Pay-As-You-Go' : planForm.frequency,
+      description: planForm.description.trim(),
+      isPayg: planForm.isPayg,
+      prices,
+      updatedAt: serverTimestamp(),
+    };
+
+    setPlanLoading(true);
+    try {
+      if (editingPlan) {
+        await updateDoc(doc(db, 'pricingPlans', editingPlan.id), payload);
+      } else {
+        await addDoc(collection(db, 'pricingPlans'), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+      }
+      setShowPlanModal(false);
+    } catch (err) {
+      alert('Failed to save plan: ' + err.message);
+    }
+    setPlanLoading(false);
+  };
+
+  const handleDeletePlan = async (planId) => {
+    if (!window.confirm('Delete this pricing plan? This cannot be undone.')) return;
+    try {
+      await deleteDoc(doc(db, 'pricingPlans', planId));
+    } catch (err) {
+      alert('Failed to delete plan: ' + err.message);
+    }
+  };
+
+  // ── Admin profile helpers ────────────────────────────────────────────────
   const handleAdminPhotoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -34,11 +144,7 @@ export default function Settings() {
       const dataUrl = reader.result;
       setAdminPhoto(dataUrl);
       localStorage.setItem('adminPhoto', dataUrl);
-      // Dispatch a storage event to update the header
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'adminPhoto',
-        newValue: dataUrl,
-      }));
+      window.dispatchEvent(new StorageEvent('storage', { key: 'adminPhoto', newValue: dataUrl }));
     };
     reader.readAsDataURL(file);
   };
@@ -55,13 +161,14 @@ export default function Settings() {
   const handleAddZone = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const newZone = {
-      id: `ZN-0${zones.length + 1}`,
-      name: formData.get('name'),
-      status: 'Active',
-    };
-    setZones([...zones, newZone]);
+    setZones([...zones, { id: `ZN-0${zones.length + 1}`, name: formData.get('name'), status: 'Active' }]);
     setShowZoneModal(false);
+  };
+
+  const priceLabel = (plan, size) => {
+    const val = plan.prices?.[size];
+    if (val == null || val === '') return '—';
+    return `GHS ${Number(val).toFixed(2)}`;
   };
 
   return (
@@ -81,75 +188,29 @@ export default function Settings() {
         {/* ── Admin Account Profile ── */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <h3 style={{ fontSize: '16px' }}>Admin Account Profile</h3>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            {/* Clickable Avatar */}
             <div
               style={{ position: 'relative', width: '72px', height: '72px', cursor: 'pointer', flexShrink: 0 }}
               onClick={() => photoInputRef.current?.click()}
               title="Click to change profile photo"
             >
               {adminPhoto ? (
-                <img
-                  src={adminPhoto}
-                  alt="Admin"
-                  style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-primary)' }}
-                />
+                <img src={adminPhoto} alt="Admin" style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-primary)' }} />
               ) : (
-                <div style={{
-                  width: '72px', height: '72px', borderRadius: '50%',
-                  background: 'linear-gradient(135deg, var(--color-primary), var(--color-info))',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '28px', fontWeight: '900', color: 'white',
-                  border: '3px solid var(--color-primary)',
-                }}>
+                <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-info))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: '900', color: 'white', border: '3px solid var(--color-primary)' }}>
                   {adminName[0]?.toUpperCase() || 'A'}
                 </div>
               )}
-              <div style={{
-                position: 'absolute', bottom: 0, right: 0,
-                background: 'var(--color-primary)', borderRadius: '50%',
-                padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-              }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
+              <div style={{ position: 'absolute', bottom: 0, right: 0, background: 'var(--color-primary)', borderRadius: '50%', padding: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               </div>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handleAdminPhotoUpload}
-              />
+              <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAdminPhotoUpload} />
             </div>
-
-            {/* Name & Email */}
             <div style={{ flex: 1 }}>
               {isEditingProfile ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <input
-                    value={nameInput}
-                    onChange={(e) => setNameInput(e.target.value)}
-                    placeholder="Full Name"
-                    style={{
-                      padding: '8px 12px', borderRadius: '8px', fontSize: '14px',
-                      border: '1px solid var(--border-divider)', background: 'var(--bg-app)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
-                  <input
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="Email"
-                    style={{
-                      padding: '8px 12px', borderRadius: '8px', fontSize: '13px',
-                      border: '1px solid var(--border-divider)', background: 'var(--bg-app)',
-                      color: 'var(--text-primary)',
-                    }}
-                  />
+                  <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="Full Name" style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '14px', border: '1px solid var(--border-divider)', background: 'var(--bg-app)', color: 'var(--text-primary)' }} />
+                  <input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder="Email" style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '13px', border: '1px solid var(--border-divider)', background: 'var(--bg-app)', color: 'var(--text-primary)' }} />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                     <button className="btn-primary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={handleSaveProfile}>Save</button>
                     <button className="btn-outline" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setIsEditingProfile(false)}>Cancel</button>
@@ -160,47 +221,94 @@ export default function Settings() {
                   <h4 style={{ fontSize: '18px', fontWeight: '800' }}>{adminName}</h4>
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{adminEmail}</p>
                   <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Super Administrator • CleanConnect Platform</p>
-                  <button
-                    className="btn-outline"
-                    style={{ marginTop: '10px', padding: '5px 12px', fontSize: '11px' }}
-                    onClick={() => { setNameInput(adminName); setEmailInput(adminEmail); setIsEditingProfile(true); }}
-                  >
+                  <button className="btn-outline" style={{ marginTop: '10px', padding: '5px 12px', fontSize: '11px' }} onClick={() => { setNameInput(adminName); setEmailInput(adminEmail); setIsEditingProfile(true); }}>
                     ✏️ Edit Profile
                   </button>
                 </>
               )}
             </div>
           </div>
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Click the avatar above to change your profile photo. Changes are saved locally.</p>
+        </div>
 
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            Click the avatar above to change your profile photo. Changes are saved locally.
-          </p>
+        {/* ── Subscription Pricing Plans ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ fontSize: '16px' }}>Subscription Pricing Plans</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Set dynamic prices per bin capacity for each collection frequency. The mobile app reads these in real time.
+              </p>
+            </div>
+            <button className="btn-primary" style={{ padding: '8px 14px', fontSize: '12px', whiteSpace: 'nowrap' }} onClick={openCreatePlan}>
+              + Add Plan
+            </button>
+          </div>
+
+          {pricingPlans.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '13px' }}>
+              No pricing plans configured yet. Click "Add Plan" to create one.
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="custom-table">
+                <thead>
+                  <tr>
+                    <th>Plan Name</th>
+                    <th>Frequency</th>
+                    <th>120L Price</th>
+                    <th>240L Price</th>
+                    <th>360L Price</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pricingPlans.map((plan) => (
+                    <tr key={plan.id}>
+                      <td>
+                        <div style={{ fontWeight: '800' }}>{plan.name}</div>
+                        {plan.description && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{plan.description}</div>}
+                        {plan.isPayg && <span className="badge badge-pending" style={{ fontSize: '9px', marginTop: '4px' }}>PAY-AS-YOU-GO</span>}
+                      </td>
+                      <td style={{ fontWeight: '600', textTransform: 'capitalize' }}>{plan.frequency || '—'}</td>
+                      <td style={{ color: 'var(--color-success)', fontWeight: '700' }}>{priceLabel(plan, '120L')}</td>
+                      <td style={{ color: 'var(--color-success)', fontWeight: '700' }}>{priceLabel(plan, '240L')}</td>
+                      <td style={{ color: 'var(--color-success)', fontWeight: '700' }}>{priceLabel(plan, '360L')}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn-outline" style={{ padding: '5px 10px', fontSize: '11px' }} onClick={() => openEditPlan(plan)}>Edit</button>
+                          <button
+                            style={{ padding: '5px 10px', fontSize: '11px', borderRadius: '8px', border: '1px solid var(--color-danger)', background: 'transparent', color: 'var(--color-danger)', cursor: 'pointer', fontWeight: '700' }}
+                            onClick={() => handleDeletePlan(plan.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* ── Roles & Permissions ── */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <h3 style={{ fontSize: '16px' }}>Roles & Permissions</h3>
-
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-divider)', paddingBottom: '16px' }}>
             <div>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold' }}>Super Admin Access</h4>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Full root-level write access to database configurations.</p>
             </div>
-            <label className="switch">
-              <input type="checkbox" checked={superAdminAccess} onChange={(e) => setSuperAdminAccess(e.target.checked)} />
-              <span className="slider"></span>
-            </label>
+            <label className="switch"><input type="checkbox" checked={superAdminAccess} onChange={(e) => setSuperAdminAccess(e.target.checked)} /><span className="slider"></span></label>
           </div>
-
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold' }}>Other Route Modifications</h4>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>Allow active optimization overrides during active rider shifts.</p>
             </div>
-            <label className="switch">
-              <input type="checkbox" defaultChecked />
-              <span className="slider"></span>
-            </label>
+            <label className="switch"><input type="checkbox" defaultChecked /><span className="slider"></span></label>
           </div>
         </div>
 
@@ -208,39 +316,19 @@ export default function Settings() {
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '16px' }}>Active Service Zones</h3>
-            <button className="btn-outline" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => setShowZoneModal(true)}>
-              + Add Service Zone
-            </button>
+            <button className="btn-outline" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => setShowZoneModal(true)}>+ Add Service Zone</button>
           </div>
-
           <div className="table-container">
             <table className="custom-table">
-              <thead>
-                <tr>
-                  <th>Zone ID</th>
-                  <th>Zone Sector Area</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Zone ID</th><th>Zone Sector Area</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
                 {zones.map((zone) => (
                   <tr key={zone.id}>
                     <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>{zone.id}</td>
                     <td style={{ fontWeight: '600' }}>{zone.name}</td>
+                    <td><span className={`badge ${zone.status === 'Active' ? 'badge-active' : 'badge-defaulter'}`}>{zone.status}</span></td>
                     <td>
-                      <span className={`badge ${zone.status === 'Active' ? 'badge-active' : 'badge-defaulter'}`}>
-                        {zone.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className="btn-outline"
-                        style={{ padding: '4px 8px', fontSize: '10px' }}
-                        onClick={() => {
-                          setZones(prev => prev.map(z => z.id === zone.id ? { ...z, status: z.status === 'Active' ? 'Suspended' : 'Active' } : z));
-                        }}
-                      >
+                      <button className="btn-outline" style={{ padding: '4px 8px', fontSize: '10px' }} onClick={() => setZones(prev => prev.map(z => z.id === zone.id ? { ...z, status: z.status === 'Active' ? 'Suspended' : 'Active' } : z))}>
                         Toggle Status
                       </button>
                     </td>
@@ -251,6 +339,87 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* ── Add/Edit Pricing Plan Modal ── */}
+      {showPlanModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '520px', width: '100%' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>
+              {editingPlan ? 'Edit Pricing Plan' : 'Create Pricing Plan'}
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              Set the price per bin capacity. The mobile app will show customers the price matching their bin size.
+            </p>
+            <form onSubmit={handleSavePlan} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label>Plan Name</label>
+                <input value={planForm.name} onChange={(e) => handlePlanFormChange('name', e.target.value)} placeholder="e.g. Weekly Plan" required />
+              </div>
+
+              <div className="form-group">
+                <label>Description (optional)</label>
+                <input value={planForm.description} onChange={(e) => handlePlanFormChange('description', e.target.value)} placeholder="e.g. Most popular for busy households" />
+              </div>
+
+              {/* PAYG toggle */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontWeight: '700', fontSize: '13px' }}>Pay-As-You-Go Plan</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Customer pays per pickup, no monthly commitment</div>
+                </div>
+                <label className="switch">
+                  <input type="checkbox" checked={planForm.isPayg} onChange={(e) => handlePlanFormChange('isPayg', e.target.checked)} />
+                  <span className="slider"></span>
+                </label>
+              </div>
+
+              {!planForm.isPayg && (
+                <div className="form-group">
+                  <label>Collection Frequency</label>
+                  <select value={planForm.frequency} onChange={(e) => handlePlanFormChange('frequency', e.target.value)}>
+                    <option value="Weekly">Weekly</option>
+                    <option value="Bi-weekly">Bi-weekly</option>
+                    <option value="Monthly">Monthly</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Per-size pricing grid */}
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
+                  Price per Bin Capacity (GHS / {planForm.isPayg ? 'pickup' : 'month'})
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  {BIN_SIZES.map((size) => (
+                    <div key={size} style={{ background: 'var(--bg-app)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{size}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>GHS</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={planForm.prices[size]}
+                          onChange={(e) => handlePriceChange(size, e.target.value)}
+                          style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-divider)', background: 'var(--bg-sidebar)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '700' }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-outline" onClick={() => setShowPlanModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={planLoading}>
+                  {planLoading ? 'Saving...' : editingPlan ? 'Save Changes' : 'Create Plan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── Add Zone Modal ── */}
       {showZoneModal && (
@@ -273,4 +442,3 @@ export default function Settings() {
     </div>
   );
 }
-

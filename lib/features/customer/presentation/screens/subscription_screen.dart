@@ -14,18 +14,57 @@ class SubscriptionScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subState = ref.watch(customerSubscriptionProvider);
+    final binsState = ref.watch(customerBinsProvider);
+    final pricingPlansState = ref.watch(customerPricingPlansProvider);
 
     final selectedPlan = useState('Weekly Plan');
     final selectedFee = useState(15.0);
     final selectedPaymentMethod = useState('Mobile Money');
     final isProcessing = useState(false);
 
-    final plans = [
-      _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
-      _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
-      _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
-      _PlanData(title: 'Pay-As-You-Go', price: 3.0, description: 'Pay only when you request collection'),
-    ];
+    // Determine customer's bin size from registered bins or default to 240L
+    final userBinSize = binsState.when(
+      data: (bins) => bins.isNotEmpty ? bins.first.size : '240L',
+      error: (_, _) => '240L',
+      loading: () => '240L',
+    );
+
+    // Build dynamic plans list from Firestore pricingPlans collection
+    final List<_PlanData> plans = pricingPlansState.when(
+      data: (pricingPlans) {
+        if (pricingPlans.isEmpty) {
+          // Default fallback plans scaling with bin capacity if admin hasn't created plans yet
+          final multiplier = userBinSize == '120L' ? 0.7 : (userBinSize == '360L' ? 1.4 : 1.0);
+          return [
+            _PlanData(title: 'Weekly Plan', price: (15.0 * multiplier).roundToDouble(), description: 'Most popular for busy households'),
+            _PlanData(title: 'Bi-weekly Plan', price: (10.0 * multiplier).roundToDouble(), description: 'Eco-conscious & flexible'),
+            _PlanData(title: 'Monthly Plan', price: (6.0 * multiplier).roundToDouble(), description: 'Low volume waste collection'),
+            _PlanData(title: 'Pay-As-You-Go', price: (3.0 * multiplier).roundToDouble(), description: 'Pay only when you request collection', isPayg: true),
+          ];
+        }
+        return pricingPlans.map((plan) {
+          final price = plan.getPriceForSize(userBinSize);
+          return _PlanData(
+            title: plan.name,
+            price: price,
+            description: plan.description.isNotEmpty ? plan.description : (plan.isPayg ? 'Pay per collection request' : 'Recurring collection plan'),
+            isPayg: plan.isPayg,
+          );
+        }).toList();
+      },
+      error: (_, _) => [
+        _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
+        _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
+        _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
+        _PlanData(title: 'Pay-As-You-Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
+      ],
+      loading: () => [
+        _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
+        _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
+        _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
+        _PlanData(title: 'Pay-As-You-Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
+      ],
+    );
 
     Future<void> handleSubscribe() async {
       if (isProcessing.value) return;
@@ -166,13 +205,36 @@ class SubscriptionScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                const Text('Choose a plan below', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Choose a plan below', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'Bin size: $userBinSize',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
 
                 // Plans List
                 Column(
                   children: plans.map((plan) {
                     final isSelected = selectedPlan.value == plan.title;
+                    final formattedPrice = plan.price.truncateToDouble() == plan.price
+                        ? plan.price.toInt().toString()
+                        : plan.price.toStringAsFixed(2);
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
@@ -195,9 +257,9 @@ class SubscriptionScreen extends HookConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              plan.title == 'Pay-As-You-Go'
-                                  ? 'GHS ${plan.price.toInt()}/pickup'
-                                  : 'GHS ${plan.price.toInt()}/mo',
+                              plan.isPayg
+                                  ? 'GHS $formattedPrice/pickup'
+                                  : 'GHS $formattedPrice/mo',
                               style: TextStyle(
                                 fontWeight: FontWeight.w900,
                                 color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface,
@@ -314,11 +376,13 @@ class _PlanData {
   final String title;
   final double price;
   final String description;
+  final bool isPayg;
 
   _PlanData({
     required this.title,
     required this.price,
     required this.description,
+    this.isPayg = false,
   });
 }
 

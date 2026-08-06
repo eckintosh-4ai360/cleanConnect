@@ -83,6 +83,14 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
 }
 
 @riverpod
+class CustomerPricingPlans extends _$CustomerPricingPlans {
+  @override
+  Stream<List<PricingPlanEntity>> build() {
+    return ref.watch(customerRepositoryProvider).watchPricingPlans();
+  }
+}
+
+@riverpod
 class CustomerSubscription extends _$CustomerSubscription {
   @override
   Stream<SubscriptionEntity> build() {

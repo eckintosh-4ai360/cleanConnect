@@ -38,6 +38,8 @@ abstract class CustomerRepository {
   Stream<SubscriptionEntity> watchSubscription();
   Future<SubscriptionEntity> getSubscription();
 
+  Stream<List<PricingPlanEntity>> watchPricingPlans();
+
   Future<SubscriptionEntity> updateSubscription({
     required String newPlan,
     required double fee,
