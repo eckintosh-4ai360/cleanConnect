@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -25,6 +29,10 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
   final _passwordCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
 
+  // Rider Profile Picture
+  XFile? _photoFile;
+  Uint8List? _photoBytes;
+
   // Step 2 – Credentials & Vehicle
   final _licenseCtrl = TextEditingController();
   final _nationalIdCtrl = TextEditingController();
@@ -37,6 +45,24 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
   bool _photoUploaded = false;
 
   bool _isLoading = false;
+
+  Future<void> _pickPhoto() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
+      maxWidth: 600,
+      maxHeight: 600,
+      imageQuality: 80,
+    );
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _photoFile = pickedFile;
+        _photoBytes = bytes;
+        _photoUploaded = true;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -212,6 +238,9 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
                   phoneCtrl: _phoneCtrl,
                   passwordCtrl: _passwordCtrl,
                   addressCtrl: _addressCtrl,
+                  photoFile: _photoFile,
+                  photoBytes: _photoBytes,
+                  onPickPhoto: _pickPhoto,
                 ),
                 _Step2CredentialsVehicle(
                   licenseCtrl: _licenseCtrl,
@@ -224,11 +253,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
                   licenseUploaded: _licenseUploaded,
                   idUploaded: _idUploaded,
                   photoUploaded: _photoUploaded,
-                  onUpload: (type) => setState(() {
-                    if (type == 'license') _licenseUploaded = true;
-                    if (type == 'id') _idUploaded = true;
-                    if (type == 'photo') _photoUploaded = true;
-                  }),
+                  onUpload: _pickDocument,
                 ),
               ],
             ),
@@ -261,6 +286,26 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
       ),
     );
   }
+
+  Future<void> _pickDocument(String type) async {
+    if (type == 'photo') {
+      await _pickPhoto();
+      return;
+    }
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
+      maxWidth: 1000,
+      maxHeight: 1000,
+      imageQuality: 80,
+    );
+    if (picked != null) {
+      setState(() {
+        if (type == 'license') _licenseUploaded = true;
+        if (type == 'id') _idUploaded = true;
+      });
+    }
+  }
 }
 
 // ── Step 1: Personal Info ─────────────────────────────────────────────────────
@@ -271,6 +316,9 @@ class _Step1PersonalInfo extends StatelessWidget {
   final TextEditingController phoneCtrl;
   final TextEditingController passwordCtrl;
   final TextEditingController addressCtrl;
+  final XFile? photoFile;
+  final Uint8List? photoBytes;
+  final VoidCallback onPickPhoto;
 
   const _Step1PersonalInfo({
     required this.nameCtrl,
@@ -278,6 +326,9 @@ class _Step1PersonalInfo extends StatelessWidget {
     required this.phoneCtrl,
     required this.passwordCtrl,
     required this.addressCtrl,
+    this.photoFile,
+    this.photoBytes,
+    required this.onPickPhoto,
   });
 
   @override
@@ -297,36 +348,46 @@ class _Step1PersonalInfo extends StatelessWidget {
             style: TextStyle(color: Colors.grey, fontSize: 14),
           ),
           const SizedBox(height: 24),
-          // Avatar placeholder
+          // Interactive Avatar Uploader
           Center(
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 48,
-                  backgroundColor: Colors.grey.shade200,
-                  child: Icon(
-                    Icons.person,
-                    size: 48,
-                    color: Colors.grey.shade400,
+            child: GestureDetector(
+              onTap: onPickPhoto,
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 48,
+                    backgroundColor: Colors.grey.shade200,
+                    backgroundImage: photoBytes != null
+                        ? MemoryImage(photoBytes!)
+                        : (photoFile != null && !kIsWeb
+                            ? FileImage(File(photoFile!.path)) as ImageProvider
+                            : null),
+                    child: (photoBytes == null && photoFile == null)
+                        ? Icon(
+                            Icons.person,
+                            size: 48,
+                            color: Colors.grey.shade400,
+                          )
+                        : null,
                   ),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF0A500),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.camera_alt,
-                      size: 16,
-                      color: Colors.white,
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF0A500),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 16,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 24),
