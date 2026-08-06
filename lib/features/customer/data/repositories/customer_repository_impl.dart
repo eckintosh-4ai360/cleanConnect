@@ -197,6 +197,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
           (d['fillLevelPercentage'] as num?)?.toDouble() ?? 0.0,
       scheduleFrequency: d['scheduleFrequency'] as String?,
       pickupDays: (d['pickupDays'] as List<dynamic>?)?.cast<String>(),
+      gpsLocation: d['gpsLocation'] as String?,
       verificationPhotoUrl: d['verificationPhotoUrl'] as String?,
       registeredDate: d['registeredAt'] is Timestamp
           ? (d['registeredAt'] as Timestamp).toDate()

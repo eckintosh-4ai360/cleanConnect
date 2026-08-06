@@ -404,7 +404,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                   }
 
                   return DropdownButtonFormField<String>(
-                    value: addressSelection.value,
+                    initialValue: addressSelection.value,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.location_on_outlined),
                     ),

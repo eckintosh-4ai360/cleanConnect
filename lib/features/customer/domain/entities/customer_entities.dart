@@ -6,6 +6,7 @@ class BinEntity {
   final double fillLevelPercentage; // 0.0 to 1.0 (e.g. 0.45 = 45%)
   final String? scheduleFrequency; // 'Weekly', 'Bi-weekly', 'Monthly'
   final List<String>? pickupDays; // ['Monday', 'Thursday']
+  final String? gpsLocation;
   final String? verificationPhotoUrl;
   final DateTime registeredDate;
 
@@ -17,6 +18,7 @@ class BinEntity {
     required this.fillLevelPercentage,
     this.scheduleFrequency,
     this.pickupDays,
+    this.gpsLocation,
     this.verificationPhotoUrl,
     required this.registeredDate,
   });
@@ -29,6 +31,7 @@ class BinEntity {
     double? fillLevelPercentage,
     String? scheduleFrequency,
     List<String>? pickupDays,
+    String? gpsLocation,
     String? verificationPhotoUrl,
     DateTime? registeredDate,
   }) {
@@ -40,6 +43,7 @@ class BinEntity {
       fillLevelPercentage: fillLevelPercentage ?? this.fillLevelPercentage,
       scheduleFrequency: scheduleFrequency ?? this.scheduleFrequency,
       pickupDays: pickupDays ?? this.pickupDays,
+      gpsLocation: gpsLocation ?? this.gpsLocation,
       verificationPhotoUrl: verificationPhotoUrl ?? this.verificationPhotoUrl,
       registeredDate: registeredDate ?? this.registeredDate,
     );
