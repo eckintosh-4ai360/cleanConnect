@@ -21,7 +21,7 @@ const initialBinForm = {
   scheduleFrequency: 'Weekly',
 };
 
-const statusOptions = ['active', 'maintenance', 'inactive'];
+const statusOptions = ['active', 'maintenance', 'inactive', 'disabled'];
 
 function generateSerialNumber(type = 'bin') {
   const prefix = type === 'organic' ? 'ORG' : 'REC';
@@ -445,7 +445,11 @@ export default function Bins() {
                     <td style={{ textTransform: 'capitalize' }}>{bin.ownership || 'company'}</td>
                     <td>{formatPercent(bin.fillLevelPercentage)}</td>
                     <td>
-                      <span className={`badge ${bin.status === 'maintenance' ? 'badge-pending' : bin.status === 'inactive' ? 'badge-defaulter' : 'badge-active'}`}>
+                      <span className={`badge ${
+                        bin.status === 'maintenance' ? 'badge-pending'
+                        : bin.status === 'inactive' || bin.status === 'disabled' ? 'badge-defaulter'
+                        : 'badge-active'
+                      }`}>
                         {(bin.status || 'active').toUpperCase()}
                       </span>
                     </td>

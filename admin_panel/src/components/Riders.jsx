@@ -122,15 +122,21 @@ export default function Riders() {
     setActionLoading(false);
   };
 
-  const handleToggleStatus = async (rider) => {
-    const newStatus = rider.status === 'active' ? 'offline' : 'active';
+  const handleSetRiderStatus = async (rider, status) => {
     try {
       await updateDoc(doc(db, 'riders', rider.id), {
-        status: newStatus,
+        status,
         updatedAt: serverTimestamp(),
       });
+      // Also sync users collection
+      try {
+        await updateDoc(doc(db, 'users', rider.id), {
+          status,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (_) {}
     } catch (err) {
-      alert('Failed to update status: ' + err.message);
+      alert('Failed to update rider status: ' + err.message);
     }
   };
 
@@ -227,12 +233,10 @@ export default function Riders() {
                       <td>{r.totalCollections ?? 0}</td>
                       <td>
                         <span
-                          className={`badge ${r.status === 'active' ? 'badge-active' : ''}`}
-                          style={{ background: r.status !== 'active' ? 'rgba(0,0,0,0.05)' : '', cursor: 'pointer' }}
-                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(r); }}
-                          title="Click to toggle status"
+                          className={`badge ${r.status === 'active' ? 'badge-active' : r.status === 'disabled' ? 'badge-defaulter' : ''}`}
+                          style={{ background: r.status === 'offline' ? 'rgba(0,0,0,0.05)' : '' }}
                         >
-                          {r.status === 'active' ? 'Active' : 'Offline'}
+                          {r.status === 'active' ? 'Active' : r.status === 'disabled' ? 'Disabled' : 'Offline'}
                         </span>
                       </td>
                     </tr>
@@ -326,11 +330,52 @@ export default function Riders() {
                   <span>{value}</span>
                 </div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 'bold' }}>Status:</span>
-                <span style={{ color: selectedRider.status === 'active' ? 'var(--color-success)' : 'var(--text-muted)', fontWeight: 'bold' }}>
-                  {selectedRider.status === 'active' ? 'Active' : 'Offline'}
+                <span style={{ color: selectedRider.status === 'active' ? 'var(--color-success)' : selectedRider.status === 'disabled' ? 'var(--color-danger)' : 'var(--text-muted)', fontWeight: 'bold' }}>
+                  {selectedRider.status === 'active' ? 'Active' : selectedRider.status === 'disabled' ? 'Disabled' : 'Offline'}
                 </span>
+              </div>
+
+              {/* ── Status Control ── */}
+              <div style={{ background: 'var(--bg-sidebar)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '800', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>Set Rider Status</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                  <button
+                    onClick={() => handleSetRiderStatus(selectedRider, 'active')}
+                    style={{
+                      padding: '8px 0',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: selectedRider.status === 'active' ? 'var(--color-success)' : 'var(--border-divider)',
+                      background: selectedRider.status === 'active' ? 'rgba(16,185,129,0.12)' : 'transparent',
+                      color: selectedRider.status === 'active' ? 'var(--color-success)' : 'var(--text-secondary)',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ✓ Active
+                  </button>
+                  <button
+                    onClick={() => handleSetRiderStatus(selectedRider, 'disabled')}
+                    style={{
+                      padding: '8px 0',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: selectedRider.status === 'disabled' ? 'var(--color-danger)' : 'var(--border-divider)',
+                      background: selectedRider.status === 'disabled' ? 'rgba(239,68,68,0.12)' : 'transparent',
+                      color: selectedRider.status === 'disabled' ? 'var(--color-danger)' : 'var(--text-secondary)',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ✕ Disabled
+                  </button>
+                </div>
               </div>
             </div>
           )}

@@ -143,6 +143,27 @@ export default function Customers() {
     setActionLoading(false);
   };
 
+  const handleSetCustomerStatus = async (status) => {
+    if (!selectedCustomer) return;
+    setActionLoading(true);
+    try {
+      await updateDoc(doc(db, 'customers', selectedCustomer.id), {
+        subscriptionStatus: status,
+        updatedAt: serverTimestamp(),
+      });
+      // Also sync users collection
+      try {
+        await updateDoc(doc(db, 'users', selectedCustomer.id), {
+          status,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (_) {}
+    } catch (err) {
+      alert('Failed to update customer status: ' + err.message);
+    }
+    setActionLoading(false);
+  };
+
   const handleAddCustomer = async (e) => {
     e.preventDefault();
     const form = new FormData(e.target);
@@ -214,11 +235,12 @@ export default function Customers() {
 
   const statusBadgeClass = (status) => {
     if (status === 'active') return 'badge-active';
-    if (status === 'suspended') return 'badge-defaulter';
+    if (status === 'disabled' || status === 'suspended') return 'badge-defaulter';
     return 'badge-pending';
   };
 
   const statusLabel = (c) => {
+    if (c.subscriptionStatus === 'disabled') return 'Disabled';
     if (c.subscriptionStatus === 'suspended') return 'Suspended';
     if ((c.outstandingBalance ?? 0) > 0) return 'Outstanding';
     return 'Active';
@@ -422,18 +444,49 @@ export default function Customers() {
                   Send Reminder
                 </button>
               </div>
-              {selectedCustomer.subscriptionStatus !== 'suspended' && (
-                <button className="btn-danger" style={{ justifyContent: 'center' }} onClick={() => setShowSuspendModal(true)}>
-                  Suspend Service
-                </button>
-              )}
-              {selectedCustomer.subscriptionStatus === 'suspended' && (
-                <button className="btn-primary" style={{ justifyContent: 'center' }} onClick={async () => {
-                  await updateDoc(doc(db, 'customers', selectedCustomer.id), { subscriptionStatus: 'active', updatedAt: serverTimestamp() });
-                }}>
-                  Reinstate Service
-                </button>
-              )}
+
+              {/* ── Status Control ── */}
+              <div style={{ background: 'var(--bg-app)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '800', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>Account Status</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                  <button
+                    onClick={() => handleSetCustomerStatus('active')}
+                    disabled={actionLoading}
+                    style={{
+                      padding: '8px 0',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: (selectedCustomer.subscriptionStatus === 'active') ? 'var(--color-success)' : 'var(--border-divider)',
+                      background: (selectedCustomer.subscriptionStatus === 'active') ? 'rgba(16,185,129,0.12)' : 'transparent',
+                      color: (selectedCustomer.subscriptionStatus === 'active') ? 'var(--color-success)' : 'var(--text-secondary)',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ✓ Active
+                  </button>
+                  <button
+                    onClick={() => handleSetCustomerStatus('disabled')}
+                    disabled={actionLoading}
+                    style={{
+                      padding: '8px 0',
+                      borderRadius: '8px',
+                      border: '2px solid',
+                      borderColor: (selectedCustomer.subscriptionStatus === 'disabled' || selectedCustomer.subscriptionStatus === 'suspended') ? 'var(--color-danger)' : 'var(--border-divider)',
+                      background: (selectedCustomer.subscriptionStatus === 'disabled' || selectedCustomer.subscriptionStatus === 'suspended') ? 'rgba(239,68,68,0.12)' : 'transparent',
+                      color: (selectedCustomer.subscriptionStatus === 'disabled' || selectedCustomer.subscriptionStatus === 'suspended') ? 'var(--color-danger)' : 'var(--text-secondary)',
+                      fontWeight: '800',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ✕ Disabled
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
