@@ -15,8 +15,11 @@ class PickupRequestScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // State of requested pickup details
-    final selectedBins = useState<List<String>>(['general']);
+    final binsState = ref.watch(customerBinsProvider);
+    final subState = ref.watch(customerSubscriptionProvider);
+
+    // State of requested pickup details (default to recycling)
+    final selectedBins = useState<List<String>>(['recycling']);
     final selectedDate = useState<DateTime>(
       DateTime.now().add(const Duration(days: 1)),
     );
@@ -26,9 +29,9 @@ class PickupRequestScreen extends HookConsumerWidget {
     final selectedPaymentMethod = useState('Mobile Money');
 
     final isSubmitting = useState(false);
+    final isInitialized = useState(false);
 
-    // Subscription state to check if user is on Pay-As-You-Go
-    final subState = ref.watch(customerSubscriptionProvider);
+    // Subscription state
     final currentPlan = subState.value?.currentPlan ?? 'Pay-As-You-Go';
     final isPayAsYouGo = currentPlan == 'Pay-As-You-Go';
 
@@ -39,6 +42,44 @@ class PickupRequestScreen extends HookConsumerWidget {
         (index) => DateTime.now().add(Duration(days: index + 1)),
       );
     });
+
+    // Auto-populate defaults from customer's bin registration data
+    useEffect(() {
+      if (!isInitialized.value && binsState.hasValue) {
+        final bins = binsState.value ?? [];
+        if (bins.isNotEmpty) {
+          // 1. Pre-select registered bin types (recycling / organic)
+          final registeredTypes = bins
+              .map((b) => b.type.toLowerCase())
+              .where((t) => t == 'recycling' || t == 'organic')
+              .toSet()
+              .toList();
+          if (registeredTypes.isNotEmpty) {
+            selectedBins.value = registeredTypes;
+          }
+
+          // 2. Pre-select location from registered bin GPS location / service address
+          final primaryBin = bins.first;
+          if (primaryBin.gpsLocation != null && primaryBin.gpsLocation!.trim().isNotEmpty) {
+            addressSelection.value = primaryBin.gpsLocation!;
+          }
+
+          // 3. Pre-select date matching customer's preferred pickup day
+          if (primaryBin.pickupDays != null && primaryBin.pickupDays!.isNotEmpty) {
+            final prefDays = primaryBin.pickupDays!.map((d) => d.toLowerCase()).toList();
+            for (final date in dateOptions) {
+              final dayName = DateFormat('EEEE').format(date).toLowerCase();
+              if (prefDays.contains(dayName)) {
+                selectedDate.value = date;
+                break;
+              }
+            }
+          }
+        }
+        isInitialized.value = true;
+      }
+      return null;
+    }, [binsState.hasValue]);
 
     final timeSlots = [
       '08:00 AM - 12:00 PM', // Morning
@@ -174,22 +215,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
               const SizedBox(height: 12),
 
-              // Bins selection check lists
-              _BinCheckboxTile(
-                label: 'General Waste',
-                icon: Icons.delete_outline,
-                color: Colors.grey,
-                isSelected: selectedBins.value.contains('general'),
-                onChanged: (val) {
-                  final list = List<String>.from(selectedBins.value);
-                  if (val == true) {
-                    list.add('general');
-                  } else {
-                    list.remove('general');
-                  }
-                  selectedBins.value = list;
-                },
-              ),
+              // Bins selection check lists (Recycling & Organic)
               _BinCheckboxTile(
                 label: 'Recycling',
                 icon: Icons.recycling_outlined,
@@ -363,24 +389,35 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
               const SizedBox(height: 12),
 
-              // Location Dropdown
-              DropdownButtonFormField<String>(
-                initialValue: addressSelection.value,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.location_on_outlined),
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'Home: 123 Green St, Eco City',
-                    child: Text('Home: 123 Green St, Eco City'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Office: 456 Corporate Way, Eco City',
-                    child: Text('Office: 456 Corporate Way'),
-                  ),
-                ],
-                onChanged: (val) {
-                  if (val != null) addressSelection.value = val;
+              // Location Dropdown (Pre-populated with registered address + standard options)
+              Builder(
+                builder: (context) {
+                  final locationOptions = <String>[];
+                  if (addressSelection.value.isNotEmpty) {
+                    locationOptions.add(addressSelection.value);
+                  }
+                  if (!locationOptions.contains('Home: 123 Green St, Eco City')) {
+                    locationOptions.add('Home: 123 Green St, Eco City');
+                  }
+                  if (!locationOptions.contains('Office: 456 Corporate Way')) {
+                    locationOptions.add('Office: 456 Corporate Way');
+                  }
+
+                  return DropdownButtonFormField<String>(
+                    value: addressSelection.value,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.location_on_outlined),
+                    ),
+                    items: locationOptions.map((loc) {
+                      return DropdownMenuItem<String>(
+                        value: loc,
+                        child: Text(loc, overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) addressSelection.value = val;
+                    },
+                  );
                 },
               ),
 
