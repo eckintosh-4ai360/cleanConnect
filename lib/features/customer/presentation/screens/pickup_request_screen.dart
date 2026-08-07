@@ -8,8 +8,6 @@ import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/services/paystack_service.dart';
 
-const double _pickupFeePerBin = 3.0;
-
 class PickupRequestScreen extends HookConsumerWidget {
   const PickupRequestScreen({super.key});
 
@@ -23,10 +21,21 @@ class PickupRequestScreen extends HookConsumerWidget {
     final selectedDate = useState<DateTime>(
       DateTime.now().add(const Duration(days: 1)),
     );
-    final selectedTimeSlot = useState('08:00 AM - 12:00 PM');
+    // Dynamic time slot initialization based on time of day
+    final defaultTimeSlot = DateTime.now().hour < 12
+        ? '08:00 AM - 12:00 PM'
+        : '12:00 PM - 04:00 PM';
+    final selectedTimeSlot = useState(defaultTimeSlot);
+
     final driverNotesController = useTextEditingController();
-    final addressSelection = useState('Home: 123 Green St, Eco City');
-    final selectedPaymentMethod = useState('Mobile Money');
+    final addressSelection = useState('');
+    final isCustomAddress = useState(false);
+    final customAddressController = useTextEditingController();
+
+    // Dynamic payment method initialized from customer subscription profile
+    final selectedPaymentMethod = useState(
+      subState.value?.paymentMethod ?? 'Mobile Money',
+    );
 
     final isSubmitting = useState(false);
     final isInitialized = useState(false);
@@ -43,12 +52,20 @@ class PickupRequestScreen extends HookConsumerWidget {
       );
     });
 
-    // Auto-populate defaults from customer's bin registration data
+    // Auto-populate dynamic defaults from customer's profile, bin registration, and subscription
     useEffect(() {
+      if (subState.hasValue && subState.value?.paymentMethod != null) {
+        if (selectedPaymentMethod.value.isEmpty || selectedPaymentMethod.value == 'Mobile Money') {
+          selectedPaymentMethod.value = subState.value!.paymentMethod;
+        }
+      }
+
       if (!isInitialized.value && binsState.hasValue) {
         final bins = binsState.value ?? [];
+        final currentUser = FirebaseAuth.instance.currentUser;
+
+        // 1. Pre-select registered bin types (recycling / organic)
         if (bins.isNotEmpty) {
-          // 1. Pre-select registered bin types (recycling / organic)
           final registeredTypes = bins
               .map((b) => b.type.toLowerCase())
               .where((t) => t == 'recycling' || t == 'organic')
@@ -58,15 +75,19 @@ class PickupRequestScreen extends HookConsumerWidget {
             selectedBins.value = registeredTypes;
           }
 
-          // 2. Pre-select location from registered bin GPS location / service address
+          // 2. Pre-select location from registered bin GPS location
           final primaryBin = bins.first;
-          if (primaryBin.gpsLocation != null && primaryBin.gpsLocation!.trim().isNotEmpty) {
+          if (primaryBin.gpsLocation != null &&
+              primaryBin.gpsLocation!.trim().isNotEmpty) {
             addressSelection.value = primaryBin.gpsLocation!;
           }
 
           // 3. Pre-select date matching customer's preferred pickup day
-          if (primaryBin.pickupDays != null && primaryBin.pickupDays!.isNotEmpty) {
-            final prefDays = primaryBin.pickupDays!.map((d) => d.toLowerCase()).toList();
+          if (primaryBin.pickupDays != null &&
+              primaryBin.pickupDays!.isNotEmpty) {
+            final prefDays = primaryBin.pickupDays!
+                .map((d) => d.toLowerCase())
+                .toList();
             for (final date in dateOptions) {
               final dayName = DateFormat('EEEE').format(date).toLowerCase();
               if (prefDays.contains(dayName)) {
@@ -76,16 +97,76 @@ class PickupRequestScreen extends HookConsumerWidget {
             }
           }
         }
+
+        // Fallback address from user profile if bin location is empty
+        if (addressSelection.value.isEmpty) {
+          if (currentUser?.email != null && currentUser!.email!.isNotEmpty) {
+            addressSelection.value = '${currentUser.displayName ?? "Customer"} Address';
+          } else {
+            addressSelection.value = 'Primary Service Location';
+          }
+        }
+
         isInitialized.value = true;
       }
       return null;
-    }, [binsState.hasValue]);
+    }, [binsState.hasValue, subState.hasValue]);
+
+    final requestsState = ref.watch(customerPickupRequestsProvider);
+
+    // Auto-detect if customer has any pickup request delayed past 3 days grace period
+    final hasOverdueDelayBonus = useMemoized(() {
+      final requests = requestsState.value ?? [];
+      return requests.any((r) => r.isOverdueBeyondGracePeriod);
+    }, [requestsState.value]);
+
+    // Demo toggle to test delay bonus even without historical delayed records
+    final demoDelayBonus = useState(true);
+    final isBonusEligible =
+        hasOverdueDelayBonus ||
+        (subState.value?.delayBonusAvailable ?? false) ||
+        demoDelayBonus.value;
 
     final timeSlots = [
       '08:00 AM - 12:00 PM', // Morning
       '12:00 PM - 04:00 PM', // Afternoon
     ];
-    final pickupTotal = selectedBins.value.length * _pickupFeePerBin;
+
+    final userBinSize = binsState.when(
+      data: (bins) => bins.isNotEmpty ? bins.first.size : '240L',
+      error: (_, _) => '240L',
+      loading: () => '240L',
+    );
+
+    final pricingPlansState = ref.watch(customerPricingPlansProvider);
+
+    // Dynamic Pay-As-You-Go per-bin fee (Weekly Price + 30% of Weekly Price)
+    final pickupFeePerBin = useMemoized(() {
+      final plans = pricingPlansState.value ?? [];
+
+      // 1. Check if admin configured a PAYG plan directly in Firestore
+      for (final plan in plans) {
+        if (plan.isPayg) {
+          final p = plan.getPriceForSize(userBinSize);
+          if (p > 0) return p;
+        }
+      }
+
+      // 2. Otherwise calculate as Weekly Price + 30% of Weekly Price (130%)
+      for (final plan in plans) {
+        if (plan.frequency.toLowerCase() == 'weekly') {
+          final wPrice = plan.getPriceForSize(userBinSize);
+          if (wPrice > 0) return (wPrice * 1.30);
+        }
+      }
+
+      return 65.0; // fallback (GHS 50.00 weekly + 30% = GHS 65.00)
+    }, [pricingPlansState.value, userBinSize]);
+
+    final originalTotal = selectedBins.value.length * pickupFeePerBin;
+    final discountPercentage = isBonusEligible ? 10.0 : 0.0;
+    final discountAmount = isBonusEligible ? (originalTotal * 0.10) : 0.0;
+    final pickupTotal = originalTotal - discountAmount;
 
     Future<void> handleConfirmPickup() async {
       if (selectedBins.value.isEmpty) {
@@ -114,7 +195,9 @@ class PickupRequestScreen extends HookConsumerWidget {
           if (email.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Could not retrieve your account email. Please sign in again.'),
+                content: Text(
+                  'Could not retrieve your account email. Please sign in again.',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -131,8 +214,12 @@ class PickupRequestScreen extends HookConsumerWidget {
             metadata: {
               'type': 'pickup_request_pay_as_you_go',
               'bin_types': selectedBins.value.join(', '),
-              'pickup_date': DateFormat('yyyy-MM-dd').format(selectedDate.value),
+              'pickup_date': DateFormat(
+                'yyyy-MM-dd',
+              ).format(selectedDate.value),
               'time_slot': selectedTimeSlot.value,
+              'discount_percentage': discountPercentage,
+              'original_total': originalTotal,
             },
           );
 
@@ -141,7 +228,9 @@ class PickupRequestScreen extends HookConsumerWidget {
           if (paymentResult.status == PaymentStatus.cancelled) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Payment cancelled. Your pickup was not scheduled.'),
+                content: Text(
+                  'Payment cancelled. Your pickup was not scheduled.',
+                ),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -152,7 +241,10 @@ class PickupRequestScreen extends HookConsumerWidget {
           if (!paymentResult.isSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(paymentResult.errorMessage ?? 'Payment failed. Please try again.'),
+                content: Text(
+                  paymentResult.errorMessage ??
+                      'Payment failed. Please try again.',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -164,17 +256,26 @@ class PickupRequestScreen extends HookConsumerWidget {
           finalAmountPaid = pickupTotal;
         }
 
-        // ── Step 2: Save pickup request to Firestore ──────────────────────
+        final finalLocation = isCustomAddress.value &&
+                customAddressController.text.trim().isNotEmpty
+            ? customAddressController.text.trim()
+            : (addressSelection.value.trim().isNotEmpty
+                ? addressSelection.value.trim()
+                : 'Primary Service Location');
+
+        // ── Step 2: Save pickup request to Firestore
         await ref
             .read(customerPickupRequestsProvider.notifier)
             .requestPickup(
               binTypes: selectedBins.value,
               date: selectedDate.value,
               timeSlot: selectedTimeSlot.value,
-              location: addressSelection.value,
+              location: finalLocation,
               amountPaid: finalAmountPaid,
               paymentMethod: paymentMethodToSave,
               instructions: driverNotesController.text,
+              originalAmount: originalTotal,
+              discountAppliedPercentage: discountPercentage,
             );
 
         if (!context.mounted) return;
@@ -389,44 +490,264 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
               const SizedBox(height: 12),
 
-              // Location Dropdown (Pre-populated with registered address + standard options)
+              // Dynamic Location Dropdown & Custom Address Field
               Builder(
                 builder: (context) {
-                  final locationOptions = <String>[];
-                  if (addressSelection.value.isNotEmpty) {
-                    locationOptions.add(addressSelection.value);
-                  }
-                  if (!locationOptions.contains('Home: 123 Green St, Eco City')) {
-                    locationOptions.add('Home: 123 Green St, Eco City');
-                  }
-                  if (!locationOptions.contains('Office: 456 Corporate Way')) {
-                    locationOptions.add('Office: 456 Corporate Way');
+                  final bins = binsState.value ?? [];
+                  final requests = requestsState.value ?? [];
+                  final currentUser = FirebaseAuth.instance.currentUser;
+
+                  final locationOptions = <String>{};
+
+                  // 1. Registered bin locations
+                  for (final bin in bins) {
+                    if (bin.gpsLocation != null && bin.gpsLocation!.trim().isNotEmpty) {
+                      locationOptions.add(bin.gpsLocation!.trim());
+                    }
                   }
 
-                  return DropdownButtonFormField<String>(
-                    initialValue: addressSelection.value,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.location_on_outlined),
-                    ),
-                    items: locationOptions.map((loc) {
-                      return DropdownMenuItem<String>(
-                        value: loc,
-                        child: Text(loc, overflow: TextOverflow.ellipsis),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) addressSelection.value = val;
-                    },
+                  // 2. Previous requests' locations
+                  for (final req in requests) {
+                    if (req.location.trim().isNotEmpty) {
+                      locationOptions.add(req.location.trim());
+                    }
+                  }
+
+                  // 3. Current selected address
+                  if (addressSelection.value.trim().isNotEmpty) {
+                    locationOptions.add(addressSelection.value.trim());
+                  }
+
+                  // 4. Default user location tag
+                  if (locationOptions.isEmpty) {
+                    final defaultLoc = currentUser?.displayName != null
+                        ? '${currentUser!.displayName}\'s Service Location'
+                        : 'Primary Service Location';
+                    locationOptions.add(defaultLoc);
+                  }
+
+                  final optionsList = locationOptions.toList();
+                  optionsList.add('+ Enter Custom Address');
+
+                  final currentSelection = isCustomAddress.value
+                      ? '+ Enter Custom Address'
+                      : (optionsList.contains(addressSelection.value)
+                          ? addressSelection.value
+                          : optionsList.first);
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: currentSelection,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.location_on_outlined),
+                        ),
+                        items: optionsList.map((loc) {
+                          return DropdownMenuItem<String>(
+                            value: loc,
+                            child: Text(
+                              loc,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: loc.startsWith('+')
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: loc.startsWith('+')
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val == '+ Enter Custom Address') {
+                            isCustomAddress.value = true;
+                          } else if (val != null) {
+                            isCustomAddress.value = false;
+                            addressSelection.value = val;
+                          }
+                        },
+                      ),
+                      if (isCustomAddress.value) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: customAddressController,
+                          decoration: const InputDecoration(
+                            labelText: 'Enter Custom Pickup Address',
+                            hintText: 'e.g. House 42, Palm Avenue, East Legon',
+                            prefixIcon: Icon(Icons.edit_location_alt_outlined),
+                          ),
+                          onChanged: (val) {
+                            if (val.trim().isNotEmpty) {
+                              addressSelection.value = val.trim();
+                            }
+                          },
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),
 
               const SizedBox(height: 24),
-              Text(
-                isPayAsYouGo ? 'Payment (Pay-As-You-Go)' : 'Payment Status',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isPayAsYouGo ? 'Payment (Pay-As-You-Go)' : 'Payment Status',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => demoDelayBonus.value = !demoDelayBonus.value,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: demoDelayBonus.value
+                            ? Colors.green.shade50
+                            : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: demoDelayBonus.value
+                              ? Colors.green.shade300
+                              : Colors.grey.shade400,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            demoDelayBonus.value
+                                ? Icons.card_giftcard
+                                : Icons.card_giftcard_outlined,
+                            size: 14,
+                            color: demoDelayBonus.value
+                                ? Colors.green.shade800
+                                : Colors.grey.shade700,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            demoDelayBonus.value
+                                ? '10% Bonus On'
+                                : 'Test Bonus',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: demoDelayBonus.value
+                                  ? Colors.green.shade900
+                                  : Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
+
+              // 🎁 Rider Delay Compensation Banner (if 10% bonus active)
+              if (isBonusEligible)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDark
+                          ? [Colors.green.shade900, Colors.teal.shade900]
+                          : [const Color(0xFFE8F5E9), const Color(0xFFC8E6C9)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.green.shade700
+                          : Colors.green.shade400,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade700,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.card_giftcard_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Flexible(
+                                  child: Text(
+                                    '10% DELAY BONUS APPLIED',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.green,
+                                      letterSpacing: 0.8,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade800,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text(
+                                    '10% OFF',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Riders failed to pick up after 3 days grace period. 10% discount applied to your next pickup!',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.grey.shade300
+                                    : const Color(0xFF1B5E20),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               if (isPayAsYouGo)
                 Container(
@@ -436,7 +757,11 @@ class PickupRequestScreen extends HookConsumerWidget {
                         ? Colors.grey.shade900
                         : const Color(0xFFFFF8E1),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.amber.shade200),
+                    border: Border.all(
+                      color: isBonusEligible
+                          ? Colors.green.shade400
+                          : Colors.amber.shade200,
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -447,12 +772,32 @@ class PickupRequestScreen extends HookConsumerWidget {
                             'Pickup Charge',
                             style: TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          Text(
-                            'GHS ${pickupTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 18,
-                            ),
+                          Row(
+                            children: [
+                              if (isBonusEligible) ...[
+                                Text(
+                                  'GHS ${originalTotal.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade500,
+                                    decoration: TextDecoration.lineThrough,
+                                    decorationColor: Colors.red,
+                                    decorationThickness: 2,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Text(
+                                'GHS ${pickupTotal.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  color: isBonusEligible
+                                      ? Colors.green.shade700
+                                      : null,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -461,18 +806,29 @@ class PickupRequestScreen extends HookConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x GHS ${_pickupFeePerBin.toStringAsFixed(2)}',
+                            isBonusEligible
+                                ? '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} (Original GHS ${originalTotal.toStringAsFixed(2)} - 10% Bonus)'
+                                : '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x GHS ${pickupFeePerBin.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade600,
+                              color: isBonusEligible
+                                  ? Colors.green.shade800
+                                  : Colors.grey.shade600,
+                              fontWeight: isBonusEligible
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
-                          const Text(
-                            'Paystack payment required',
+                          Text(
+                            isBonusEligible
+                                ? 'Saved GHS ${discountAmount.toStringAsFixed(2)}'
+                                : 'Paystack payment required',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFFC78200),
+                              color: isBonusEligible
+                                  ? Colors.green.shade800
+                                  : const Color(0xFFC78200),
                             ),
                           ),
                         ],
@@ -516,8 +872,11 @@ class PickupRequestScreen extends HookConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_outline,
-                          color: Colors.green, size: 28),
+                      const Icon(
+                        Icons.check_circle_outline,
+                        color: Colors.green,
+                        size: 28,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -526,15 +885,18 @@ class PickupRequestScreen extends HookConsumerWidget {
                             Text(
                               'Covered by $currentPlan',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                  fontSize: 14),
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                                fontSize: 14,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             const Text(
                               'No additional per-pickup charge required.',
-                              style:
-                                  TextStyle(fontSize: 12, color: Colors.grey),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
                             ),
                           ],
                         ),

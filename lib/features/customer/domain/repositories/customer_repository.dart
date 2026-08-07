@@ -30,6 +30,8 @@ abstract class CustomerRepository {
     required double amountPaid,
     required String paymentMethod,
     String? instructions,
+    double originalAmount = 0.0,
+    double discountAppliedPercentage = 0.0,
   });
 
   Stream<List<ServiceRecordEntity>> watchServiceHistory();

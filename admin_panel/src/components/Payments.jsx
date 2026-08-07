@@ -5,6 +5,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  setDoc,
   addDoc,
   writeBatch,
   getDocs,
@@ -20,8 +21,160 @@ export default function Payments() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [savingPricing, setSavingPricing] = useState(false);
   const [billingCycle, setBillingCycle] = useState('current');
+
+  // Dynamic Subscription Pricing State (default base rates)
+  const [pricingData, setPricingData] = useState({
+    weekly120: 35,
+    weekly240: 50,
+    weekly360: 70,
+    biweekly120: 65,
+    biweekly240: 90,
+    biweekly360: 120,
+    monthly120: 110,
+    monthly240: 160,
+    monthly360: 210,
+  });
+
+  // Calculate Pay-As-You-Go rates automatically as Weekly Price + 30% of Weekly Price (130%)
+  const payg120 = (Number(pricingData.weekly120 || 0) * 1.30).toFixed(2);
+  const payg240 = (Number(pricingData.weekly240 || 0) * 1.30).toFixed(2);
+  const payg360 = (Number(pricingData.weekly360 || 0) * 1.30).toFixed(2);
+
+  // Listen to live pricingPlans from Firestore
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'pricingPlans'), (snap) => {
+      if (!snap.empty) {
+        const plansMap = {};
+        snap.docs.forEach(docSnap => {
+          plansMap[docSnap.id] = docSnap.data();
+        });
+
+        if (plansMap['weekly']?.prices) {
+          setPricingData(prev => ({
+            ...prev,
+            weekly120: plansMap['weekly'].prices['120L'] ?? prev.weekly120,
+            weekly240: plansMap['weekly'].prices['240L'] ?? prev.weekly240,
+            weekly360: plansMap['weekly'].prices['360L'] ?? prev.weekly360,
+            biweekly120: plansMap['biweekly']?.prices?.['120L'] ?? prev.biweekly120,
+            biweekly240: plansMap['biweekly']?.prices?.['240L'] ?? prev.biweekly240,
+            biweekly360: plansMap['biweekly']?.prices?.['360L'] ?? prev.biweekly360,
+            monthly120: plansMap['monthly']?.prices?.['120L'] ?? prev.monthly120,
+            monthly240: plansMap['monthly']?.prices?.['240L'] ?? prev.monthly240,
+            monthly360: plansMap['monthly']?.prices?.['360L'] ?? prev.monthly360,
+          }));
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSaveSubscriptionPrices = async (e) => {
+    e.preventDefault();
+    setSavingPricing(true);
+    try {
+      const w120 = Number(pricingData.weekly120 || 0);
+      const w240 = Number(pricingData.weekly240 || 0);
+      const w360 = Number(pricingData.weekly360 || 0);
+
+      const bw120 = Number(pricingData.biweekly120 || 0);
+      const bw240 = Number(pricingData.biweekly240 || 0);
+      const bw360 = Number(pricingData.biweekly360 || 0);
+
+      const m120 = Number(pricingData.monthly120 || 0);
+      const m240 = Number(pricingData.monthly240 || 0);
+      const m360 = Number(pricingData.monthly360 || 0);
+
+      // PAYG rates = Weekly Price + 30% of Weekly Price (1.30 * Weekly Price)
+      const p120 = Number((w120 * 1.30).toFixed(2));
+      const p240 = Number((w240 * 1.30).toFixed(2));
+      const p360 = Number((w360 * 1.30).toFixed(2));
+
+      // ── Step 1: Save Core Pricing Plans to Firestore
+      const batch = writeBatch(db);
+
+      // 1. Weekly Plan Doc
+      batch.set(doc(db, 'pricingPlans', 'weekly'), {
+        name: 'Weekly Plan',
+        frequency: 'Weekly',
+        description: 'Most popular for busy households',
+        isPayg: false,
+        prices: { '120L': w120, '240L': w240, '360L': w360 },
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+
+      // 2. Bi-weekly Plan Doc
+      batch.set(doc(db, 'pricingPlans', 'biweekly'), {
+        name: 'Bi-weekly Plan',
+        frequency: 'Bi-weekly',
+        description: 'Eco-conscious & flexible',
+        isPayg: false,
+        prices: { '120L': bw120, '240L': bw240, '360L': bw360 },
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+
+      // 3. Monthly Plan Doc
+      batch.set(doc(db, 'pricingPlans', 'monthly'), {
+        name: 'Monthly Plan',
+        frequency: 'Monthly',
+        description: 'Low volume waste collection',
+        isPayg: false,
+        prices: { '120L': m120, '240L': m240, '360L': m360 },
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+
+      // 4. Pay-As-You-Go Plan Doc (Automatically Weekly + 30%)
+      batch.set(doc(db, 'pricingPlans', 'payg'), {
+        name: 'Pay-As-You-Go',
+        frequency: 'Pay-As-You-Go',
+        description: 'Pay per collection request (Weekly price + 30% surcharge)',
+        isPayg: true,
+        prices: { '120L': p120, '240L': p240, '360L': p360 },
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
+
+      await batch.commit();
+
+      // ── Step 2: Optional Settings & Admin Notification (silent fallback if rules restrict settings)
+      try {
+        await setDoc(doc(db, 'settings', 'subscription_pricing'), {
+          weeklyFee: w240,
+          biweeklyFee: bw240,
+          monthlyFee: m240,
+          paygFee: p240,
+          paygRatio: 1.30,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (settingsErr) {
+        console.warn('Settings summary doc skipped:', settingsErr);
+      }
+
+      try {
+        await addDoc(collection(db, 'admin_notifications'), {
+          title: 'Subscription Pricing Updated',
+          message: `Admin updated subscription plans. Pay-As-You-Go set to Weekly + 30% (GHS ${p240} for 240L bin).`,
+          type: 'pricing_updated',
+          isRead: false,
+          createdAt: serverTimestamp(),
+        });
+      } catch (notifErr) {
+        console.warn('Admin notification skipped:', notifErr);
+      }
+
+      alert(`Subscription & PAYG Prices updated successfully!\nPay-As-You-Go rate automatically set to Weekly + 30% (GHS ${p240}/pickup for 240L bin).`);
+      setShowPricingModal(false);
+    } catch (err) {
+      alert('Failed to save subscription prices: ' + err.message);
+    }
+    setSavingPricing(false);
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'payments'), orderBy('invoiceDate', 'desc'));
@@ -203,12 +356,17 @@ export default function Payments() {
         <div>
           <h2 style={{ fontSize: '24px' }}>Payments & Invoicing</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '4px' }}>
-            Verify collection billing invoices, view payment statuses, and configure client accounts.
+            Verify collection billing invoices, set dynamic subscription prices, and configure client accounts.
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowBatchModal(true)}>
-          Send Batch Invoices
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowPricingModal(true)}>
+            ⚙️ Set Subscription Prices
+          </button>
+          <button className="btn-primary" onClick={() => setShowBatchModal(true)}>
+            Send Batch Invoices
+          </button>
+        </div>
       </div>
 
       {/* ── Metric Summary Cards ── */}
@@ -238,6 +396,57 @@ export default function Payments() {
           </span>
           <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>transactions</span>
         </div>
+      </div>
+
+      {/* ── Active Subscription & PAYG Pricing Banner ── */}
+      <div
+        className="card-glass"
+        style={{
+          background: 'linear-gradient(135deg, rgba(62,193,107,0.08), rgba(240,165,0,0.08))',
+          border: '1px solid rgba(62,193,107,0.3)',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          padding: '16px 20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div
+            style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: 'var(--color-success)',
+              display: 'flex',
+              alignItems: 'center',
+              justify: 'center',
+              fontSize: '20px',
+              color: 'white',
+              flexShrink: 0,
+            }}
+          >
+            🏷️
+          </div>
+          <div>
+            <h4 style={{ fontSize: '14px', fontWeight: '800', margin: 0 }}>
+              Active Subscription Rates & PAYG Pricing (Weekly + 30%)
+            </h4>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', gap: '16px' }}>
+              <span>Weekly Plan: <strong>GHS {Number(pricingData.weekly240 || 50).toFixed(2)}</strong> (240L)</span>
+              <span>•</span>
+              <span style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>
+                PAYG Rate (Weekly + 30%): <strong>GHS {payg240}/pickup</strong> (240L)
+              </span>
+            </div>
+          </div>
+        </div>
+        <button
+          className="btn-outline"
+          style={{ padding: '6px 14px', fontSize: '12px', whiteSpace: 'nowrap' }}
+          onClick={() => setShowPricingModal(true)}
+        >
+          Edit Rates
+        </button>
       </div>
 
       {/* ── Layout columns ── */}
@@ -385,6 +594,138 @@ export default function Payments() {
                 {actionLoading ? 'Sending...' : 'Generate & Dispatch'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Subscription & Pay-As-You-Go Pricing Manager Modal ── */}
+      {showPricingModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '580px', width: '100%' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '4px' }}>Configure Subscription Pricing & PAYG Rates</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              Set subscription prices dynamically. Pay-As-You-Go price is automatically calculated as <strong>30% of the regular Weekly Plan price</strong>.
+            </p>
+
+            <form onSubmit={handleSaveSubscriptionPrices} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+
+              {/* ── Weekly Plan Pricing ── */}
+              <div style={{ background: 'var(--bg-app)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-divider)' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--color-primary)', marginBottom: '8px' }}>
+                  1. Regular Weekly Plan Prices (Base Rate)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  {['120L', '240L', '360L'].map((size) => {
+                    const key = `weekly${size.replace('L', '')}`;
+                    return (
+                      <div key={size} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold' }}>{size} Bin (GHS/wk)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={pricingData[key]}
+                          onChange={(e) => setPricingData({ ...pricingData, [key]: e.target.value })}
+                          required
+                          style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-divider)', fontSize: '13px', fontWeight: '700' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Auto-calculated PAYG Rates Card (Weekly + 30% Rule) ── */}
+              <div style={{ background: 'rgba(62,193,107,0.1)', padding: '14px', borderRadius: '10px', border: '1px solid var(--color-success)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--color-success)', margin: 0 }}>
+                    ⚡ Pay-As-You-Go Rates (Weekly Price + 30% Surcharge)
+                  </h4>
+                  <span style={{ fontSize: '10px', background: 'var(--color-success)', color: 'white', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                    WEEKLY + 30% RULE
+                  </span>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  Customers paying per pickup pay the weekly rate plus 30% per bin request.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div style={{ background: 'white', padding: '8px 12px', borderRadius: '6px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>120L PAYG</div>
+                    <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--color-success)' }}>GHS {payg120}</div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>GHS {pricingData.weekly120 || 0} + 30%</div>
+                  </div>
+                  <div style={{ background: 'white', padding: '8px 12px', borderRadius: '6px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>240L PAYG</div>
+                    <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--color-success)' }}>GHS {payg240}</div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>GHS {pricingData.weekly240 || 0} + 30%</div>
+                  </div>
+                  <div style={{ background: 'white', padding: '8px 12px', borderRadius: '6px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>360L PAYG</div>
+                    <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--color-success)' }}>GHS {payg360}</div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>GHS {pricingData.weekly360 || 0} + 30%</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Bi-weekly Plan Pricing ── */}
+              <div style={{ background: 'var(--bg-app)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-divider)' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  2. Bi-weekly Plan Prices
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  {['120L', '240L', '360L'].map((size) => {
+                    const key = `biweekly${size.replace('L', '')}`;
+                    return (
+                      <div key={size} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold' }}>{size} Bin (GHS/bi-wk)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={pricingData[key]}
+                          onChange={(e) => setPricingData({ ...pricingData, [key]: e.target.value })}
+                          required
+                          style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-divider)', fontSize: '13px', fontWeight: '700' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Monthly Plan Pricing ── */}
+              <div style={{ background: 'var(--bg-app)', padding: '14px', borderRadius: '10px', border: '1px solid var(--border-divider)' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  3. Monthly Plan Prices
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  {['120L', '240L', '360L'].map((size) => {
+                    const key = `monthly${size.replace('L', '')}`;
+                    return (
+                      <div key={size} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 'bold' }}>{size} Bin (GHS/mo)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={pricingData[key]}
+                          onChange={(e) => setPricingData({ ...pricingData, [key]: e.target.value })}
+                          required
+                          style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--border-divider)', fontSize: '13px', fontWeight: '700' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-outline" onClick={() => setShowPricingModal(false)} disabled={savingPricing}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={savingPricing}>
+                  {savingPricing ? 'Updating...' : 'Save Pricing Plans'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

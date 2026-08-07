@@ -426,68 +426,79 @@ class _SlidePage extends HookWidget {
       opacity: fadeAnim,
       child: SlideTransition(
         position: slideAnim,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 12),
 
-              // ── Circular Hero Card ──────────────────────────────────────
-              _CircularHeroCard(slide: slide),
+                    // ── Circular Hero Card ────────────────────────────────
+                    _CircularHeroCard(slide: slide),
 
-              const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
-              // ── Step label pill ─────────────────────────────────────────
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                decoration: BoxDecoration(
-                  color: slide.accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  slide.stepLabel.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: slide.accentColor,
-                    letterSpacing: 1.4,
-                  ),
+                    // ── Step label pill ───────────────────────────────────
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 400),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: slide.accentColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        slide.stepLabel.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: slide.accentColor,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ── Title ─────────────────────────────────────────────
+                    Text(
+                      slide.title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: _kDark,
+                        height: 1.2,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ── Description ───────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        slide.description,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: _kMuted,
+                          fontWeight: FontWeight.w500,
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-
-              const SizedBox(height: 14),
-
-              // ── Title ────────────────────────────────────────────────────
-              Text(
-                slide.title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
-                  color: _kDark,
-                  height: 1.2,
-                ),
-              ),
-
-              const SizedBox(height: 14),
-
-              // ── Description ───────────────────────────────────────────────
-              Text(
-                slide.description,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14.5,
-                  color: _kMuted,
-                  fontWeight: FontWeight.w500,
-                  height: 1.6,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -502,17 +513,23 @@ class _CircularHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive size: up to 240px but never wider than screen minus padding
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardSize = math.min(240.0, screenWidth - 48);
+    final center = cardSize / 2;
+
     return SizedBox(
-      width: 280,
-      height: 280,
+      width: cardSize,
+      height: cardSize,
       child: Stack(
+        clipBehavior: Clip.none, // allow badges to render outside the box
         alignment: Alignment.center,
         children: [
           // Outermost subtle ring
           AnimatedContainer(
             duration: const Duration(milliseconds: 400),
-            width: 280,
-            height: 280,
+            width: cardSize,
+            height: cardSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
@@ -524,7 +541,7 @@ class _CircularHeroCard extends StatelessWidget {
 
           // Middle dashed ring
           CustomPaint(
-            size: const Size(240, 240),
+            size: Size(cardSize * 0.857, cardSize * 0.857),
             painter: _DashedCirclePainter(
               color: slide.accentColor.withValues(alpha: 0.25),
               dashCount: 24,
@@ -534,21 +551,21 @@ class _CircularHeroCard extends StatelessWidget {
           // Main filled circle
           AnimatedContainer(
             duration: const Duration(milliseconds: 400),
-            width: 200,
-            height: 200,
+            width: cardSize * 0.714,
+            height: cardSize * 0.714,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: slide.cardBg,
               boxShadow: [
                 BoxShadow(
                   color: slide.accentColor.withValues(alpha: 0.22),
-                  blurRadius: 32,
-                  spreadRadius: 4,
+                  blurRadius: 28,
+                  spreadRadius: 3,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
                   color: Colors.white.withValues(alpha: 0.9),
-                  blurRadius: 12,
+                  blurRadius: 10,
                   spreadRadius: -4,
                   offset: const Offset(-4, -4),
                 ),
@@ -557,24 +574,25 @@ class _CircularHeroCard extends StatelessWidget {
             child: Center(
               child: Icon(
                 slide.heroIcon,
-                size: 80,
+                size: cardSize * 0.28,
                 color: slide.accentColor,
               ),
             ),
           ),
 
-          // Floating badge chips
-          ..._buildBadges(),
+          // Floating badge chips — anchored inside the outer ring
+          ..._buildBadges(center),
         ],
       ),
     );
   }
 
-  List<Widget> _buildBadges() {
-    // Positions relative to center (140, 140) of the 280×280 stack
+  List<Widget> _buildBadges(double center) {
+    // Offset from center; kept inside ±center so they stay on-screen
+    final r = center * 0.78; // radius at which chips orbit
     final positions = [
-      const Offset(-118, -58),
-      const Offset(94, 68),
+      Offset(-r * 0.82, -r * 0.55), // top-left
+      Offset(r * 0.55, r * 0.68),   // bottom-right
     ];
 
     return List.generate(
@@ -583,8 +601,8 @@ class _CircularHeroCard extends StatelessWidget {
         final badge = slide.badges[i];
         final pos = positions[i];
         return Positioned(
-          left: 140 + pos.dx,
-          top: 140 + pos.dy,
+          left: center + pos.dx,
+          top: center + pos.dy,
           child: _BadgeChip(badge: badge),
         );
       },

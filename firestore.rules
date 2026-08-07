@@ -75,5 +75,14 @@ service cloud.firestore {
     match /pricingPlans/{planId} {
       allow read, write: if true;
     }
+
+    // ── Settings & App Settings ───────────────────────────────────────────────
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    match /app_settings/{settingId} {
+      allow read, write: if true;
+    }
   }
 }

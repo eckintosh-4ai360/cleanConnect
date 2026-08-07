@@ -83,44 +83,50 @@ class BinManagementScreen extends ConsumerWidget {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: bin.type == 'recycling'
-                                              ? Colors.blue.shade50
-                                              : (bin.type == 'organic' ? Colors.green.shade50 : Colors.grey.shade100),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.delete,
-                                          color: bin.type == 'recycling'
-                                              ? Colors.blue
-                                              : (bin.type == 'organic' ? Colors.green : Colors.grey.shade600),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${bin.type[0].toUpperCase()}${bin.type.substring(1)} Waste',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: bin.type == 'recycling'
+                                                ? Colors.blue.shade50
+                                                : (bin.type == 'organic' ? Colors.green.shade50 : Colors.grey.shade100),
+                                            shape: BoxShape.circle,
                                           ),
-                                          Text(
-                                            'Capacity: ${bin.size}',
-                                            style: const TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 12,
-                                            ),
+                                          child: Icon(
+                                            Icons.delete,
+                                            color: bin.type == 'recycling'
+                                                ? Colors.blue
+                                                : (bin.type == 'organic' ? Colors.green : Colors.grey.shade600),
                                           ),
-                                        ],
-                                      ),
-                                    ],
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '${bin.type[0].toUpperCase()}${bin.type.substring(1)} Waste',
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                              Text(
+                                                'Capacity: ${bin.size}',
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.grey,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   // QR Code action icon
                                   IconButton(
@@ -135,21 +141,25 @@ class BinManagementScreen extends ConsumerWidget {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    'Status: ${isHigh ? "Action Needed" : "Active"}',
-                                    style: TextStyle(
-                                      color: isHigh ? Colors.red : Colors.grey,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
+                                  Flexible(
+                                    child: Text(
+                                      'Status: ${isHigh ? "Action Needed" : "Active"}',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isHigh ? Colors.red : Colors.grey,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
-                                      '${(bin.fillLevelPercentage * 100).toInt()}% Full',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        color: isHigh ? Colors.red : theme.colorScheme.primary,
-                                        fontSize: 14,
-                                      ),
+                                    '${(bin.fillLevelPercentage * 100).toInt()}% Full',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      color: isHigh ? Colors.red : theme.colorScheme.primary,
+                                      fontSize: 14,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -175,27 +185,35 @@ class BinManagementScreen extends ConsumerWidget {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text('Serial Number', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        bin.serialNumber,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                    ],
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Serial Number', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          bin.serialNumber,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text('Schedule Frequency', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        bin.scheduleFrequency ?? 'Weekly',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                    ],
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text('Schedule Frequency', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          bin.scheduleFrequency ?? 'Weekly',
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.end,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),

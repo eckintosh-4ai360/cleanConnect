@@ -57,7 +57,10 @@ class PickupRequestEntity {
   final String timeSlot; // '08:00 AM - 12:00 PM'
   final String location;
   final String? instructions;
-  final String status; // 'pending', 'scheduled', 'completed', 'cancelled'
+  final String status; // 'pending', 'scheduled', 'completed', 'cancelled', 'overdue_delayed'
+  final double amountPaid;
+  final double originalAmount;
+  final double discountAppliedPercentage; // e.g. 10.0 for 10% discount
 
   const PickupRequestEntity({
     required this.id,
@@ -67,7 +70,41 @@ class PickupRequestEntity {
     required this.location,
     this.instructions,
     required this.status,
+    this.amountPaid = 0.0,
+    this.originalAmount = 0.0,
+    this.discountAppliedPercentage = 0.0,
   });
+
+  /// True if pickup was not completed on scheduled date
+  bool get isDelayed {
+    if (status == 'completed' || status == 'cancelled') return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduledDay = DateTime(date.year, date.month, date.day);
+    return today.isAfter(scheduledDay);
+  }
+
+  /// Calculates number of days delayed past the scheduled date
+  int get daysDelayed {
+    if (!isDelayed) return 0;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scheduledDay = DateTime(date.year, date.month, date.day);
+    return today.difference(scheduledDay).inDays;
+  }
+
+  /// Remaining days in the 3-day grace period (max 3, min 0)
+  int get remainingGraceDays {
+    if (!isDelayed) return 3;
+    final daysPast = daysDelayed;
+    final remaining = 3 - daysPast;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  /// True if rider failed to pick up after the 3rd day of grace period
+  bool get isOverdueBeyondGracePeriod {
+    return isDelayed && daysDelayed > 3;
+  }
 }
 
 class ServiceRecordEntity {
@@ -109,6 +146,7 @@ class SubscriptionEntity {
   final String paymentMethod;
   final double outstandingBalance;
   final DateTime? nextPickupDate;
+  final bool delayBonusAvailable; // true if rider delayed past 3-day grace period
 
   const SubscriptionEntity({
     required this.currentPlan,
@@ -117,6 +155,7 @@ class SubscriptionEntity {
     required this.paymentMethod,
     required this.outstandingBalance,
     this.nextPickupDate,
+    this.delayBonusAvailable = false,
   });
 }
 

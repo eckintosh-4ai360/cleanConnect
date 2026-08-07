@@ -232,6 +232,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required double amountPaid,
     required String paymentMethod,
     String? instructions,
+    double originalAmount = 0.0,
+    double discountAppliedPercentage = 0.0,
   }) async {
     final custDoc = await _customerRef.get();
     final custData = custDoc.data() as Map<String, dynamic>? ?? {};
@@ -251,6 +253,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'status': 'pending',
       'paymentStatus': 'paid',
       'amountPaid': amountPaid,
+      'originalAmount': originalAmount > 0 ? originalAmount : amountPaid,
+      'discountAppliedPercentage': discountAppliedPercentage,
       'paymentMethod': paymentMethod,
       'paidAt': FieldValue.serverTimestamp(),
       'customerId': _uid,
@@ -267,7 +271,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
       });
 
       await _historyRef.add({
-        'title': 'Pickup Request Payment',
+        'title': discountAppliedPercentage > 0
+            ? 'Pickup Payment (${discountAppliedPercentage.toInt()}% Delay Bonus Applied)'
+            : 'Pickup Request Payment',
         'type': 'payment',
         'date': FieldValue.serverTimestamp(),
         'status': 'completed',
@@ -278,7 +284,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'pickupRequestId': docRef.id,
       });
 
-      // 2. Upsert customer profile in 'customers' collection
+      // 2. Upsert customer profile in 'customers' collection & reset delay bonus if used
       await _customerRef.set({
         'displayName': name,
         'fullName': name,
@@ -293,6 +299,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'outstandingBalance': 0.0,
         'activeRequestsCount': FieldValue.increment(1),
         'lastPickupRequestDate': FieldValue.serverTimestamp(),
+        if (discountAppliedPercentage > 0) 'delayBonusRedeemedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -301,7 +308,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       await _db.collection('admin_notifications').add({
         'title': 'Pickup Requested',
         'message':
-            '$name paid \$${amountPaid.toStringAsFixed(2)} and requested pickup for ${binTypes.join(", ")} ($timeSlot at $location).',
+            '$name paid GHS ${amountPaid.toStringAsFixed(2)}${discountAppliedPercentage > 0 ? " (with ${discountAppliedPercentage.toInt()}% Delay Bonus)" : ""} and requested pickup for ${binTypes.join(", ")} ($timeSlot at $location).',
         'type': 'pickup_requested',
         'customerId': _uid,
         'customerName': name,
@@ -319,6 +326,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
       location: location,
       instructions: instructions,
       status: 'pending',
+      amountPaid: amountPaid,
+      originalAmount: originalAmount > 0 ? originalAmount : amountPaid,
+      discountAppliedPercentage: discountAppliedPercentage,
     );
   }
 
@@ -334,6 +344,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
       location: d['location'] as String? ?? '',
       instructions: d['instructions'] as String?,
       status: d['status'] as String? ?? 'pending',
+      amountPaid: (d['amountPaid'] as num?)?.toDouble() ?? 0.0,
+      originalAmount: (d['originalAmount'] as num?)?.toDouble() ?? 0.0,
+      discountAppliedPercentage:
+          (d['discountAppliedPercentage'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -406,6 +420,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       nextPickupDate: d['nextPickupDate'] is Timestamp
           ? (d['nextPickupDate'] as Timestamp).toDate()
           : null,
+      delayBonusAvailable: d['delayBonusAvailable'] as bool? ?? false,
     );
   }
 
