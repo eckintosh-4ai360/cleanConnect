@@ -260,7 +260,7 @@ class LoginScreen extends HookConsumerWidget {
                                 style: TextStyle(color: Colors.grey.shade500),
                               ),
                               TextSpan(
-                                text: 'Register here',
+                                text: 'Register as Customer',
                                 style: TextStyle(
                                   color: theme.colorScheme.primary,
                                   fontWeight: FontWeight.bold,

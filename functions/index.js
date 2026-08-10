@@ -1,6 +1,9 @@
 /* eslint-disable max-len */
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { initializeApp } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getMessaging } = require('firebase-admin/messaging');
 const axios = require('axios');
 
 initializeApp();
@@ -106,5 +109,62 @@ exports.initializePaystackTransaction = onCall(
         apiError || 'Could not reach payment service. Please try again.',
       );
     }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firestore Trigger: notifyRidersOnNewPickup
+//
+// Fires whenever a customer creates a new pickup request (root `pickupRequests`
+// collection). Broadcasts a data-only FCM push to every rider with a stored
+// `fcmToken` so the app can show an on-screen "incoming request" alert with
+// vibration, even in the background or when the app is killed (Android).
+// ─────────────────────────────────────────────────────────────────────────────
+exports.notifyRidersOnNewPickup = onDocumentCreated(
+  { document: 'pickupRequests/{requestId}', region: 'us-central1' },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data || data.status !== 'pending') return;
+
+    const requestId = event.params.requestId;
+    const db = getFirestore();
+
+    const ridersSnap = await db.collection('riders').get();
+    const tokens = ridersSnap.docs
+      .map((doc) => doc.data().fcmToken)
+      .filter((token) => typeof token === 'string' && token.length > 0);
+
+    if (tokens.length === 0) {
+      console.log(`[notifyRidersOnNewPickup] No rider tokens found for request ${requestId}.`);
+      return;
+    }
+
+    const binTypes = Array.isArray(data.binTypes) ? data.binTypes : [];
+
+    const message = {
+      data: {
+        type: 'new_pickup_request',
+        requestId,
+        customerId: data.customerId || '',
+        customerName: data.customerName || 'Customer',
+        location: data.location || '',
+        timeSlot: data.timeSlot || '',
+        binTypes: JSON.stringify(binTypes),
+      },
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { contentAvailable: true } },
+      },
+      tokens,
+    };
+
+    const response = await getMessaging().sendEachForMulticast(message);
+    console.log(
+      `[notifyRidersOnNewPickup] request ${requestId}: sent to ${tokens.length} riders, ` +
+        `success=${response.successCount}, failure=${response.failureCount}`,
+    );
   },
 );

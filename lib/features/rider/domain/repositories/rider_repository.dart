@@ -37,6 +37,14 @@ abstract class RiderRepository {
   /// Streams all pickup requests with status 'pending' (not yet accepted).
   Stream<List<PickupRequestEntity>> watchAvailablePickups();
 
+  /// Streams a single pickup request by id (used by the incoming-request
+  /// notification screen, which only receives a requestId from the push).
+  Stream<PickupRequestEntity?> watchPickupById(String requestId);
+
+  /// Saves/updates this rider's FCM push token so Cloud Functions can target
+  /// them with new-pickup-request notifications.
+  Future<void> updateFcmToken(String token);
+
   /// Accept a pickup request — assigns this rider and sets status to 'accepted'.
   Future<void> acceptPickup({
     required String requestId,

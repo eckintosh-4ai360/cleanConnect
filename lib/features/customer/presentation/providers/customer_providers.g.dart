@@ -81,7 +81,7 @@ final class CustomerBinsProvider
   CustomerBins create() => CustomerBins();
 }
 
-String _$customerBinsHash() => r'881dcff919ef829a55410644a3f0cd96ed417d16';
+String _$customerBinsHash() => r'2951eafc887443115a4f6908fe11fde9804026cf';
 
 abstract class _$CustomerBins extends $StreamNotifier<List<BinEntity>> {
   Stream<List<BinEntity>> build();
@@ -130,7 +130,7 @@ final class CustomerPickupRequestsProvider
 }
 
 String _$customerPickupRequestsHash() =>
-    r'ae69f51b5a7a24805fa571b49420fca945cbfcb7';
+    r'b5788ba0d36a2f1f5788397e04e69a882cec248f';
 
 abstract class _$CustomerPickupRequests
     extends $StreamNotifier<List<PickupRequestEntity>> {
@@ -164,10 +164,7 @@ final customerPricingPlansProvider = CustomerPricingPlansProvider._();
 
 final class CustomerPricingPlansProvider
     extends
-        $StreamNotifierProvider<
-          CustomerPricingPlans,
-          List<PricingPlanEntity>
-        > {
+        $StreamNotifierProvider<CustomerPricingPlans, List<PricingPlanEntity>> {
   CustomerPricingPlansProvider._()
     : super(
         from: null,
@@ -188,7 +185,7 @@ final class CustomerPricingPlansProvider
 }
 
 String _$customerPricingPlansHash() =>
-    r'a1b2c3d4e5f67890123456789abcdef012345678';
+    r'296bfb1272a5c9a1be907c306c21b7e3ce86e1df';
 
 abstract class _$CustomerPricingPlans
     extends $StreamNotifier<List<PricingPlanEntity>> {

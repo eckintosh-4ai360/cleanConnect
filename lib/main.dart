@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:device_preview/device_preview.dart';
@@ -8,6 +9,7 @@ import 'core/config/router.dart';
 import 'core/config/theme.dart';
 import 'core/config/theme_provider.dart';
 import 'core/services/paystack_service.dart';
+import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +31,7 @@ void main() async {
     } else {
       await Firebase.initializeApp();
     }
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint('Firebase initialization warning: $e');
   }
@@ -41,10 +44,23 @@ void main() async {
   await Hive.openBox('auth_box');
   await Hive.openBox('settings_box');
 
+  // A container we hold onto directly (rather than only inside ProviderScope)
+  // so NotificationService can read/navigate from outside the widget tree —
+  // needed to react to FCM taps received while the app is backgrounded.
+  final container = ProviderContainer();
+  try {
+    await NotificationService.instance.initialize(container);
+  } catch (e) {
+    debugPrint('Notification service initialization warning: $e');
+  }
+
   runApp(
     DevicePreview(
       enabled: !kReleaseMode,
-      builder: (context) => const ProviderScope(child: EcoWasteApp()),
+      builder: (context) => UncontrolledProviderScope(
+        container: container,
+        child: const EcoWasteApp(),
+      ),
     ),
   );
 }

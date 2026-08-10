@@ -29,6 +29,7 @@ import '../../features/rider/presentation/screens/rider_profile_screen.dart';
 import '../../features/rider/presentation/screens/rider_notifications_screen.dart';
 import '../../features/rider/presentation/screens/available_pickups_screen.dart';
 import '../../features/rider/presentation/screens/rider_navigation_screen.dart';
+import '../../features/rider/presentation/screens/incoming_pickup_request_screen.dart';
 import '../../features/rider/domain/entities/pickup_request_entity.dart';
 import '../../features/admin/presentation/screens/admin_dashboard.dart';
 
@@ -222,6 +223,13 @@ GoRouter router(Ref ref) {
         builder: (context, state) {
           final pickup = state.extra as PickupRequestEntity?;
           return RiderNavigationScreen(pickup: pickup);
+        },
+      ),
+      GoRoute(
+        path: '/rider/incoming-request/:requestId',
+        builder: (context, state) {
+          final requestId = state.pathParameters['requestId']!;
+          return IncomingPickupRequestScreen(requestId: requestId);
         },
       ),
       GoRoute(

@@ -75,7 +75,7 @@ final class RiderProfileProvider
   RiderProfile create() => RiderProfile();
 }
 
-String _$riderProfileHash() => r'a5e5b01f1cf7dca2f4f1d08ce331b935f99dedd1';
+String _$riderProfileHash() => r'22a2f2c128700606a6d3a49a8138e9d3bcfb78bc';
 
 abstract class _$RiderProfile extends $StreamNotifier<RiderEntity?> {
   Stream<RiderEntity?> build();
@@ -358,4 +358,81 @@ abstract class _$AvailablePickups
             >;
     return element.handleCreate(ref, build);
   }
+}
+
+@ProviderFor(pickupById)
+final pickupByIdProvider = PickupByIdFamily._();
+
+final class PickupByIdProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<PickupRequestEntity?>,
+          PickupRequestEntity?,
+          Stream<PickupRequestEntity?>
+        >
+    with
+        $FutureModifier<PickupRequestEntity?>,
+        $StreamProvider<PickupRequestEntity?> {
+  PickupByIdProvider._({
+    required PickupByIdFamily super.from,
+    required String super.argument,
+  }) : super(
+         retry: null,
+         name: r'pickupByIdProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$pickupByIdHash();
+
+  @override
+  String toString() {
+    return r'pickupByIdProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $StreamProviderElement<PickupRequestEntity?> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<PickupRequestEntity?> create(Ref ref) {
+    final argument = this.argument as String;
+    return pickupById(ref, argument);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is PickupByIdProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$pickupByIdHash() => r'd71f6a1e8345479dfdfd4329902c02facd3d32b8';
+
+final class PickupByIdFamily extends $Family
+    with $FunctionalFamilyOverride<Stream<PickupRequestEntity?>, String> {
+  PickupByIdFamily._()
+    : super(
+        retry: null,
+        name: r'pickupByIdProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  PickupByIdProvider call(String requestId) =>
+      PickupByIdProvider._(argument: requestId, from: this);
+
+  @override
+  String toString() => r'pickupByIdProvider';
 }

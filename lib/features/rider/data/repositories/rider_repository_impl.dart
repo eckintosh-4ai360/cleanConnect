@@ -388,55 +388,67 @@ class RiderRepositoryImpl implements RiderRepository {
     required String customerId,
   }) async {
     final rider = await getRiderProfile();
-    final batch = _db.batch();
-
-    // 1. Update root pickupRequests doc
     final rootRef = _db.collection('pickupRequests').doc(requestId);
-    batch.set(
-      rootRef,
-      {
-        'status': 'accepted',
-        'assignedRiderId': _uid,
-        'assignedRiderName': rider.fullName,
-        'acceptedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
-
-    // 2. Mirror update in customer's subcollection
     final custRef = _db
         .collection('customers')
         .doc(customerId)
         .collection('pickupRequests')
         .doc(requestId);
-    batch.set(
-      custRef,
-      {
+
+    // Broadcasting new requests to every rider means more than one rider can
+    // swipe "accept" around the same time — guard the assignment with a
+    // transaction so only the first accept actually wins.
+    await _db.runTransaction((txn) async {
+      final rootSnap = await txn.get(rootRef);
+      final rootData = rootSnap.data() ?? {};
+      if (rootData['status'] != 'pending') {
+        throw Exception('This pickup was already accepted by another rider.');
+      }
+
+      final assignment = {
         'status': 'accepted',
         'assignedRiderId': _uid,
         'assignedRiderName': rider.fullName,
         'acceptedAt': FieldValue.serverTimestamp(),
+      };
+
+      txn.set(rootRef, assignment, SetOptions(merge: true));
+      txn.set(custRef, assignment, SetOptions(merge: true));
+      txn.set(
+        _db.collection('admin_notifications').doc(),
+        {
+          'title': 'Pickup Accepted',
+          'message': '${rider.fullName} accepted a pickup request.',
+          'type': 'pickup_accepted',
+          'riderId': _uid,
+          'riderName': rider.fullName,
+          'requestId': requestId,
+          'customerId': customerId,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+      );
+    });
+  }
+
+  @override
+  Stream<PickupRequestEntity?> watchPickupById(String requestId) {
+    return _db
+        .collection('pickupRequests')
+        .doc(requestId)
+        .snapshots()
+        .map((doc) => doc.exists ? _pickupFromDoc(doc) : null);
+  }
+
+  @override
+  Future<void> updateFcmToken(String token) async {
+    await _riderRef.set(
+      {
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
       },
       SetOptions(merge: true),
     );
-
-    // 3. Push notification to admin
-    batch.set(
-      _db.collection('admin_notifications').doc(),
-      {
-        'title': 'Pickup Accepted',
-        'message': '${rider.fullName} accepted a pickup request.',
-        'type': 'pickup_accepted',
-        'riderId': _uid,
-        'riderName': rider.fullName,
-        'requestId': requestId,
-        'customerId': customerId,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      },
-    );
-
-    await batch.commit();
   }
 
   @override

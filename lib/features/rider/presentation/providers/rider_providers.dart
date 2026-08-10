@@ -37,6 +37,10 @@ class RiderProfile extends _$RiderProfile {
           currentJobId: currentJobId,
         );
   }
+
+  Future<void> updateFcmToken(String token) async {
+    await ref.read(riderRepositoryProvider).updateFcmToken(token);
+  }
 }
 
 @riverpod
@@ -134,4 +138,9 @@ class AvailablePickups extends _$AvailablePickups {
           customerId: customerId,
         );
   }
+}
+
+@riverpod
+Stream<PickupRequestEntity?> pickupById(Ref ref, String requestId) {
+  return ref.watch(riderRepositoryProvider).watchPickupById(requestId);
 }
