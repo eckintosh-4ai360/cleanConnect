@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/customer_entities.dart';
+import '../../domain/entities/incident_report_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../../data/repositories/customer_repository_impl.dart';
 
@@ -134,5 +137,31 @@ class CustomerHistory extends _$CustomerHistory {
     await ref
         .read(customerRepositoryProvider)
         .reportProblem(category: category, description: description);
+  }
+}
+
+@riverpod
+class CustomerIncidentReports extends _$CustomerIncidentReports {
+  @override
+  Stream<List<IncidentReportEntity>> build() {
+    return ref.watch(customerRepositoryProvider).watchIncidentReports();
+  }
+
+  Future<IncidentReportEntity> submitReport({
+    required String description,
+    required String location,
+    Uint8List? mediaBytes,
+    String? mediaFileName,
+    String? mediaType,
+  }) async {
+    return ref
+        .read(customerRepositoryProvider)
+        .submitIncidentReport(
+          description: description,
+          location: location,
+          mediaBytes: mediaBytes,
+          mediaFileName: mediaFileName,
+          mediaType: mediaType,
+        );
   }
 }

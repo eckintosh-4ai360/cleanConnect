@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import '../entities/customer_entities.dart';
+import '../entities/incident_report_entity.dart';
 
 abstract class CustomerRepository {
   Stream<List<BinEntity>> watchBins();
@@ -53,5 +56,15 @@ abstract class CustomerRepository {
   Future<void> reportProblem({
     required String category,
     required String description,
+  });
+
+  Stream<List<IncidentReportEntity>> watchIncidentReports();
+
+  Future<IncidentReportEntity> submitIncidentReport({
+    required String description,
+    required String location,
+    Uint8List? mediaBytes,
+    String? mediaFileName,
+    String? mediaType,
   });
 }

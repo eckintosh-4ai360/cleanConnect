@@ -1,5 +1,6 @@
 import '../entities/rider_entities.dart';
 import '../entities/pickup_request_entity.dart';
+import '../entities/incident_report_entity.dart';
 
 abstract class RiderRepository {
   Stream<RiderEntity?> watchRiderProfile();
@@ -64,5 +65,16 @@ abstract class RiderRepository {
     double? heading,
     double? speed,
     String? currentJobId,
+  });
+
+  /// Streams incident reports (waste dumps / choked gutters) assigned to this rider.
+  Stream<List<IncidentReportEntity>> watchAssignedIncidentReports();
+
+  /// Update the status of an incident report assigned to this rider
+  /// (e.g. 'in_progress', 'resolved').
+  Future<void> updateIncidentReportStatus({
+    required String reportId,
+    required String reporterId,
+    required String status,
   });
 }

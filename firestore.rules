@@ -71,6 +71,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // ── Root Incident Reports (waste dumps / choked gutters) ─────────────────
+    match /incidentReports/{reportId} {
+      allow read, write: if true;
+    }
+
     // ── Pricing Plans ─────────────────────────────────────────────────────────
     match /pricingPlans/{planId} {
       allow read, write: if true;

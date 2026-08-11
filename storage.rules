@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // ── Incident Report Media (photos/videos of waste dumps, choked gutters) ──
+    match /incident_reports/{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
+import '../../domain/entities/incident_report_entity.dart';
 import '../../domain/repositories/rider_repository.dart';
 
 class RiderRepositoryImpl implements RiderRepository {
@@ -530,5 +531,65 @@ class RiderRepositoryImpl implements RiderRepository {
     }
 
     await batch.commit();
+  }
+
+  // ── Incident Reports (waste dumps / choked gutters) ──────────────────────
+
+  @override
+  Stream<List<IncidentReportEntity>> watchAssignedIncidentReports() {
+    return _db
+        .collection('incidentReports')
+        .where('assignedRiderId', isEqualTo: _uid)
+        .snapshots()
+        .map((snap) => snap.docs.map(_incidentReportFromDoc).toList());
+  }
+
+  @override
+  Future<void> updateIncidentReportStatus({
+    required String reportId,
+    required String reporterId,
+    required String status,
+  }) async {
+    final update = {
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    final batch = _db.batch();
+    batch.set(
+      _db.collection('incidentReports').doc(reportId),
+      update,
+      SetOptions(merge: true),
+    );
+    batch.set(
+      _db
+          .collection('customers')
+          .doc(reporterId)
+          .collection('incidentReports')
+          .doc(reportId),
+      update,
+      SetOptions(merge: true),
+    );
+    await batch.commit();
+  }
+
+  IncidentReportEntity _incidentReportFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return IncidentReportEntity(
+      id: doc.id,
+      reporterId: d['reporterId'] as String? ?? '',
+      reporterName: d['reporterName'] as String? ?? 'Customer',
+      reporterPhone: d['reporterPhone'] as String? ?? '',
+      description: d['description'] as String? ?? '',
+      mediaUrl: d['mediaUrl'] as String?,
+      mediaType: d['mediaType'] as String?,
+      location: d['location'] as String? ?? '',
+      status: d['status'] as String? ?? 'pending',
+      assignedRiderId: d['assignedRiderId'] as String?,
+      assignedRiderName: d['assignedRiderName'] as String?,
+      createdAt: d['createdAt'] is Timestamp
+          ? (d['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+    );
   }
 }

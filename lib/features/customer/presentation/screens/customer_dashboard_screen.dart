@@ -426,6 +426,13 @@ class CustomerDashboardScreen extends ConsumerWidget {
                       iconColor: Colors.purple,
                       onTap: () => context.push('/customer/support'),
                     ),
+                    _ActionCard(
+                      title: 'Report an Issue',
+                      icon: Icons.report_problem_outlined,
+                      color: const Color(0xFFFFEBEE),
+                      iconColor: Colors.red.shade700,
+                      onTap: () => context.push('/customer/report-incident'),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),

@@ -20,6 +20,7 @@ import '../../features/customer/presentation/screens/collection_detail_screen.da
 import '../../features/customer/presentation/screens/subscription_screen.dart';
 import '../../features/customer/presentation/screens/profile_settings_screen.dart';
 import '../../features/customer/presentation/screens/support_home_screen.dart';
+import '../../features/customer/presentation/screens/report_incident_screen.dart';
 import '../../features/rider/presentation/screens/rider_register_screen.dart';
 import '../../features/rider/presentation/screens/rider_dashboard_screen.dart';
 import '../../features/rider/presentation/screens/route_optimization_screen.dart';
@@ -30,6 +31,7 @@ import '../../features/rider/presentation/screens/rider_notifications_screen.dar
 import '../../features/rider/presentation/screens/available_pickups_screen.dart';
 import '../../features/rider/presentation/screens/rider_navigation_screen.dart';
 import '../../features/rider/presentation/screens/incoming_pickup_request_screen.dart';
+import '../../features/rider/presentation/screens/assigned_reports_screen.dart';
 import '../../features/rider/domain/entities/pickup_request_entity.dart';
 import '../../features/admin/presentation/screens/admin_dashboard.dart';
 
@@ -187,6 +189,10 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const SupportHomeScreen(),
       ),
       GoRoute(
+        path: '/customer/report-incident',
+        builder: (context, state) => const ReportIncidentScreen(),
+      ),
+      GoRoute(
         path: '/rider/home',
         builder: (context, state) => const RiderDashboardScreen(),
       ),
@@ -231,6 +237,10 @@ GoRouter router(Ref ref) {
           final requestId = state.pathParameters['requestId']!;
           return IncomingPickupRequestScreen(requestId: requestId);
         },
+      ),
+      GoRoute(
+        path: '/rider/incident-reports',
+        builder: (context, state) => const AssignedReportsScreen(),
       ),
       GoRoute(
         path: '/admin/home',

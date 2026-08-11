@@ -436,3 +436,61 @@ final class PickupByIdFamily extends $Family
   @override
   String toString() => r'pickupByIdProvider';
 }
+
+@ProviderFor(AssignedIncidentReports)
+final assignedIncidentReportsProvider = AssignedIncidentReportsProvider._();
+
+final class AssignedIncidentReportsProvider
+    extends
+        $StreamNotifierProvider<
+          AssignedIncidentReports,
+          List<IncidentReportEntity>
+        > {
+  AssignedIncidentReportsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'assignedIncidentReportsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$assignedIncidentReportsHash();
+
+  @$internal
+  @override
+  AssignedIncidentReports create() => AssignedIncidentReports();
+}
+
+String _$assignedIncidentReportsHash() =>
+    r'cebcf6f2d743a2808b8adcc8ae7e1f6faf24181f';
+
+abstract class _$AssignedIncidentReports
+    extends $StreamNotifier<List<IncidentReportEntity>> {
+  Stream<List<IncidentReportEntity>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<List<IncidentReportEntity>>,
+              List<IncidentReportEntity>
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<List<IncidentReportEntity>>,
+                List<IncidentReportEntity>
+              >,
+              AsyncValue<List<IncidentReportEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

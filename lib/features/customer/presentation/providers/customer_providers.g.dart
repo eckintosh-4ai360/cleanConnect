@@ -314,3 +314,61 @@ abstract class _$CustomerHistory
     return element.handleCreate(ref, build);
   }
 }
+
+@ProviderFor(CustomerIncidentReports)
+final customerIncidentReportsProvider = CustomerIncidentReportsProvider._();
+
+final class CustomerIncidentReportsProvider
+    extends
+        $StreamNotifierProvider<
+          CustomerIncidentReports,
+          List<IncidentReportEntity>
+        > {
+  CustomerIncidentReportsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'customerIncidentReportsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$customerIncidentReportsHash();
+
+  @$internal
+  @override
+  CustomerIncidentReports create() => CustomerIncidentReports();
+}
+
+String _$customerIncidentReportsHash() =>
+    r'fa8adda34c65f91b6057d5463af715d115952ae7';
+
+abstract class _$CustomerIncidentReports
+    extends $StreamNotifier<List<IncidentReportEntity>> {
+  Stream<List<IncidentReportEntity>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<List<IncidentReportEntity>>,
+              List<IncidentReportEntity>
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<List<IncidentReportEntity>>,
+                List<IncidentReportEntity>
+              >,
+              AsyncValue<List<IncidentReportEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}

@@ -1,8 +1,11 @@
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../domain/entities/customer_entities.dart';
+import '../../domain/entities/incident_report_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 
 /// Firestore-backed implementation of [CustomerRepository].
@@ -10,6 +13,7 @@ import '../../domain/repositories/customer_repository.dart';
 class CustomerRepositoryImpl implements CustomerRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
   final Random _random = Random();
 
   String get _uid => _auth.currentUser?.uid ?? '';
@@ -25,6 +29,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
   CollectionReference get _historyRef =>
       _db.collection('customers').doc(_uid).collection('serviceHistory');
+
+  CollectionReference get _incidentReportsRef =>
+      _db.collection('customers').doc(_uid).collection('incidentReports');
 
   DocumentReference get _customerRef => _db.collection('customers').doc(_uid);
 
@@ -508,5 +515,112 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'amountPaid': 0.0,
       'description': description,
     });
+  }
+
+  // ── Incident Reports (waste dumps / choked gutters) ─────────────────────
+
+  @override
+  Stream<List<IncidentReportEntity>> watchIncidentReports() {
+    return _incidentReportsRef
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(_incidentReportFromDoc).toList());
+  }
+
+  @override
+  Future<IncidentReportEntity> submitIncidentReport({
+    required String description,
+    required String location,
+    Uint8List? mediaBytes,
+    String? mediaFileName,
+    String? mediaType,
+  }) async {
+    final custDoc = await _customerRef.get();
+    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
+    final name =
+        _auth.currentUser?.displayName ??
+        custData['displayName'] ??
+        custData['fullName'] ??
+        'Customer';
+    final phone =
+        custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '';
+
+    final docRef = _incidentReportsRef.doc();
+
+    String? mediaUrl;
+    if (mediaBytes != null && mediaFileName != null) {
+      final ref = _storage
+          .ref()
+          .child('incident_reports')
+          .child(_uid)
+          .child(docRef.id)
+          .child(mediaFileName);
+      final uploadTask = await ref.putData(mediaBytes);
+      mediaUrl = await uploadTask.ref.getDownloadURL();
+    }
+
+    final data = {
+      'reporterId': _uid,
+      'reporterName': name,
+      'reporterPhone': phone,
+      'description': description,
+      'location': location,
+      'mediaUrl': mediaUrl,
+      'mediaType': mediaType,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    await docRef.set(data);
+
+    try {
+      // Mirror into root 'incidentReports' collection for the Admin Panel
+      await _db.collection('incidentReports').doc(docRef.id).set({
+        ...data,
+        'id': docRef.id,
+      });
+
+      await _db.collection('admin_notifications').add({
+        'title': 'New Incident Reported',
+        'message': '$name reported an issue: $description',
+        'type': 'incident_reported',
+        'customerId': _uid,
+        'customerName': name,
+        'requestId': docRef.id,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+
+    return IncidentReportEntity(
+      id: docRef.id,
+      reporterName: name,
+      reporterPhone: phone,
+      description: description,
+      mediaUrl: mediaUrl,
+      mediaType: mediaType,
+      location: location,
+      status: 'pending',
+      createdAt: DateTime.now(),
+    );
+  }
+
+  IncidentReportEntity _incidentReportFromDoc(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>? ?? {};
+    return IncidentReportEntity(
+      id: doc.id,
+      reporterName: d['reporterName'] as String? ?? 'Customer',
+      reporterPhone: d['reporterPhone'] as String? ?? '',
+      description: d['description'] as String? ?? '',
+      mediaUrl: d['mediaUrl'] as String?,
+      mediaType: d['mediaType'] as String?,
+      location: d['location'] as String? ?? '',
+      status: d['status'] as String? ?? 'pending',
+      assignedRiderId: d['assignedRiderId'] as String?,
+      assignedRiderName: d['assignedRiderName'] as String?,
+      createdAt: d['createdAt'] is Timestamp
+          ? (d['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+    );
   }
 }

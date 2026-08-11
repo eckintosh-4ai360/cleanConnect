@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
+import '../../domain/entities/incident_report_entity.dart';
 import '../../domain/repositories/rider_repository.dart';
 import '../../data/repositories/rider_repository_impl.dart';
 
@@ -143,4 +144,24 @@ class AvailablePickups extends _$AvailablePickups {
 @riverpod
 Stream<PickupRequestEntity?> pickupById(Ref ref, String requestId) {
   return ref.watch(riderRepositoryProvider).watchPickupById(requestId);
+}
+
+@riverpod
+class AssignedIncidentReports extends _$AssignedIncidentReports {
+  @override
+  Stream<List<IncidentReportEntity>> build() {
+    return ref.watch(riderRepositoryProvider).watchAssignedIncidentReports();
+  }
+
+  Future<void> updateStatus({
+    required String reportId,
+    required String reporterId,
+    required String status,
+  }) async {
+    await ref.read(riderRepositoryProvider).updateIncidentReportStatus(
+          reportId: reportId,
+          reporterId: reporterId,
+          status: status,
+        );
+  }
 }
