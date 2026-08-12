@@ -24,7 +24,9 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('Dashboard');
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('activeTab') || 'Dashboard';
+  });
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
   });
