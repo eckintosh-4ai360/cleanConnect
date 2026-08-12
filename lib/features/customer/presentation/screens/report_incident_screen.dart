@@ -20,7 +20,8 @@ class ReportIncidentScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final descriptionController = useTextEditingController();
-    final gpsLocation = useState('');
+    final locationController = useTextEditingController();
+    final isDetectingLocation = useState(false);
     final mediaPath = useState<String?>(null);
     final mediaBytes = useState<Uint8List?>(null);
     final mediaFileName = useState<String?>(null);
@@ -31,6 +32,7 @@ class ReportIncidentScreen extends HookConsumerWidget {
     final currentUser = ref.watch(currentUserProvider);
 
     Future<void> detectLocation() async {
+      isDetectingLocation.value = true;
       try {
         final permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
@@ -44,17 +46,25 @@ class ReportIncidentScreen extends HookConsumerWidget {
             return;
           }
         }
-        gpsLocation.value = 'Fetching GPS coordinates...';
         final position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
             timeLimit: Duration(seconds: 8),
           ),
         );
-        gpsLocation.value =
+        locationController.text =
             '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
       } catch (_) {
-        gpsLocation.value = '5.603700, -0.187000 (Fallback)';
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not detect location automatically. Please type it in.',
+            ),
+          ),
+        );
+      } finally {
+        isDetectingLocation.value = false;
       }
     }
 
@@ -80,22 +90,12 @@ class ReportIncidentScreen extends HookConsumerWidget {
 
     Future<void> handleSubmit() async {
       if (!(formKey.currentState?.validate() ?? false)) return;
-      if (gpsLocation.value.isEmpty ||
-          gpsLocation.value == 'Fetching GPS coordinates...') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please detect the incident location.'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
 
       isSubmitting.value = true;
       try {
         await ref.read(customerIncidentReportsProvider.notifier).submitReport(
               description: descriptionController.text.trim(),
-              location: gpsLocation.value,
+              location: locationController.text.trim(),
               mediaBytes: mediaBytes.value,
               mediaFileName: mediaFileName.value,
               mediaType: mediaType.value,
@@ -217,14 +217,22 @@ class ReportIncidentScreen extends HookConsumerWidget {
 
                 EcoTextField(
                   labelText: 'Location',
-                  hintText: 'Detecting location...',
-                  controller: TextEditingController(text: gpsLocation.value),
-                  readOnly: true,
-                  onTap: detectLocation,
+                  hintText: 'e.g. Near Achimota Market, opposite the pharmacy',
+                  controller: locationController,
+                  validator: (value) => (value == null || value.trim().isEmpty)
+                      ? 'Please enter the location.'
+                      : null,
                   prefixIcon: const Icon(Icons.location_on_outlined),
                   suffixIcon: IconButton(
-                    icon: const Icon(Icons.my_location, color: Color(0xFFF0A500)),
-                    onPressed: detectLocation,
+                    icon: isDetectingLocation.value
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.my_location, color: Color(0xFFF0A500)),
+                    onPressed: isDetectingLocation.value ? null : detectLocation,
+                    tooltip: 'Auto-detect my location',
                   ),
                 ),
 

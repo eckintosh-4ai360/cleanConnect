@@ -545,7 +545,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
     final phone =
         custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '';
 
-    final docRef = _incidentReportsRef.doc();
+    // Root 'incidentReports' collection is the source of truth the Admin
+    // Panel reads from, so its id must be generated there.
+    final docRef = _db.collection('incidentReports').doc();
 
     String? mediaUrl;
     if (mediaBytes != null && mediaFileName != null) {
@@ -571,14 +573,15 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'createdAt': FieldValue.serverTimestamp(),
     };
 
-    await docRef.set(data);
+    // Write to the Admin-visible root collection first. Let failures here
+    // surface to the customer instead of being swallowed — otherwise the
+    // customer sees "submitted" while the admin panel never gets the report.
+    await docRef.set({...data, 'id': docRef.id});
 
     try {
-      // Mirror into root 'incidentReports' collection for the Admin Panel
-      await _db.collection('incidentReports').doc(docRef.id).set({
-        ...data,
-        'id': docRef.id,
-      });
+      // Best-effort mirror into the customer's own subcollection (used for
+      // their "My Reports" view) and an admin notification badge.
+      await _incidentReportsRef.doc(docRef.id).set(data);
 
       await _db.collection('admin_notifications').add({
         'title': 'New Incident Reported',
