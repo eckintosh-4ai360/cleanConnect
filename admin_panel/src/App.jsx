@@ -58,6 +58,11 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Persist the active sidebar tab so a page refresh doesn't bounce back to Dashboard
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
   // Real-time Platform Notifications
   useEffect(() => {
     const q = query(
