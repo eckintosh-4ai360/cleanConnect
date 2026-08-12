@@ -72,6 +72,7 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
     String? instructions,
     double originalAmount = 0.0,
     double discountAppliedPercentage = 0.0,
+    double surchargeAppliedPercentage = 0.0,
   }) async {
     await ref
         .read(customerRepositoryProvider)
@@ -85,6 +86,7 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
           instructions: instructions,
           originalAmount: originalAmount,
           discountAppliedPercentage: discountAppliedPercentage,
+          surchargeAppliedPercentage: surchargeAppliedPercentage,
         );
   }
 }

@@ -84,19 +84,29 @@ export default function PickupRequests() {
   const handleUpdateStatus = async (requestId, newStatus) => {
     setActionLoading(true);
     try {
-      await updateDoc(doc(db, 'pickupRequests', requestId), {
-        status: newStatus,
-        updatedAt: serverTimestamp(),
-      });
+      const update = { status: newStatus, updatedAt: serverTimestamp() };
+      if (newStatus === 'completed') {
+        update.completedAt = serverTimestamp();
+      }
+
+      await updateDoc(doc(db, 'pickupRequests', requestId), update);
 
       const req = requests.find((r) => r.id === requestId);
       if (req?.customerId) {
         try {
           await updateDoc(
             doc(db, 'customers', req.customerId, 'pickupRequests', requestId),
-            { status: newStatus, updatedAt: serverTimestamp() }
+            update
           );
         } catch (_) {}
+
+        if (newStatus === 'completed') {
+          try {
+            await updateDoc(doc(db, 'customers', req.customerId), {
+              lastPickupCompletedAt: serverTimestamp(),
+            });
+          } catch (_) {}
+        }
       }
 
       if (selectedReq?.id === requestId) {
@@ -228,6 +238,12 @@ export default function PickupRequests() {
                 { label: 'Location', value: selectedReq.location ?? '—' },
                 { label: 'Instructions', value: selectedReq.instructions || 'None provided' },
                 { label: 'Submitted', value: formatDateTime(selectedReq.createdAt) },
+                ...(selectedReq.discountAppliedPercentage > 0
+                  ? [{ label: 'Discount Applied', value: `${selectedReq.discountAppliedPercentage}% (rider delay bonus)` }]
+                  : []),
+                ...(selectedReq.surchargeAppliedPercentage > 0
+                  ? [{ label: 'Surcharge Applied', value: `${selectedReq.surchargeAppliedPercentage}% (late payment)` }]
+                  : []),
               ].map(({ label, value }) => (
                 <div key={label}>
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '700', color: 'var(--text-muted)' }}>{label}</span>

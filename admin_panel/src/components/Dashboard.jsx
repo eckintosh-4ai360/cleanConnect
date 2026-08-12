@@ -14,6 +14,9 @@ export default function Dashboard() {
   const [topRiders, setTopRiders] = useState([]);
   const [recentCollections, setRecentCollections] = useState([]);
   const [pickupRequests, setPickupRequests] = useState([]);
+  const [todaysPickups, setTodaysPickups] = useState([]);
+  const [openIncidents, setOpenIncidents] = useState([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalRevenue: 0,
     activeRiders: 0,
@@ -21,6 +24,56 @@ export default function Dashboard() {
     co2SavedKg: 0,
   });
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // ── Today's Activities: pickups scheduled for today ────────────────────
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+    const todaysPickupsQ = query(
+      collection(db, 'pickupRequests'),
+      where('date', '>=', startOfToday),
+      where('date', '<', startOfTomorrow)
+    );
+    const unsubTodaysPickups = onSnapshot(
+      todaysPickupsQ,
+      (snap) => {
+        setTodaysPickups(
+          snap.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            date: doc.data().date?.toDate?.() ?? null,
+          }))
+        );
+        setActivitiesLoading(false);
+      },
+      () => { setTodaysPickups([]); setActivitiesLoading(false); }
+    );
+
+    // ── Today's Activities: waste/gutter reports still open ────────────────
+    const incidentsQ = query(collection(db, 'incidentReports'));
+    const unsubIncidents = onSnapshot(
+      incidentsQ,
+      (snap) => {
+        const docs = snap.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() ?? new Date(),
+          }))
+          .filter((r) => r.status !== 'resolved');
+        setOpenIncidents(docs);
+      },
+      () => setOpenIncidents([])
+    );
+
+    return () => {
+      unsubTodaysPickups();
+      unsubIncidents();
+    };
+  }, []);
 
   useEffect(() => {
     // ── 0. Real-time Pickup Requests ──────────────────────────────────────
@@ -139,6 +192,38 @@ export default function Dashboard() {
   const formatCurrency = (val) =>
     val >= 1000 ? `$${(val / 1000).toFixed(1)}k` : `$${val.toFixed(2)}`;
 
+  // ── Today's Activities: merge scheduled pickups + open incident reports ──
+  const pickupBadgeClass = (status) => {
+    if (status === 'completed') return 'badge-active';
+    if (status === 'rejected') return 'badge-defaulter';
+    return 'badge-pending';
+  };
+  const incidentBadgeClass = (status) => {
+    if (status === 'assigned' || status === 'in_progress') return 'badge-active';
+    return 'badge-pending';
+  };
+
+  const todaysActivities = [
+    ...todaysPickups.map((p) => ({
+      key: `pickup-${p.id}`,
+      type: 'Pickup',
+      title: p.customerName ?? 'Customer',
+      subtitle: `${Array.isArray(p.binTypes) ? p.binTypes.join(', ') : 'General'} — ${p.timeSlot ?? 'Flexible'}`,
+      status: p.status ?? 'pending',
+      badgeClass: pickupBadgeClass(p.status),
+      sortTime: p.date,
+    })),
+    ...openIncidents.map((r) => ({
+      key: `incident-${r.id}`,
+      type: 'Waste/Gutter Report',
+      title: r.reporterName ?? 'Customer',
+      subtitle: r.description ?? 'No description provided',
+      status: r.status ?? 'pending',
+      badgeClass: incidentBadgeClass(r.status),
+      sortTime: r.createdAt,
+    })),
+  ].sort((a, b) => (a.sortTime?.getTime?.() ?? 0) - (b.sortTime?.getTime?.() ?? 0));
+
   return (
     <div className="page-content">
       {/* ── Page Header ── */}
@@ -226,6 +311,42 @@ export default function Dashboard() {
             </svg>
             <span>Carbon offset total</span>
           </div>
+        </div>
+      </div>
+
+      {/* ── Today's Activities - Live ── */}
+      <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '16px' }}>Today's Activities</h3>
+          <span className="badge badge-pending">{todaysActivities.length} TO TRACK</span>
+        </div>
+        <div className="table-container">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Customer</th>
+                <th>Details</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activitiesLoading ? (
+                <tr><td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading today's activities...</td></tr>
+              ) : todaysActivities.length === 0 ? (
+                <tr><td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>Nothing scheduled for today.</td></tr>
+              ) : (
+                todaysActivities.map((activity) => (
+                  <tr key={activity.key}>
+                    <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>{activity.type}</td>
+                    <td style={{ fontWeight: '600' }}>{activity.title}</td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: '12px', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activity.subtitle}</td>
+                    <td><span className={`badge ${activity.badgeClass}`}>{activity.status.toUpperCase()}</span></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

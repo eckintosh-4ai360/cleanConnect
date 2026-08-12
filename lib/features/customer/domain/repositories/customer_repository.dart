@@ -35,6 +35,7 @@ abstract class CustomerRepository {
     String? instructions,
     double originalAmount = 0.0,
     double discountAppliedPercentage = 0.0,
+    double surchargeAppliedPercentage = 0.0,
   });
 
   Stream<List<ServiceRecordEntity>> watchServiceHistory();

@@ -61,6 +61,7 @@ class PickupRequestEntity {
   final double amountPaid;
   final double originalAmount;
   final double discountAppliedPercentage; // e.g. 10.0 for 10% discount
+  final double surchargeAppliedPercentage; // e.g. 10.0 for 10% late-payment surcharge
 
   const PickupRequestEntity({
     required this.id,
@@ -73,6 +74,7 @@ class PickupRequestEntity {
     this.amountPaid = 0.0,
     this.originalAmount = 0.0,
     this.discountAppliedPercentage = 0.0,
+    this.surchargeAppliedPercentage = 0.0,
   });
 
   /// True if pickup was not completed on scheduled date
@@ -147,6 +149,7 @@ class SubscriptionEntity {
   final double outstandingBalance;
   final DateTime? nextPickupDate;
   final bool delayBonusAvailable; // true if rider delayed past 3-day grace period
+  final DateTime? lastPickupCompletedAt;
 
   const SubscriptionEntity({
     required this.currentPlan,
@@ -156,6 +159,7 @@ class SubscriptionEntity {
     required this.outstandingBalance,
     this.nextPickupDate,
     this.delayBonusAvailable = false,
+    this.lastPickupCompletedAt,
   });
 }
 

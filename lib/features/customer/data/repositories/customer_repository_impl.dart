@@ -241,6 +241,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     String? instructions,
     double originalAmount = 0.0,
     double discountAppliedPercentage = 0.0,
+    double surchargeAppliedPercentage = 0.0,
   }) async {
     final custDoc = await _customerRef.get();
     final custData = custDoc.data() as Map<String, dynamic>? ?? {};
@@ -262,6 +263,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'amountPaid': amountPaid,
       'originalAmount': originalAmount > 0 ? originalAmount : amountPaid,
       'discountAppliedPercentage': discountAppliedPercentage,
+      'surchargeAppliedPercentage': surchargeAppliedPercentage,
       'paymentMethod': paymentMethod,
       'paidAt': FieldValue.serverTimestamp(),
       'customerId': _uid,
@@ -303,7 +305,6 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'subscriptionFee': 50.0,
         'subscriptionStatus': 'active',
         'paymentMethod': paymentMethod,
-        'outstandingBalance': 0.0,
         'activeRequestsCount': FieldValue.increment(1),
         'lastPickupRequestDate': FieldValue.serverTimestamp(),
         if (discountAppliedPercentage > 0) 'delayBonusRedeemedAt': FieldValue.serverTimestamp(),
@@ -336,6 +337,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       amountPaid: amountPaid,
       originalAmount: originalAmount > 0 ? originalAmount : amountPaid,
       discountAppliedPercentage: discountAppliedPercentage,
+      surchargeAppliedPercentage: surchargeAppliedPercentage,
     );
   }
 
@@ -355,6 +357,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
       originalAmount: (d['originalAmount'] as num?)?.toDouble() ?? 0.0,
       discountAppliedPercentage:
           (d['discountAppliedPercentage'] as num?)?.toDouble() ?? 0.0,
+      surchargeAppliedPercentage:
+          (d['surchargeAppliedPercentage'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -428,6 +432,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
           ? (d['nextPickupDate'] as Timestamp).toDate()
           : null,
       delayBonusAvailable: d['delayBonusAvailable'] as bool? ?? false,
+      lastPickupCompletedAt: d['lastPickupCompletedAt'] is Timestamp
+          ? (d['lastPickupCompletedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 

@@ -120,12 +120,8 @@ class PickupRequestScreen extends HookConsumerWidget {
       return requests.any((r) => r.isOverdueBeyondGracePeriod);
     }, [requestsState.value]);
 
-    // Demo toggle to test delay bonus even without historical delayed records
-    final demoDelayBonus = useState(true);
     final isBonusEligible =
-        hasOverdueDelayBonus ||
-        (subState.value?.delayBonusAvailable ?? false) ||
-        demoDelayBonus.value;
+        hasOverdueDelayBonus || (subState.value?.delayBonusAvailable ?? false);
 
     final timeSlots = [
       '08:00 AM - 12:00 PM', // Morning
@@ -163,10 +159,22 @@ class PickupRequestScreen extends HookConsumerWidget {
       return 65.0; // fallback (GHS 50.00 weekly + 30% = GHS 65.00)
     }, [pricingPlansState.value, userBinSize]);
 
+    // Customer still owes money more than 3 days after their last completed
+    // pickup: their next request carries a 10% surcharge for the company.
+    final hasOverduePayment = useMemoized(() {
+      final sub = subState.value;
+      if (sub == null || sub.outstandingBalance <= 0) return false;
+      final completedAt = sub.lastPickupCompletedAt;
+      if (completedAt == null) return false;
+      return DateTime.now().difference(completedAt).inDays > 3;
+    }, [subState.value]);
+
     final originalTotal = selectedBins.value.length * pickupFeePerBin;
     final discountPercentage = isBonusEligible ? 10.0 : 0.0;
     final discountAmount = isBonusEligible ? (originalTotal * 0.10) : 0.0;
-    final pickupTotal = originalTotal - discountAmount;
+    final surchargePercentage = hasOverduePayment ? 10.0 : 0.0;
+    final surchargeAmount = hasOverduePayment ? (originalTotal * 0.10) : 0.0;
+    final pickupTotal = originalTotal - discountAmount + surchargeAmount;
 
     Future<void> handleConfirmPickup() async {
       if (selectedBins.value.isEmpty) {
@@ -219,6 +227,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               ).format(selectedDate.value),
               'time_slot': selectedTimeSlot.value,
               'discount_percentage': discountPercentage,
+              'surcharge_percentage': surchargePercentage,
               'original_total': originalTotal,
             },
           );
@@ -276,6 +285,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               instructions: driverNotesController.text,
               originalAmount: originalTotal,
               discountAppliedPercentage: discountPercentage,
+              surchargeAppliedPercentage: surchargePercentage,
             );
 
         if (!context.mounted) return;
@@ -601,52 +611,36 @@ class PickupRequestScreen extends HookConsumerWidget {
                       fontSize: 16,
                     ),
                   ),
-                  InkWell(
-                    onTap: () => demoDelayBonus.value = !demoDelayBonus.value,
-                    child: Container(
+                  if (isBonusEligible)
+                    Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: demoDelayBonus.value
-                            ? Colors.green.shade50
-                            : Colors.grey.shade200,
+                        color: Colors.green.shade50,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: demoDelayBonus.value
-                              ? Colors.green.shade300
-                              : Colors.grey.shade400,
-                        ),
+                        border: Border.all(color: Colors.green.shade300),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            demoDelayBonus.value
-                                ? Icons.card_giftcard
-                                : Icons.card_giftcard_outlined,
+                            Icons.card_giftcard,
                             size: 14,
-                            color: demoDelayBonus.value
-                                ? Colors.green.shade800
-                                : Colors.grey.shade700,
+                            color: Colors.green.shade800,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            demoDelayBonus.value
-                                ? '10% Bonus On'
-                                : 'Test Bonus',
+                            '10% Delay Bonus On',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: demoDelayBonus.value
-                                  ? Colors.green.shade900
-                                  : Colors.grey.shade700,
+                              color: Colors.green.shade900,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -749,6 +743,67 @@ class PickupRequestScreen extends HookConsumerWidget {
                   ),
                 ),
 
+              // ⚠️ Late Payment Surcharge Banner (if 10% surcharge active)
+              if (hasOverduePayment)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.red.shade900.withValues(alpha: 0.3)
+                        : const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.red.shade700 : Colors.red.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade700,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '10% LATE PAYMENT SURCHARGE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.red,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'An outstanding balance was not settled within 3 days of your last completed pickup. A 10% surcharge has been added to this request.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.grey.shade300
+                                    : const Color(0xFFB71C1C),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               if (isPayAsYouGo)
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -760,7 +815,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                     border: Border.all(
                       color: isBonusEligible
                           ? Colors.green.shade400
-                          : Colors.amber.shade200,
+                          : (hasOverduePayment
+                              ? Colors.red.shade300
+                              : Colors.amber.shade200),
                     ),
                   ),
                   child: Column(
@@ -774,7 +831,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                           ),
                           Row(
                             children: [
-                              if (isBonusEligible) ...[
+                              if (isBonusEligible || hasOverduePayment) ...[
                                 Text(
                                   'GHS ${originalTotal.toStringAsFixed(2)}',
                                   style: TextStyle(
@@ -794,7 +851,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                                   fontSize: 18,
                                   color: isBonusEligible
                                       ? Colors.green.shade700
-                                      : null,
+                                      : (hasOverduePayment
+                                          ? Colors.red.shade700
+                                          : null),
                                 ),
                               ),
                             ],
@@ -802,37 +861,72 @@ class PickupRequestScreen extends HookConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            isBonusEligible
-                                ? '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} (Original GHS ${originalTotal.toStringAsFixed(2)} - 10% Bonus)'
-                                : '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x GHS ${pickupFeePerBin.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isBonusEligible
-                                  ? Colors.green.shade800
-                                  : Colors.grey.shade600,
-                              fontWeight: isBonusEligible
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                      Text(
+                        '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x GHS ${pickupFeePerBin.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                      if (isBonusEligible) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Delay Bonus (-10%)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
                             ),
-                          ),
-                          Text(
-                            isBonusEligible
-                                ? 'Saved GHS ${discountAmount.toStringAsFixed(2)}'
-                                : 'Paystack payment required',
+                            Text(
+                              '- GHS ${discountAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (hasOverduePayment) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Late Payment Surcharge (+10%)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                            Text(
+                              '+ GHS ${surchargeAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (!isBonusEligible && !hasOverduePayment) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'Paystack payment required',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: isBonusEligible
-                                  ? Colors.green.shade800
-                                  : const Color(0xFFC78200),
+                              color: Color(0xFFC78200),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       Row(
                         children: [

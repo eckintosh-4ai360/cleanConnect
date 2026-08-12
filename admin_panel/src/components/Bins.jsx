@@ -337,13 +337,14 @@ export default function Bins() {
                   <th>Type</th>
                   <th>Size</th>
                   <th>Location</th>
+                  <th>Requested</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {pendingRequests.length === 0 ? (
                   <tr>
-                    <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                       No pending company-bin requests.
                     </td>
                   </tr>
@@ -354,6 +355,7 @@ export default function Bins() {
                       <td style={{ textTransform: 'capitalize' }}>{request.type || 'recycling'}</td>
                       <td>{request.size || '240L'}</td>
                       <td>{request.gpsLocation || 'Not provided'}</td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{formatDate(request.createdAt)}</td>
                       <td>
                         <button
                           className="btn-primary"
