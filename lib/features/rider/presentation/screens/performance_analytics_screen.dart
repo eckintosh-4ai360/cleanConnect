@@ -194,7 +194,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _MetricCard(
                         label: 'Week Earnings',
-                        value: '\$${perf.earningsThisWeek.toStringAsFixed(2)}',
+                        value: 'GHS ${perf.earningsThisWeek.toStringAsFixed(2)}',
                         unit: '',
                         icon: Icons.payments_outlined,
                         color: const Color(0xFFFFF8E1),
@@ -206,7 +206,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _MetricCard(
                         label: 'Month Earnings',
-                        value: '\$${perf.earningsThisMonth.toStringAsFixed(2)}',
+                        value: 'GHS ${perf.earningsThisMonth.toStringAsFixed(2)}',
                         unit: '',
                         icon: Icons.account_balance_wallet_outlined,
                         color: const Color(0xFFF3E5F5),
@@ -383,7 +383,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _ImpactCard(
                         label: 'Bonus Earned',
-                        value: '\$285.64',
+                        value: 'GHS 285.64',
                         sublabel: 'efficiency bonus',
                         color: Colors.purple,
                         isDark: isDark,

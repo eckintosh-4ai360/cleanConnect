@@ -258,7 +258,7 @@ class RiderProfileScreen extends ConsumerWidget {
                     _DetailRow(
                         label: 'This Month',
                         value:
-                            '\$${rider.earningsThisMonth.toStringAsFixed(2)}'),
+                            'GHS ${rider.earningsThisMonth.toStringAsFixed(2)}'),
                     _DetailRow(
                         label: 'Total Weight',
                         value:
@@ -266,8 +266,8 @@ class RiderProfileScreen extends ConsumerWidget {
                     _DetailRow(
                         label: 'Avg per Trip',
                         value: rider.totalCollections > 0
-                            ? '\$${(rider.earningsThisMonth / rider.totalCollections * 30).toStringAsFixed(2)}'
-                            : '\$0.00'),
+                            ? 'GHS ${(rider.earningsThisMonth / rider.totalCollections * 30).toStringAsFixed(2)}'
+                            : 'GHS 0.00'),
                   ],
                 ),
                 const SizedBox(height: 14),

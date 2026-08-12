@@ -190,7 +190,7 @@ export default function Dashboard() {
     kg >= 1000 ? `${(kg / 1000).toFixed(1)} T` : `${kg} kg`;
 
   const formatCurrency = (val) =>
-    val >= 1000 ? `$${(val / 1000).toFixed(1)}k` : `$${val.toFixed(2)}`;
+    val >= 1000 ? `GHS ${(val / 1000).toFixed(1)}k` : `GHS ${val.toFixed(2)}`;
 
   // ── Today's Activities: merge scheduled pickups + open incident reports ──
   const pickupBadgeClass = (status) => {

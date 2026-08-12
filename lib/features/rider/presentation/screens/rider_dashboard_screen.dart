@@ -345,7 +345,7 @@ class _TodayStats {
     return '${weightKg.toStringAsFixed(weightKg >= 100 ? 0 : 1)} kg';
   }
 
-  String get earningsLabel => '\$${earnings.toStringAsFixed(2)}';
+  String get earningsLabel => 'GHS ${earnings.toStringAsFixed(2)}';
 }
 
 class _TodayStatsRow extends StatelessWidget {

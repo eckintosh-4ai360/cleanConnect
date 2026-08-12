@@ -245,7 +245,7 @@ class CollectionDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  '\$${record.amountPaid.toStringAsFixed(2)}',
+                  'GHS ${record.amountPaid.toStringAsFixed(2)}',
                   style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF1A1A1A)),
                 ),
                 const SizedBox(height: 20),
@@ -255,9 +255,9 @@ class CollectionDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 _SummaryRowDetail(label: 'Collection Date', value: DateFormat('MMM dd, yyyy').format(record.date)),
                 const SizedBox(height: 8),
-                const _SummaryRowDetail(label: 'Service Charge', value: '\$12.00'),
+                const _SummaryRowDetail(label: 'Service Charge', value: 'GHS 12.00'),
                 const SizedBox(height: 8),
-                const _SummaryRowDetail(label: 'Weight Tax', value: '\$3.00'),
+                const _SummaryRowDetail(label: 'Weight Tax', value: 'GHS 3.00'),
                 const SizedBox(height: 8),
                 const _SummaryRowDetail(
                   label: 'Payment Method',

@@ -235,7 +235,7 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                             children: [
                               if (record.type == 'payment') ...[
                                 Text(
-                                  '\$${record.amountPaid.toStringAsFixed(2)}',
+                                  'GHS ${record.amountPaid.toStringAsFixed(2)}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 14,
@@ -328,7 +328,7 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    '\$${record.amountPaid.toStringAsFixed(2)}',
+                    'GHS ${record.amountPaid.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.w900,
@@ -350,12 +350,12 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                   const SizedBox(height: 8),
                   _ReceiptRow(
                     label: 'Service Charge',
-                    value: '\$${serviceCharge.toStringAsFixed(2)}',
+                    value: 'GHS ${serviceCharge.toStringAsFixed(2)}',
                   ),
                   const SizedBox(height: 8),
                   _ReceiptRow(
                     label: 'Tax',
-                    value: '\$${tax.toStringAsFixed(2)}',
+                    value: 'GHS ${tax.toStringAsFixed(2)}',
                   ),
                   const SizedBox(height: 8),
                   _ReceiptRow(

@@ -271,7 +271,7 @@ export default function Customers() {
         <div className="card-glass metric-card" style={{ borderLeft: '4px solid var(--color-danger)' }}>
           <span className="metric-title" style={{ fontSize: '10px' }}>Total Outstanding</span>
           <span className="metric-value" style={{ fontSize: '24px', color: 'var(--color-danger)' }}>
-            ${totalOutstanding.toFixed(2)}
+            GHS {totalOutstanding.toFixed(2)}
           </span>
         </div>
         <div className="card-glass metric-card" style={{ borderLeft: '4px solid var(--color-accent)' }}>
@@ -318,7 +318,7 @@ export default function Customers() {
                       <td style={{ fontWeight: '700' }}>{c.displayName ?? c.fullName ?? '—'}</td>
                       <td>{c.contractType ?? c.subscriptionPlan ?? '—'}</td>
                       <td style={{ color: (c.outstandingBalance ?? 0) > 0 ? 'var(--color-danger)' : 'var(--text-primary)', fontWeight: (c.outstandingBalance ?? 0) > 0 ? '700' : 'normal' }}>
-                        ${(c.outstandingBalance ?? 0).toFixed(2)}
+                        GHS {(c.outstandingBalance ?? 0).toFixed(2)}
                       </td>
                       <td>
                         <span className={`badge ${statusBadgeClass(c.subscriptionStatus)}`}>
@@ -367,7 +367,7 @@ export default function Customers() {
                 <div>
                   <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '700', color: 'var(--text-muted)' }}>Outstanding Due</span>
                   <p style={{ fontSize: '16px', fontWeight: '800', color: 'var(--color-danger)', marginTop: '4px' }}>
-                    ${(selectedCustomer.outstandingBalance ?? 0).toFixed(2)}
+                    GHS {(selectedCustomer.outstandingBalance ?? 0).toFixed(2)}
                   </p>
                 </div>
                 <div>

@@ -333,7 +333,7 @@ class CustomerDashboardScreen extends ConsumerWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '\$${sub.outstandingBalance.toStringAsFixed(2)}',
+                                'GHS ${sub.outstandingBalance.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w900,

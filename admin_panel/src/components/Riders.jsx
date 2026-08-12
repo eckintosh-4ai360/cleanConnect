@@ -321,7 +321,7 @@ export default function Riders() {
                 { label: 'Phone Number', value: selectedRider.phoneNumber || '—' },
                 { label: 'Vehicle', value: selectedRider.vehicleType || '—' },
                 { label: 'License No.', value: selectedRider.licenseNumber || '—' },
-                { label: 'Earnings This Month', value: selectedRider.earningsThisMonth ? `$${selectedRider.earningsThisMonth.toFixed(2)}` : '—' },
+                { label: 'Earnings This Month', value: selectedRider.earningsThisMonth ? `GHS ${selectedRider.earningsThisMonth.toFixed(2)}` : '—' },
                 { label: 'Total Collections', value: selectedRider.totalCollections ?? 0 },
                 { label: 'Efficiency Score', value: selectedRider.efficiencyScore ? `${selectedRider.efficiencyScore}%` : '—' },
               ].map(({ label, value }) => (

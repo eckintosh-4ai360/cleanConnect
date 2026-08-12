@@ -4,7 +4,7 @@ export default function Reports() {
   const [selectedVariant, setSelectedVariant] = useState('DataPro'); // DataPro, ModernMinimal, VisualFirst
 
   const metrics = {
-    revenue: '$124,500',
+    revenue: 'GHS 124,500',
     volume: '842 Tons',
     co2: '14B kg',
     efficiency: '96.2%',

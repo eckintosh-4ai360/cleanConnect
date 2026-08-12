@@ -19,7 +19,7 @@ class ReportIncidentScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final descriptionController = useTextEditingController();
+    final selectedIssueType = useState<String?>(null);
     final locationController = useTextEditingController();
     final isDetectingLocation = useState(false);
     final mediaPath = useState<String?>(null);
@@ -94,7 +94,7 @@ class ReportIncidentScreen extends HookConsumerWidget {
       isSubmitting.value = true;
       try {
         await ref.read(customerIncidentReportsProvider.notifier).submitReport(
-              description: descriptionController.text.trim(),
+              description: selectedIssueType.value!,
               location: locationController.text.trim(),
               mediaBytes: mediaBytes.value,
               mediaFileName: mediaFileName.value,
@@ -201,17 +201,25 @@ class ReportIncidentScreen extends HookConsumerWidget {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: descriptionController,
-                  minLines: 3,
-                  maxLines: 5,
-                  validator: (value) => (value == null || value.trim().isEmpty)
-                      ? 'Please describe the issue.'
-                      : null,
+                DropdownButtonFormField<String>(
+                  initialValue: selectedIssueType.value,
                   decoration: const InputDecoration(
-                    hintText:
-                        'e.g. Large pile of waste dumped by the roadside near the market.',
+                    hintText: 'Select an issue type',
+                    prefixIcon: Icon(Icons.report_outlined),
                   ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Heaped Waste',
+                      child: Text('Heaped Waste'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Choked Gutter',
+                      child: Text('Choked Gutter'),
+                    ),
+                  ],
+                  onChanged: (val) => selectedIssueType.value = val,
+                  validator: (value) =>
+                      value == null ? 'Please select an issue type.' : null,
                 ),
                 const SizedBox(height: 20),
 
