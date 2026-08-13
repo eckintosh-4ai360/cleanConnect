@@ -8,6 +8,8 @@ import {
   onSnapshot,
   where,
   getDocs,
+  getAggregateFromServer,
+  sum as fsSum,
 } from 'firebase/firestore';
 
 export default function Dashboard() {
@@ -103,22 +105,36 @@ export default function Dashboard() {
       orderBy('collectedAt', 'desc'),
       limit(10)
     );
-    const unsubCollections = onSnapshot(collectionsQ, (snap) => {
-      const logs = snap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        collectedAt: doc.data().collectedAt?.toDate?.() ?? new Date(),
-      }));
-      setRecentCollections(logs);
+    // ── 1b. Waste/CO2 totals across ALL collections (not just the 10 most
+    // recent shown below) — an aggregate query so this doesn't require
+    // downloading every collection doc just to sum two fields.
+    const fetchCollectionTotals = async () => {
+      try {
+        const totals = await getAggregateFromServer(
+          collection(db, 'collections'),
+          {
+            totalWeight: fsSum('weightKg'),
+            totalCO2: fsSum('carbonOffset'),
+          }
+        );
+        setMetrics((prev) => ({
+          ...prev,
+          wasteCollectedKg: parseFloat((totals.data().totalWeight ?? 0).toFixed(1)),
+          co2SavedKg: parseFloat((totals.data().totalCO2 ?? 0).toFixed(1)),
+        }));
+      } catch (_) {}
+    };
 
-      const totalWeight = logs.reduce((sum, c) => sum + (c.weightKg ?? 0), 0);
-      const totalCO2 = logs.reduce((sum, c) => sum + (c.carbonOffset ?? 0), 0);
-      setMetrics((prev) => ({
-        ...prev,
-        wasteCollectedKg: parseFloat(totalWeight.toFixed(1)),
-        co2SavedKg: parseFloat(totalCO2.toFixed(1)),
-      }));
+    const unsubCollections = onSnapshot(collectionsQ, (snap) => {
+      setRecentCollections(
+        snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          collectedAt: doc.data().collectedAt?.toDate?.() ?? new Date(),
+        }))
+      );
       setLoading(false);
+      fetchCollectionTotals();
     });
 
     // ── 2. Real-time: Active Riders Count ─────────────────────────────────
@@ -290,7 +306,7 @@ export default function Dashboard() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M18 15l-6-6-6 6" />
             </svg>
-            <span>From recent logs</span>
+            <span>All-time total</span>
           </div>
         </div>
 

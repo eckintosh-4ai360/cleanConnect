@@ -466,6 +466,101 @@ class RiderRepositoryImpl implements RiderRepository {
     );
   }
 
+  @override
+  Future<void> completePickup({
+    required String requestId,
+    required String customerId,
+    required double weightKg,
+    String? notes,
+  }) async {
+    final rootRef = _db.collection('pickupRequests').doc(requestId);
+    final custPickupRef = _db
+        .collection('customers')
+        .doc(customerId)
+        .collection('pickupRequests')
+        .doc(requestId);
+    final custRef = _db.collection('customers').doc(customerId);
+
+    final rootSnap = await rootRef.get();
+    final rootData = rootSnap.data() ?? {};
+    final custSnap = await custRef.get();
+    final custData = custSnap.data() ?? {};
+
+    final riderProfile = await getRiderProfile();
+    final carbonOffset = weightKg * 0.52;
+
+    final completion = {
+      'status': 'completed',
+      'completedAt': FieldValue.serverTimestamp(),
+      'actualWeightKg': weightKg,
+      if (notes != null && notes.isNotEmpty) 'completionNotes': notes,
+    };
+
+    // Only clear the customer's "next pickup" banner if this job is the one
+    // it's currently showing — an older job finishing late shouldn't wipe
+    // out a newer pickup the customer has since scheduled.
+    final storedNext = custData['nextPickupDate'];
+    final requestDate = rootData['date'];
+    final matchesNext = storedNext is Timestamp &&
+        requestDate is Timestamp &&
+        storedNext.seconds == requestDate.seconds;
+
+    final batch = _db.batch();
+    batch.set(rootRef, completion, SetOptions(merge: true));
+    batch.set(custPickupRef, completion, SetOptions(merge: true));
+    batch.set(
+      custRef,
+      {
+        'lastPickupCompletedAt': FieldValue.serverTimestamp(),
+        'activeRequestsCount': FieldValue.increment(-1),
+        if (matchesNext) 'nextPickupDate': FieldValue.delete(),
+        if (matchesNext) 'nextPickupTimeSlot': FieldValue.delete(),
+        if (matchesNext) 'nextPickupBinTypes': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    batch.set(_collectionsRef.doc(), {
+      'riderId': _uid,
+      'riderName': riderProfile.fullName,
+      'customerId': customerId,
+      'customerName':
+          rootData['customerName'] ?? custData['fullName'] ?? 'Customer',
+      'address': rootData['location'] as String? ?? '',
+      'binType': (rootData['binTypes'] as List<dynamic>?)?.join(', ') ??
+          'general',
+      'weightKg': weightKg,
+      'carbonOffset': double.parse(carbonOffset.toStringAsFixed(1)),
+      'status': 'verified',
+      'requestId': requestId,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+      'collectedAt': FieldValue.serverTimestamp(),
+    });
+    batch.set(
+      _riderRef,
+      {
+        'totalCollections': FieldValue.increment(1),
+        'totalWeightKg': FieldValue.increment(weightKg),
+        'earningsThisMonth': FieldValue.increment(weightKg * 0.15),
+      },
+      SetOptions(merge: true),
+    );
+    batch.set(_db.collection('admin_notifications').doc(), {
+      'title': 'Pickup Completed',
+      'message':
+          '${riderProfile.fullName} completed the pickup for ${rootData['customerName'] ?? 'a customer'}.',
+      'type': 'pickup_completed',
+      'riderId': _uid,
+      'riderName': riderProfile.fullName,
+      'requestId': requestId,
+      'customerId': customerId,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+  }
+
   PickupRequestEntity _pickupFromDoc(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>? ?? {};
     return PickupRequestEntity(

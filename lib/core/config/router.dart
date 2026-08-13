@@ -206,7 +206,10 @@ GoRouter router(Ref ref) {
       ),
       GoRoute(
         path: '/rider/collection',
-        builder: (context, state) => const RiderCollectionScreen(),
+        builder: (context, state) {
+          final pickup = state.extra as PickupRequestEntity?;
+          return RiderCollectionScreen(pickup: pickup);
+        },
       ),
       GoRoute(
         path: '/rider/performance',

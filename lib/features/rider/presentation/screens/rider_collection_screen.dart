@@ -3,10 +3,13 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/rider_nav_bar.dart';
+import '../../domain/entities/pickup_request_entity.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 
 class RiderCollectionScreen extends ConsumerStatefulWidget {
-  const RiderCollectionScreen({super.key});
+  final PickupRequestEntity? pickup;
+
+  const RiderCollectionScreen({super.key, this.pickup});
 
   @override
   ConsumerState<RiderCollectionScreen> createState() =>
@@ -125,9 +128,21 @@ class _RiderCollectionScreenState
             // Scan Result
             _ScanResultCard(
               code: _scannedCode!,
-              onConfirm: (weight, notes) {
-                ref
-                    .read(riderCollectionHistoryProvider.notifier);
+              onConfirm: (weight, notes) async {
+                final pickup = widget.pickup;
+                if (pickup != null) {
+                  // Real job: persist the collection and clear the
+                  // customer's "next pickup" banner if this was it.
+                  await ref
+                      .read(availablePickupsProvider.notifier)
+                      .complete(
+                        requestId: pickup.id,
+                        customerId: pickup.customerId,
+                        weightKg: weight,
+                        notes: notes,
+                      );
+                }
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Collection verified and logged!'),
@@ -348,7 +363,7 @@ class _CornerPainter extends CustomPainter {
 
 class _ScanResultCard extends StatefulWidget {
   final String code;
-  final void Function(double weight, String? notes) onConfirm;
+  final Future<void> Function(double weight, String? notes) onConfirm;
   final VoidCallback onRetry;
   const _ScanResultCard(
       {required this.code, required this.onConfirm, required this.onRetry});
@@ -440,16 +455,24 @@ class _ScanResultCardState extends State<_ScanResultCard> {
           child: ElevatedButton.icon(
             onPressed: _uploading
                 ? null
-                : () {
+                : () async {
                     setState(() => _uploading = true);
-                    Future.delayed(const Duration(milliseconds: 1200), () {
+                    try {
+                      await widget.onConfirm(
+                        double.tryParse(_weightCtrl.text) ?? 18.0,
+                        _notesCtrl.text.isEmpty ? null : _notesCtrl.text,
+                      );
+                    } catch (e) {
                       if (mounted) {
-                        widget.onConfirm(
-                          double.tryParse(_weightCtrl.text) ?? 18.0,
-                          _notesCtrl.text.isEmpty ? null : _notesCtrl.text,
+                        setState(() => _uploading = false);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to log collection: $e'),
+                            backgroundColor: Colors.red,
+                          ),
                         );
                       }
-                    });
+                    }
                   },
             icon: _uploading
                 ? const SizedBox(

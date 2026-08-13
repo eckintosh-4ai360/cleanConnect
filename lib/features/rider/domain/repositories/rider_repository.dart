@@ -58,6 +58,17 @@ abstract class RiderRepository {
     required String customerId,
   });
 
+  /// Mark an accepted pickup request as completed: records the collected
+  /// weight, logs it to this rider's collection history, and — if this was
+  /// the customer's currently-displayed "next pickup" — clears it so the
+  /// dashboard banner reflects reality again.
+  Future<void> completePickup({
+    required String requestId,
+    required String customerId,
+    required double weightKg,
+    String? notes,
+  });
+
   /// Update live GPS position of rider in Firestore for admin live tracking.
   Future<void> updateRiderLocation({
     required double latitude,

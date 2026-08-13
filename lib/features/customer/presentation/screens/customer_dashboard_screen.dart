@@ -3,10 +3,28 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
+
+String _formatBinTypes(List<String>? types) {
+  if (types == null || types.isEmpty) return 'General & Recycling Bins';
+  final labels = types.map((t) {
+    switch (t.toLowerCase()) {
+      case 'recycling':
+        return 'Recycling';
+      case 'organic':
+        return 'Organic Waste';
+      case 'general':
+        return 'General';
+      default:
+        return t;
+    }
+  }).toList();
+  return '${labels.join(' & ')} Bin${labels.length > 1 ? 's' : ''}';
+}
 
 class CustomerDashboardScreen extends ConsumerWidget {
   const CustomerDashboardScreen({super.key});
@@ -180,9 +198,12 @@ class CustomerDashboardScreen extends ConsumerWidget {
                             Text(
                               subState.when(
                                 data: (sub) => sub.nextPickupDate != null
-                                    ? 'Thursday, Oct 15 • Morning'
+                                    ? DateFormat('EEEE, MMM d').format(sub.nextPickupDate!) +
+                                        (sub.nextPickupTimeSlot != null
+                                            ? ' • ${sub.nextPickupTimeSlot!.contains('08:00') ? 'Morning' : 'Afternoon'}'
+                                            : '')
                                     : 'No pickup scheduled',
-                                error: (_, __) => 'Thursday, Oct 15',
+                                error: (_, __) => 'No pickup scheduled',
                                 loading: () => 'Loading next pickup...',
                               ),
                               style: const TextStyle(
@@ -192,9 +213,15 @@ class CustomerDashboardScreen extends ConsumerWidget {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            const Text(
-                              'General & Recycling Bins',
-                              style: TextStyle(
+                            Text(
+                              subState.when(
+                                data: (sub) => sub.nextPickupDate != null
+                                    ? _formatBinTypes(sub.nextPickupBinTypes)
+                                    : 'Schedule a pickup to get started',
+                                error: (_, __) => 'General & Recycling Bins',
+                                loading: () => 'General & Recycling Bins',
+                              ),
+                              style: const TextStyle(
                                 fontSize: 13,
                                 color: Color(0xFF6E685E),
                                 fontWeight: FontWeight.w500,
@@ -534,92 +561,6 @@ class CustomerDashboardScreen extends ConsumerWidget {
                       const Center(child: CircularProgressIndicator()),
                 ),
 
-                const SizedBox(height: 24),
-
-                // Environmental Impact
-                Text(
-                  'Environmental Impact',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Environmental Impact Card with Gauge
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? theme.cardTheme.color
-                        : const Color(0xFFE8F5E9),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.green.shade100),
-                  ),
-                  child: Row(
-                    children: [
-                      // Radial Percent Gauge
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox(
-                            width: 80,
-                            height: 80,
-                            child: CircularProgressIndicator(
-                              value: 0.76,
-                              strokeWidth: 8,
-                              backgroundColor: Colors.green.shade100,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.green,
-                              ),
-                            ),
-                          ),
-                          const Text(
-                            '76%',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'TOTAL CARBON OFFSET',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '120 kg CO2',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            const Text(
-                              'equivalent offset this month',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF6E685E),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 100),
               ],
             ),

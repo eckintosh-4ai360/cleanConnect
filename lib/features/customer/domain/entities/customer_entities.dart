@@ -148,6 +148,8 @@ class SubscriptionEntity {
   final String paymentMethod;
   final double outstandingBalance;
   final DateTime? nextPickupDate;
+  final String? nextPickupTimeSlot;
+  final List<String>? nextPickupBinTypes;
   final bool delayBonusAvailable; // true if rider delayed past 3-day grace period
   final DateTime? lastPickupCompletedAt;
 
@@ -158,6 +160,8 @@ class SubscriptionEntity {
     required this.paymentMethod,
     required this.outstandingBalance,
     this.nextPickupDate,
+    this.nextPickupTimeSlot,
+    this.nextPickupBinTypes,
     this.delayBonusAvailable = false,
     this.lastPickupCompletedAt,
   });

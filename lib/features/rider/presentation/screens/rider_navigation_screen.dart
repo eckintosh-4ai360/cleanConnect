@@ -428,7 +428,7 @@ class _RiderNavigationScreenState
                             ),
                           ),
                           onPressed: () {
-                            context.push('/rider/collection');
+                            context.push('/rider/collection', extra: widget.pickup);
                           },
                           icon: const Icon(Icons.qr_code_scanner),
                           label: const Text(

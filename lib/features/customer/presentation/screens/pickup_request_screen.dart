@@ -64,19 +64,19 @@ class PickupRequestScreen extends HookConsumerWidget {
         final bins = binsState.value ?? [];
         final currentUser = FirebaseAuth.instance.currentUser;
 
-        // 1. Pre-select registered bin types (recycling / organic)
         if (bins.isNotEmpty) {
-          final registeredTypes = bins
-              .map((b) => b.type.toLowerCase())
-              .where((t) => t == 'recycling' || t == 'organic')
-              .toSet()
-              .toList();
-          if (registeredTypes.isNotEmpty) {
-            selectedBins.value = registeredTypes;
+          final primaryBin = bins.first;
+
+          // 1. Pre-select the bin type actually chosen at registration
+          // (mirrors the primary bin used for location/day below — a
+          // customer registers one type per bin, so default to that one
+          // instead of unioning every bin they've ever registered).
+          final primaryType = primaryBin.type.toLowerCase();
+          if (primaryType == 'recycling' || primaryType == 'organic') {
+            selectedBins.value = [primaryType];
           }
 
           // 2. Pre-select location from registered bin GPS location
-          final primaryBin = bins.first;
           if (primaryBin.gpsLocation != null &&
               primaryBin.gpsLocation!.trim().isNotEmpty) {
             addressSelection.value = primaryBin.gpsLocation!;
@@ -550,6 +550,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                     children: [
                       DropdownButtonFormField<String>(
                         initialValue: currentSelection,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           prefixIcon: Icon(Icons.location_on_outlined),
                         ),

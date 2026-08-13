@@ -139,6 +139,20 @@ class AvailablePickups extends _$AvailablePickups {
           customerId: customerId,
         );
   }
+
+  Future<void> complete({
+    required String requestId,
+    required String customerId,
+    required double weightKg,
+    String? notes,
+  }) async {
+    await ref.read(riderRepositoryProvider).completePickup(
+          requestId: requestId,
+          customerId: customerId,
+          weightKg: weightKg,
+          notes: notes,
+        );
+  }
 }
 
 @riverpod

@@ -307,6 +307,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'paymentMethod': paymentMethod,
         'activeRequestsCount': FieldValue.increment(1),
         'lastPickupRequestDate': FieldValue.serverTimestamp(),
+        'nextPickupDate': Timestamp.fromDate(date),
+        'nextPickupTimeSlot': timeSlot,
+        'nextPickupBinTypes': binTypes,
         if (discountAppliedPercentage > 0) 'delayBonusRedeemedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
@@ -431,6 +434,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
       nextPickupDate: d['nextPickupDate'] is Timestamp
           ? (d['nextPickupDate'] as Timestamp).toDate()
           : null,
+      nextPickupTimeSlot: d['nextPickupTimeSlot'] as String?,
+      nextPickupBinTypes:
+          (d['nextPickupBinTypes'] as List<dynamic>?)?.cast<String>(),
       delayBonusAvailable: d['delayBonusAvailable'] as bool? ?? false,
       lastPickupCompletedAt: d['lastPickupCompletedAt'] is Timestamp
           ? (d['lastPickupCompletedAt'] as Timestamp).toDate()
