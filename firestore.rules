@@ -56,6 +56,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // ── Fleet Vehicles (Maintenance & Fleet Assets) ───────────────────────────
+    match /vehicles/{vehicleId} {
+      allow read, write: if true;
+    }
+
     // ── Payments & Invoicing ──────────────────────────────────────────────────
     match /payments/{paymentId} {
       allow read, write: if true;
