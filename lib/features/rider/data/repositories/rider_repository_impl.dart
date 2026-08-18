@@ -1,168 +1,156 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../domain/entities/incident_report_entity.dart';
 import '../../domain/repositories/rider_repository.dart';
 
+/// Supabase (Postgres)-backed implementation of [RiderRepository].
+/// All data is scoped to the currently authenticated user's id via RLS.
 class RiderRepositoryImpl implements RiderRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  GoTrueClient get _auth => Supabase.instance.client.auth;
+  SupabaseClient get _db => Supabase.instance.client;
+  GoTrueClient get _auth => _db.auth;
 
   String get _uid => _auth.currentUser?.id ?? 'rider_default';
 
-  DocumentReference get _riderRef => _db.collection('riders').doc(_uid);
-
-  CollectionReference get _notificationsRef =>
-      _riderRef.collection('notifications');
-
-  CollectionReference get _routesRef => _db.collection('routes');
-
-  CollectionReference get _collectionsRef => _db.collection('collections');
-
-  // ── Profile & Status ──────────────────────────────────────────────────────
+  // ── Profile & Status ─────────────────────────────────────────────────────
 
   @override
   Stream<RiderEntity?> watchRiderProfile() {
-    return _riderRef.snapshots().map((doc) {
-      if (!doc.exists) return _fallbackProfile();
-      return _riderFromDoc(doc);
-    });
+    return _db
+        .from('riders')
+        .stream(primaryKey: ['id'])
+        .eq('id', _uid)
+        .map((rows) => rows.isEmpty ? _fallbackProfile() : _riderFromRow(rows.first));
   }
 
   @override
   Future<RiderEntity> getRiderProfile() async {
-    final doc = await _riderRef.get();
-    if (!doc.exists) return _fallbackProfile();
-    return _riderFromDoc(doc);
+    final row = await _db.from('riders').select().eq('id', _uid).maybeSingle();
+    if (row == null) return _fallbackProfile();
+    return _riderFromRow(row);
   }
 
   @override
   Future<RiderEntity> updateRiderStatus(String status) async {
-    await _riderRef.set(
-      {
-        'status': status,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await _db.from('riders').update({'status': status}).eq('id', _uid);
     return getRiderProfile();
   }
 
-  RiderEntity _riderFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
+  // Identity fields (name/email/photo) come from Supabase Auth rather than a
+  // profiles join, since this repo only ever looks at the current rider's own
+  // profile and Realtime streams can't embed joined tables — matches the
+  // same source Phase 3's UI screens already use.
+  RiderEntity _riderFromRow(Map<String, dynamic> r) {
+    final authUser = _auth.currentUser;
     return RiderEntity(
-      id: doc.id,
-      fullName: d['fullName'] as String? ?? 'Rider',
-      email: d['email'] as String? ?? '',
-      phoneNumber: d['phoneNumber'] as String? ?? '',
-      profilePhotoUrl: d['photoUrl'] as String? ?? d['profilePhotoUrl'] as String? ?? '',
-      vehicleType: d['vehicleType'] as String? ?? 'Motorbike',
-      licenseNumber: d['licenseNumber'] as String? ?? '',
-      nationalIdNumber: d['nationalIdNumber'] as String? ?? '',
-      status: d['status'] as String? ?? 'active',
-      rating: (d['rating'] as num?)?.toDouble() ?? 5.0,
-      totalCollections: (d['totalCollections'] as num?)?.toInt() ?? 0,
-      totalWeightKg: (d['totalWeightKg'] as num?)?.toDouble() ?? 0.0,
-      earningsThisMonth: (d['earningsThisMonth'] as num?)?.toDouble() ?? 0.0,
-      efficiencyScore: (d['efficiencyScore'] as num?)?.toDouble() ?? 100.0,
+      id: r['id'] as String,
+      fullName: authUser?.userMetadata?['full_name'] as String? ?? 'Rider',
+      email: authUser?.email ?? '',
+      phoneNumber: authUser?.userMetadata?['phone_number'] as String? ?? '',
+      profilePhotoUrl: authUser?.userMetadata?['avatar_url'] as String?,
+      vehicleType: r['vehicle_type'] as String? ?? 'Motorbike',
+      licenseNumber: r['license_number'] as String? ?? '',
+      nationalIdNumber: r['national_id_number'] as String? ?? '',
+      status: r['status'] as String? ?? 'active',
+      rating: (r['rating'] as num?)?.toDouble() ?? 5.0,
+      totalCollections: (r['total_collections'] as num?)?.toInt() ?? 0,
+      totalWeightKg: (r['total_weight_kg'] as num?)?.toDouble() ?? 0.0,
+      earningsThisMonth: (r['earnings_this_month'] as num?)?.toDouble() ?? 0.0,
+      efficiencyScore: (r['efficiency_score'] as num?)?.toDouble() ?? 100.0,
     );
   }
 
-  RiderEntity _fallbackProfile() => RiderEntity(
-        id: _uid,
-        fullName: _auth.currentUser?.userMetadata?['full_name'] as String? ?? 'Marcus Sterling',
-        email: _auth.currentUser?.email ?? 'marcus@ecowaste.com',
-        phoneNumber: '+1 (555) 234-5678',
-        profilePhotoUrl:
-            'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
-        vehicleType: 'compact_van',
-        licenseNumber: 'DL-GH-20240312',
-        nationalIdNumber: 'GHA-0012345678',
-        status: 'active',
-        rating: 4.8,
-        totalCollections: 12,
-        totalWeightKg: 450.0,
-        earningsThisMonth: 850.0,
-        efficiencyScore: 95.0,
-      );
+  RiderEntity _fallbackProfile() {
+    final authUser = _auth.currentUser;
+    return RiderEntity(
+      id: _uid,
+      fullName: authUser?.userMetadata?['full_name'] as String? ?? 'Marcus Sterling',
+      email: authUser?.email ?? 'marcus@ecowaste.com',
+      phoneNumber: '+1 (555) 234-5678',
+      profilePhotoUrl:
+          'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
+      vehicleType: 'compact_van',
+      licenseNumber: 'DL-GH-20240312',
+      nationalIdNumber: 'GHA-0012345678',
+      status: 'active',
+      rating: 4.8,
+      totalCollections: 12,
+      totalWeightKg: 450.0,
+      earningsThisMonth: 850.0,
+      efficiencyScore: 95.0,
+    );
+  }
 
-  // ── Active Route & Stops ──────────────────────────────────────────────────
+  // ── Active Route & Stops ─────────────────────────────────────────────────
 
   @override
   Stream<ActiveRouteEntity?> watchActiveRoute() {
-    return _routesRef
-        .where('assignedRiderId', isEqualTo: _uid)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .snapshots()
-        .asyncMap((snap) async {
-      if (snap.docs.isEmpty) return null;
-      final routeDoc = snap.docs.first;
-      return _buildActiveRoute(routeDoc);
+    return _db
+        .from('routes')
+        .stream(primaryKey: ['id'])
+        .eq('assigned_rider_id', _uid)
+        .asyncMap((rows) async {
+      final active = rows.where((r) => r['status'] == 'active').toList();
+      if (active.isEmpty) return null;
+      return _buildActiveRoute(active.first);
     });
   }
 
   @override
   Future<ActiveRouteEntity?> getActiveRoute() async {
-    final snap = await _routesRef
-        .where('assignedRiderId', isEqualTo: _uid)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
-
-    if (snap.docs.isEmpty) return null;
-    return _buildActiveRoute(snap.docs.first);
+    final rows = await _db
+        .from('routes')
+        .select()
+        .eq('assigned_rider_id', _uid)
+        .eq('status', 'active')
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return _buildActiveRoute(rows.first);
   }
 
-  Future<ActiveRouteEntity> _buildActiveRoute(DocumentSnapshot routeDoc) async {
-    final d = routeDoc.data() as Map<String, dynamic>? ?? {};
-
-    // Fetch stops subcollection
-    final stopsSnap = await routeDoc.reference
-        .collection('stops')
-        .orderBy('stopOrder', descending: false)
-        .get();
-
-    final stops = stopsSnap.docs.map(_stopFromDoc).toList();
-
+  Future<ActiveRouteEntity> _buildActiveRoute(Map<String, dynamic> r) async {
+    final stopRows = await _db
+        .from('route_stops')
+        .select()
+        .eq('route_id', r['id'])
+        .order('stop_order');
+    final stops = (stopRows as List)
+        .map((s) => _stopFromRow(s as Map<String, dynamic>))
+        .toList();
     final completedCount = stops.where((s) => s.status == 'collected').length;
 
     return ActiveRouteEntity(
-      id: routeDoc.id,
-      routeName: d['routeName'] as String? ?? 'Daily Route',
-      zone: d['zone'] as String? ?? 'Central District',
-      totalDistanceKm: (d['totalDistanceKm'] as num?)?.toDouble() ?? 12.0,
-      completedDistanceKm: (d['completedDistanceKm'] as num?)?.toDouble() ?? 0.0,
-      totalStops: stops.isEmpty ? (d['totalStops'] as num?)?.toInt() ?? 0 : stops.length,
+      id: r['id'] as String,
+      routeName: r['route_name'] as String? ?? 'Daily Route',
+      zone: r['zone'] as String? ?? 'Central District',
+      totalDistanceKm: (r['total_distance_km'] as num?)?.toDouble() ?? 12.0,
+      completedDistanceKm: (r['completed_distance_km'] as num?)?.toDouble() ?? 0.0,
+      totalStops: stops.isEmpty ? (r['total_stops'] as num?)?.toInt() ?? 0 : stops.length,
       completedStops: completedCount,
-      startTime: d['startTime'] is Timestamp
-          ? (d['startTime'] as Timestamp).toDate()
+      startTime: r['start_time'] != null
+          ? DateTime.tryParse(r['start_time'].toString()) ?? DateTime.now()
           : DateTime.now(),
-      estimatedEndTime: d['estimatedEndTime'] is Timestamp
-          ? (d['estimatedEndTime'] as Timestamp).toDate()
+      estimatedEndTime: r['estimated_end_time'] != null
+          ? DateTime.tryParse(r['estimated_end_time'].toString())
           : DateTime.now().add(const Duration(hours: 3)),
-      status: d['status'] as String? ?? 'active',
+      status: r['status'] as String? ?? 'active',
       stops: stops,
     );
   }
 
-  RouteStopEntity _stopFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return RouteStopEntity(
-      id: doc.id,
-      customerName: d['customerName'] as String? ?? 'Customer',
-      address: d['address'] as String? ?? '',
-      binType: d['binType'] as String? ?? 'general',
-      status: d['status'] as String? ?? 'pending',
-      estimatedWeightKg: (d['estimatedWeightKg'] as num?)?.toDouble() ?? 15.0,
-      actualWeightKg: (d['actualWeightKg'] as num?)?.toDouble(),
-      notes: d['notes'] as String?,
-      latitude: (d['latitude'] as num?)?.toDouble() ?? 5.6037,
-      longitude: (d['longitude'] as num?)?.toDouble() ?? -0.1870,
-      stopOrder: (d['stopOrder'] as num?)?.toInt() ?? 1,
-    );
-  }
+  RouteStopEntity _stopFromRow(Map<String, dynamic> r) => RouteStopEntity(
+        id: r['id'] as String,
+        customerName: r['customer_name'] as String? ?? 'Customer',
+        address: r['address'] as String? ?? '',
+        binType: r['bin_type'] as String? ?? 'general',
+        status: r['status'] as String? ?? 'pending',
+        estimatedWeightKg: (r['estimated_weight_kg'] as num?)?.toDouble() ?? 15.0,
+        actualWeightKg: (r['actual_weight_kg'] as num?)?.toDouble(),
+        notes: r['notes'] as String?,
+        latitude: (r['latitude'] as num?)?.toDouble() ?? 5.6037,
+        longitude: (r['longitude'] as num?)?.toDouble() ?? -0.1870,
+        stopOrder: (r['stop_order'] as num?)?.toInt() ?? 1,
+      );
 
   @override
   Future<RouteStopEntity> markStopCollected({
@@ -172,57 +160,13 @@ class RiderRepositoryImpl implements RiderRepository {
     String? qrCodeData,
     String? notes,
   }) async {
-    final route = await getActiveRoute();
-    if (route != null) {
-      final stopRef = _routesRef.doc(route.id).collection('stops').doc(stopId);
-      await stopRef.update({
-        'status': 'collected',
-        'actualWeightKg': weightKg,
-        if (notes != null) 'notes': notes,
-        'collectedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Find stop details to add to global collections log
-      final stopDoc = await stopRef.get();
-      final stopData = stopDoc.data() as Map<String, dynamic>? ?? {};
-
-      final riderProfile = await getRiderProfile();
-      final carbonOffset = weightKg * 0.52; // standard CO2 calculation factor
-
-      await _collectionsRef.add({
-        'riderId': _uid,
-        'riderName': riderProfile.fullName,
-        'customerName': stopData['customerName'] ?? 'Customer',
-        'address': stopData['address'] ?? '',
-        'binType': stopData['binType'] ?? 'general',
-        'weightKg': weightKg,
-        'carbonOffset': double.parse(carbonOffset.toStringAsFixed(1)),
-        'qrVerified': qrCodeData != null && qrCodeData.isNotEmpty,
-        'status': 'completed',
-        'routeId': route.id,
-        'collectedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Update rider stats atomically
-      await _riderRef.set({
-        'totalCollections': FieldValue.increment(1),
-        'totalWeightKg': FieldValue.increment(weightKg),
-        'earningsThisMonth': FieldValue.increment(weightKg * 0.15),
-      }, SetOptions(merge: true));
-    }
-
-    return RouteStopEntity(
-      id: stopId,
-      customerName: 'Customer',
-      address: 'Address',
-      binType: 'general',
-      status: 'collected',
-      actualWeightKg: weightKg,
-      notes: notes,
-      latitude: 5.6037,
-      longitude: -0.1870,
-      stopOrder: 1,
-    );
+    final row = await _db.rpc('mark_stop_collected', params: {
+      'p_stop_id': stopId,
+      'p_weight_kg': weightKg,
+      'p_notes': notes,
+      'p_qr_code_data': qrCodeData,
+    });
+    return _stopFromRow(row as Map<String, dynamic>);
   }
 
   @override
@@ -231,156 +175,141 @@ class RiderRepositoryImpl implements RiderRepository {
     required String reason,
     String? notes,
   }) async {
-    final route = await getActiveRoute();
-    if (route != null) {
-      await _routesRef.doc(route.id).collection('stops').doc(stopId).update({
-        'status': 'problem',
-        'notes': notes ?? reason,
-      });
-    }
-    return RouteStopEntity(
-      id: stopId,
-      customerName: 'Customer',
-      address: 'Address',
-      binType: 'general',
-      status: 'problem',
-      notes: notes ?? reason,
-      latitude: 5.6037,
-      longitude: -0.1870,
-      stopOrder: 1,
-    );
+    final row = await _db
+        .from('route_stops')
+        .update({'status': 'problem', 'notes': notes ?? reason})
+        .eq('id', stopId)
+        .select()
+        .single();
+    return _stopFromRow(row);
   }
 
   @override
   Future<void> completeRoute(String routeId) async {
-    await _routesRef.doc(routeId).update({
-      'status': 'completed',
-      'completedAt': FieldValue.serverTimestamp(),
-    });
+    await _db
+        .from('routes')
+        .update({'status': 'completed', 'completed_at': DateTime.now().toIso8601String()})
+        .eq('id', routeId);
   }
 
-  // ── Collection History ────────────────────────────────────────────────────
+  // ── Collection History ───────────────────────────────────────────────────
 
   @override
   Stream<List<CollectionLogEntity>> watchCollectionHistory() {
-    return _collectionsRef
-        .where('riderId', isEqualTo: _uid)
-        .orderBy('collectedAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(_collectionFromDoc).toList());
+    return _db
+        .from('collection_events')
+        .stream(primaryKey: ['id'])
+        .eq('rider_id', _uid)
+        .order('collected_at', ascending: false)
+        .map((rows) => rows.map(_collectionFromRow).toList());
   }
 
   @override
   Future<List<CollectionLogEntity>> getCollectionHistory() async {
-    final snap = await _collectionsRef
-        .where('riderId', isEqualTo: _uid)
-        .orderBy('collectedAt', descending: true)
-        .get();
-    return snap.docs.map(_collectionFromDoc).toList();
+    final rows = await _db
+        .from('collection_events')
+        .select()
+        .eq('rider_id', _uid)
+        .order('collected_at', ascending: false);
+    return (rows as List).map((r) => _collectionFromRow(r as Map<String, dynamic>)).toList();
   }
 
-  CollectionLogEntity _collectionFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return CollectionLogEntity(
-      id: doc.id,
-      customerName: d['customerName'] as String? ?? 'Customer',
-      address: d['address'] as String? ?? '',
-      binType: d['binType'] as String? ?? 'general',
-      weightKg: (d['weightKg'] as num?)?.toDouble() ?? 0.0,
-      collectedAt: d['collectedAt'] is Timestamp
-          ? (d['collectedAt'] as Timestamp).toDate()
-          : DateTime.now(),
-      status: d['status'] as String? ?? 'verified',
-      notes: d['notes'] as String?,
-      qrCodeData: d['qrVerified'] == true ? 'QR-VERIFIED' : null,
-    );
-  }
+  CollectionLogEntity _collectionFromRow(Map<String, dynamic> r) => CollectionLogEntity(
+        id: r['id'] as String,
+        customerName: r['customer_name'] as String? ?? 'Customer',
+        address: r['address'] as String? ?? '',
+        binType: r['bin_type'] as String? ?? 'general',
+        weightKg: (r['weight_kg'] as num?)?.toDouble() ?? 0.0,
+        collectedAt: DateTime.tryParse(r['collected_at']?.toString() ?? '') ?? DateTime.now(),
+        status: r['status'] as String? ?? 'verified',
+        notes: r['notes'] as String?,
+        qrCodeData: r['qr_verified'] == true ? 'QR-VERIFIED' : null,
+      );
 
-  // ── Performance Stats ─────────────────────────────────────────────────────
+  // ── Performance Stats ────────────────────────────────────────────────────
+  // NOTE: several fields here were already hardcoded/fake in the original
+  // Firestore implementation (earningsThisWeek, onTimeDeliveryRate,
+  // weeklyScores) rather than derived from real data — preserved as-is since
+  // building real weekly aggregation is a separate feature, not part of this
+  // migration.
 
   @override
   Stream<RiderPerformanceEntity> watchPerformanceStats() {
-    return _riderRef.snapshots().map((doc) => _performanceFromDoc(doc));
+    return _db
+        .from('riders')
+        .stream(primaryKey: ['id'])
+        .eq('id', _uid)
+        .map((rows) => rows.isEmpty ? _performanceFromRow({}) : _performanceFromRow(rows.first));
   }
 
   @override
   Future<RiderPerformanceEntity> getPerformanceStats() async {
-    final doc = await _riderRef.get();
-    return _performanceFromDoc(doc);
+    final row = await _db.from('riders').select().eq('id', _uid).maybeSingle();
+    return _performanceFromRow(row ?? {});
   }
 
-  RiderPerformanceEntity _performanceFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return RiderPerformanceEntity(
-      efficiencyScore: (d['efficiencyScore'] as num?)?.toDouble() ?? 94.2,
-      averageRating: (d['rating'] as num?)?.toDouble() ?? 4.8,
-      collectionsThisWeek: (d['totalCollections'] as num?)?.toInt() ?? 28,
-      weightThisWeek: (d['totalWeightKg'] as num?)?.toDouble() ?? 412.6,
-      earningsThisWeek: 287.50,
-      earningsThisMonth: (d['earningsThisMonth'] as num?)?.toDouble() ?? 1248.50,
-      totalCollectionsAllTime: (d['totalCollections'] as num?)?.toInt() ?? 312,
-      onTimeDeliveryRate: 0.982,
-      weeklyScores: const [88.0, 91.5, 92.0, 94.2, 93.8, 95.1, 94.2],
-    );
-  }
+  RiderPerformanceEntity _performanceFromRow(Map<String, dynamic> r) => RiderPerformanceEntity(
+        efficiencyScore: (r['efficiency_score'] as num?)?.toDouble() ?? 94.2,
+        averageRating: (r['rating'] as num?)?.toDouble() ?? 4.8,
+        collectionsThisWeek: (r['total_collections'] as num?)?.toInt() ?? 28,
+        weightThisWeek: (r['total_weight_kg'] as num?)?.toDouble() ?? 412.6,
+        earningsThisWeek: 287.50,
+        earningsThisMonth: (r['earnings_this_month'] as num?)?.toDouble() ?? 1248.50,
+        totalCollectionsAllTime: (r['total_collections'] as num?)?.toInt() ?? 312,
+        onTimeDeliveryRate: 0.982,
+        weeklyScores: const [88.0, 91.5, 92.0, 94.2, 93.8, 95.1, 94.2],
+      );
 
   // ── Notifications ─────────────────────────────────────────────────────────
 
   @override
   Stream<List<RiderNotificationEntity>> watchNotifications() {
-    return _notificationsRef
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(_notificationFromDoc).toList());
+    return _db
+        .from('rider_notifications')
+        .stream(primaryKey: ['id'])
+        .eq('rider_id', _uid)
+        .order('created_at', ascending: false)
+        .map((rows) => rows.map(_notificationFromRow).toList());
   }
 
   @override
   Future<List<RiderNotificationEntity>> getNotifications() async {
-    final snap =
-        await _notificationsRef.orderBy('createdAt', descending: true).get();
-    return snap.docs.map(_notificationFromDoc).toList();
+    final rows = await _db
+        .from('rider_notifications')
+        .select()
+        .eq('rider_id', _uid)
+        .order('created_at', ascending: false);
+    return (rows as List).map((r) => _notificationFromRow(r as Map<String, dynamic>)).toList();
   }
 
-  RiderNotificationEntity _notificationFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return RiderNotificationEntity(
-      id: doc.id,
-      title: d['title'] as String? ?? 'Notification',
-      message: d['message'] as String? ?? '',
-      type: d['type'] as String? ?? 'system',
-      receivedAt: d['createdAt'] is Timestamp
-          ? (d['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-      isRead: d['isRead'] as bool? ?? false,
-    );
-  }
+  RiderNotificationEntity _notificationFromRow(Map<String, dynamic> r) => RiderNotificationEntity(
+        id: r['id'] as String,
+        title: r['title'] as String? ?? 'Notification',
+        message: r['message'] as String? ?? '',
+        type: r['type'] as String? ?? 'system',
+        receivedAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+        isRead: r['is_read'] as bool? ?? false,
+      );
 
   @override
   Future<void> markNotificationRead(String notificationId) async {
-    await _notificationsRef.doc(notificationId).update({'isRead': true});
+    await _db.from('rider_notifications').update({'is_read': true}).eq('id', notificationId);
   }
 
   @override
   Future<void> markAllNotificationsRead() async {
-    final unread =
-        await _notificationsRef.where('isRead', isEqualTo: false).get();
-    final batch = _db.batch();
-    for (final doc in unread.docs) {
-      batch.update(doc.reference, {'isRead': true});
-    }
-    await batch.commit();
+    await _db.rpc('mark_all_rider_notifications_read');
   }
 
-  // ── Available Pickup Requests ──────────────────────────────────────────────
+  // ── Available Pickup Requests ────────────────────────────────────────────
 
   @override
   Stream<List<PickupRequestEntity>> watchAvailablePickups() {
-    // Listen to root pickupRequests collection, filter to 'pending' only
     return _db
-        .collection('pickupRequests')
-        .where('status', isEqualTo: 'pending')
-        .snapshots()
-        .map((snap) => snap.docs.map(_pickupFromDoc).toList());
+        .from('pickup_requests')
+        .stream(primaryKey: ['id'])
+        .eq('status', 'pending')
+        .map((rows) => rows.map(_pickupFromRow).toList());
   }
 
   @override
@@ -388,68 +317,21 @@ class RiderRepositoryImpl implements RiderRepository {
     required String requestId,
     required String customerId,
   }) async {
-    final rider = await getRiderProfile();
-    final rootRef = _db.collection('pickupRequests').doc(requestId);
-    final custRef = _db
-        .collection('customers')
-        .doc(customerId)
-        .collection('pickupRequests')
-        .doc(requestId);
-
-    // Broadcasting new requests to every rider means more than one rider can
-    // swipe "accept" around the same time — guard the assignment with a
-    // transaction so only the first accept actually wins.
-    await _db.runTransaction((txn) async {
-      final rootSnap = await txn.get(rootRef);
-      final rootData = rootSnap.data() ?? {};
-      if (rootData['status'] != 'pending') {
-        throw Exception('This pickup was already accepted by another rider.');
-      }
-
-      final assignment = {
-        'status': 'accepted',
-        'assignedRiderId': _uid,
-        'assignedRiderName': rider.fullName,
-        'acceptedAt': FieldValue.serverTimestamp(),
-      };
-
-      txn.set(rootRef, assignment, SetOptions(merge: true));
-      txn.set(custRef, assignment, SetOptions(merge: true));
-      txn.set(
-        _db.collection('admin_notifications').doc(),
-        {
-          'title': 'Pickup Accepted',
-          'message': '${rider.fullName} accepted a pickup request.',
-          'type': 'pickup_accepted',
-          'riderId': _uid,
-          'riderName': rider.fullName,
-          'requestId': requestId,
-          'customerId': customerId,
-          'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        },
-      );
-    });
+    await _db.rpc('accept_pickup', params: {'p_request_id': requestId});
   }
 
   @override
   Stream<PickupRequestEntity?> watchPickupById(String requestId) {
     return _db
-        .collection('pickupRequests')
-        .doc(requestId)
-        .snapshots()
-        .map((doc) => doc.exists ? _pickupFromDoc(doc) : null);
+        .from('pickup_requests')
+        .stream(primaryKey: ['id'])
+        .eq('id', requestId)
+        .map((rows) => rows.isEmpty ? null : _pickupFromRow(rows.first));
   }
 
   @override
   Future<void> updateFcmToken(String token) async {
-    await _riderRef.set(
-      {
-        'fcmToken': token,
-        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await _db.from('riders').update({'fcm_token': token}).eq('id', _uid);
   }
 
   @override
@@ -457,13 +339,7 @@ class RiderRepositoryImpl implements RiderRepository {
     required String requestId,
     required String customerId,
   }) async {
-    // Track that this rider rejected the request (array so multiple riders can reject)
-    await _db.collection('pickupRequests').doc(requestId).set(
-      {
-        'rejectedBy': FieldValue.arrayUnion([_uid]),
-      },
-      SetOptions(merge: true),
-    );
+    await _db.rpc('reject_pickup', params: {'p_request_id': requestId});
   }
 
   @override
@@ -473,113 +349,30 @@ class RiderRepositoryImpl implements RiderRepository {
     required double weightKg,
     String? notes,
   }) async {
-    final rootRef = _db.collection('pickupRequests').doc(requestId);
-    final custPickupRef = _db
-        .collection('customers')
-        .doc(customerId)
-        .collection('pickupRequests')
-        .doc(requestId);
-    final custRef = _db.collection('customers').doc(customerId);
-
-    final rootSnap = await rootRef.get();
-    final rootData = rootSnap.data() ?? {};
-    final custSnap = await custRef.get();
-    final custData = custSnap.data() ?? {};
-
-    final riderProfile = await getRiderProfile();
-    final carbonOffset = weightKg * 0.52;
-
-    final completion = {
-      'status': 'completed',
-      'completedAt': FieldValue.serverTimestamp(),
-      'actualWeightKg': weightKg,
-      if (notes != null && notes.isNotEmpty) 'completionNotes': notes,
-    };
-
-    // Only clear the customer's "next pickup" banner if this job is the one
-    // it's currently showing — an older job finishing late shouldn't wipe
-    // out a newer pickup the customer has since scheduled.
-    final storedNext = custData['nextPickupDate'];
-    final requestDate = rootData['date'];
-    final matchesNext = storedNext is Timestamp &&
-        requestDate is Timestamp &&
-        storedNext.seconds == requestDate.seconds;
-
-    final batch = _db.batch();
-    batch.set(rootRef, completion, SetOptions(merge: true));
-    batch.set(custPickupRef, completion, SetOptions(merge: true));
-    batch.set(
-      custRef,
-      {
-        'lastPickupCompletedAt': FieldValue.serverTimestamp(),
-        'activeRequestsCount': FieldValue.increment(-1),
-        if (matchesNext) 'nextPickupDate': FieldValue.delete(),
-        if (matchesNext) 'nextPickupTimeSlot': FieldValue.delete(),
-        if (matchesNext) 'nextPickupBinTypes': FieldValue.delete(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
-    batch.set(_collectionsRef.doc(), {
-      'riderId': _uid,
-      'riderName': riderProfile.fullName,
-      'customerId': customerId,
-      'customerName':
-          rootData['customerName'] ?? custData['fullName'] ?? 'Customer',
-      'address': rootData['location'] as String? ?? '',
-      'binType': (rootData['binTypes'] as List<dynamic>?)?.join(', ') ??
-          'general',
-      'weightKg': weightKg,
-      'carbonOffset': double.parse(carbonOffset.toStringAsFixed(1)),
-      'status': 'verified',
-      'requestId': requestId,
-      if (notes != null && notes.isNotEmpty) 'notes': notes,
-      'collectedAt': FieldValue.serverTimestamp(),
+    await _db.rpc('complete_pickup', params: {
+      'p_request_id': requestId,
+      'p_weight_kg': weightKg,
+      'p_notes': notes,
     });
-    batch.set(
-      _riderRef,
-      {
-        'totalCollections': FieldValue.increment(1),
-        'totalWeightKg': FieldValue.increment(weightKg),
-        'earningsThisMonth': FieldValue.increment(weightKg * 0.15),
-      },
-      SetOptions(merge: true),
-    );
-    batch.set(_db.collection('admin_notifications').doc(), {
-      'title': 'Pickup Completed',
-      'message':
-          '${riderProfile.fullName} completed the pickup for ${rootData['customerName'] ?? 'a customer'}.',
-      'type': 'pickup_completed',
-      'riderId': _uid,
-      'riderName': riderProfile.fullName,
-      'requestId': requestId,
-      'customerId': customerId,
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
   }
 
-  PickupRequestEntity _pickupFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return PickupRequestEntity(
-      id: doc.id,
-      customerId: d['customerId'] as String? ?? '',
-      customerName: d['customerName'] as String? ?? 'Customer',
-      customerEmail: d['customerEmail'] as String? ?? '',
-      customerPhone: d['customerPhone'] as String? ?? '',
-      location: d['location'] as String? ?? d['address'] as String? ?? 'Unknown location',
-      timeSlot: d['timeSlot'] as String? ?? '',
-      binTypes: (d['binTypes'] as List<dynamic>?)?.cast<String>() ??
-          (d['binType'] != null ? [d['binType'] as String] : ['general']),
-      status: d['status'] as String? ?? 'pending',
-      assignedRiderId: d['assignedRiderId'] as String?,
-      assignedRiderName: d['assignedRiderName'] as String?,
-      createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      acceptedAt: (d['acceptedAt'] as Timestamp?)?.toDate(),
-    );
-  }
+  PickupRequestEntity _pickupFromRow(Map<String, dynamic> r) => PickupRequestEntity(
+        id: r['id'] as String,
+        customerId: r['customer_id'] as String? ?? '',
+        customerName: r['customer_name'] as String? ?? 'Customer',
+        customerEmail: r['customer_email'] as String? ?? '',
+        customerPhone: r['customer_phone'] as String? ?? '',
+        location: r['location'] as String? ?? 'Unknown location',
+        timeSlot: r['time_slot'] as String? ?? '',
+        binTypes: (r['bin_types'] as List<dynamic>?)?.cast<String>() ?? ['general'],
+        status: r['status'] as String? ?? 'pending',
+        assignedRiderId: r['assigned_rider_id'] as String?,
+        assignedRiderName: r['assigned_rider_name'] as String?,
+        createdAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+        acceptedAt: r['accepted_at'] != null
+            ? DateTime.tryParse(r['accepted_at'].toString())
+            : null,
+      );
 
   @override
   Future<void> updateRiderLocation({
@@ -589,43 +382,13 @@ class RiderRepositoryImpl implements RiderRepository {
     double? speed,
     String? currentJobId,
   }) async {
-    final batch = _db.batch();
-    final riderProfile = await getRiderProfile();
-
-    // 1. Update rider document in riders collection
-    batch.set(
-      _riderRef,
-      {
-        'id': _uid,
-        'fullName': riderProfile.fullName,
-        'currentLat': latitude,
-        'currentLng': longitude,
-        'latitude': latitude,
-        'longitude': longitude,
-        'heading': heading ?? 0.0,
-        'speed': speed ?? 0.0,
-        'lastLocationUpdate': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
-
-    // 2. If rider is currently fulfilling a specific pickup request, mirror coordinates on that job
-    if (currentJobId != null && currentJobId.isNotEmpty) {
-      batch.set(
-        _db.collection('pickupRequests').doc(currentJobId),
-        {
-          'riderLat': latitude,
-          'riderLng': longitude,
-          'riderHeading': heading ?? 0.0,
-          'riderSpeed': speed ?? 0.0,
-          'riderLocationUpdatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-    }
-
-    await batch.commit();
+    await _db.rpc('update_rider_location', params: {
+      'p_lat': latitude,
+      'p_lng': longitude,
+      'p_heading': heading,
+      'p_speed': speed,
+      'p_current_job_id': currentJobId,
+    });
   }
 
   // ── Incident Reports (waste dumps / choked gutters) ──────────────────────
@@ -633,10 +396,11 @@ class RiderRepositoryImpl implements RiderRepository {
   @override
   Stream<List<IncidentReportEntity>> watchAssignedIncidentReports() {
     return _db
-        .collection('incidentReports')
-        .where('assignedRiderId', isEqualTo: _uid)
-        .snapshots()
-        .map((snap) => snap.docs.map(_incidentReportFromDoc).toList());
+        .from('incident_reports')
+        .stream(primaryKey: ['id'])
+        .eq('assigned_rider_id', _uid)
+        .order('created_at', ascending: false)
+        .map((rows) => rows.map(_incidentReportFromRow).toList());
   }
 
   @override
@@ -645,46 +409,21 @@ class RiderRepositoryImpl implements RiderRepository {
     required String reporterId,
     required String status,
   }) async {
-    final update = {
-      'status': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-
-    final batch = _db.batch();
-    batch.set(
-      _db.collection('incidentReports').doc(reportId),
-      update,
-      SetOptions(merge: true),
-    );
-    batch.set(
-      _db
-          .collection('customers')
-          .doc(reporterId)
-          .collection('incidentReports')
-          .doc(reportId),
-      update,
-      SetOptions(merge: true),
-    );
-    await batch.commit();
+    await _db.from('incident_reports').update({'status': status}).eq('id', reportId);
   }
 
-  IncidentReportEntity _incidentReportFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return IncidentReportEntity(
-      id: doc.id,
-      reporterId: d['reporterId'] as String? ?? '',
-      reporterName: d['reporterName'] as String? ?? 'Customer',
-      reporterPhone: d['reporterPhone'] as String? ?? '',
-      description: d['description'] as String? ?? '',
-      mediaUrl: d['mediaUrl'] as String?,
-      mediaType: d['mediaType'] as String?,
-      location: d['location'] as String? ?? '',
-      status: d['status'] as String? ?? 'pending',
-      assignedRiderId: d['assignedRiderId'] as String?,
-      assignedRiderName: d['assignedRiderName'] as String?,
-      createdAt: d['createdAt'] is Timestamp
-          ? (d['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-    );
-  }
+  IncidentReportEntity _incidentReportFromRow(Map<String, dynamic> r) => IncidentReportEntity(
+        id: r['id'] as String,
+        reporterId: r['reporter_id'] as String? ?? '',
+        reporterName: r['reporter_name'] as String? ?? 'Customer',
+        reporterPhone: r['reporter_phone'] as String? ?? '',
+        description: r['description'] as String? ?? '',
+        mediaUrl: r['media_url'] as String?,
+        mediaType: r['media_type'] as String?,
+        location: r['location'] as String? ?? '',
+        status: r['status'] as String? ?? 'pending',
+        assignedRiderId: r['assigned_rider_id'] as String?,
+        assignedRiderName: r['assigned_rider_name'] as String?,
+        createdAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+      );
 }
