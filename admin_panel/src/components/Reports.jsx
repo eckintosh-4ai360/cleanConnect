@@ -1,12 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TREND_DAYS = 14;
@@ -37,60 +30,81 @@ export default function Reports() {
 
   // ── Gross Revenue: live sum of paid invoices ────────────────────────────
   useEffect(() => {
-    const q = query(collection(db, 'payments'), where('status', '==', 'paid'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const total = snap.docs.reduce((s, d) => s + (d.data().amount ?? 0), 0);
+    let mounted = true;
+
+    const fetchRevenue = async () => {
+      const { data, error } = await supabase.from('payments').select('amount').eq('status', 'paid');
+      if (mounted && !error) {
+        const total = data.reduce((s, d) => s + (d.amount ?? 0), 0);
         setMetrics((prev) => ({ ...prev, revenue: total }));
-      },
-      () => {}
-    );
-    return () => unsub();
+      }
+    };
+    fetchRevenue();
+
+    const channel = supabase
+      .channel('reports_payments_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, fetchRevenue)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  // ── Collections: live volume trend + all-time volume/CO2/efficiency totals.
-  // Totals are reduced client-side (rather than via getAggregateFromServer's
-  // sum/count) since sum() aggregation queries currently fail with
-  // failed-precondition against this project's Firestore instance. ─────────
+  // ── Collections: live volume trend (last N days) + all-time volume/CO2/efficiency totals ──
   useEffect(() => {
-    const q = query(collection(db, 'collections'), orderBy('collectedAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const docs = snap.docs.map((d) => ({
-          ...d.data(),
-          collectedAt: d.data().collectedAt?.toDate?.() ?? null,
-        }));
+    let mounted = true;
 
-        const buckets = new Map();
-        docs.forEach((d) => {
-          if (!d.collectedAt) return;
-          const key = dayKey(d.collectedAt);
-          buckets.set(key, (buckets.get(key) ?? 0) + (d.weightKg ?? 0));
-        });
-        setTrend(
-          buildEmptyTrend(TREND_DAYS).map((d) => ({
-            date: d.date,
-            weightKg: buckets.get(dayKey(d.date)) ?? 0,
-          }))
-        );
+    const fetchCollections = async () => {
+      const { data, error } = await supabase
+        .from('collection_events')
+        .select('weight_kg, carbon_offset, status, collected_at')
+        .order('collected_at', { ascending: false });
 
-        const totalWeight = docs.reduce((s, d) => s + (d.weightKg ?? 0), 0);
-        const totalCO2 = docs.reduce((s, d) => s + (d.carbonOffset ?? 0), 0);
-        const completedCount = docs.filter((d) => d.status === 'completed').length;
-        setMetrics((prev) => ({
-          ...prev,
-          volumeKg: totalWeight,
-          co2Kg: totalCO2,
-          efficiencyPct: docs.length > 0 ? (completedCount / docs.length) * 100 : 0,
-        }));
+      if (!mounted || error) {
+        if (error) console.warn('Reports collection_events fetch:', error);
         setLoading(false);
-      },
-      () => setLoading(false)
-    );
+        return;
+      }
 
-    return () => unsub();
+      const buckets = new Map();
+      data.forEach((d) => {
+        const collectedAt = d.collected_at ? new Date(d.collected_at) : null;
+        if (!collectedAt) return;
+        const key = dayKey(collectedAt);
+        buckets.set(key, (buckets.get(key) ?? 0) + (d.weight_kg ?? 0));
+      });
+
+      setTrend(
+        buildEmptyTrend(TREND_DAYS).map((d) => ({
+          date: d.date,
+          weightKg: buckets.get(dayKey(d.date)) ?? 0,
+        }))
+      );
+
+      const totalWeight = data.reduce((s, d) => s + (d.weight_kg ?? 0), 0);
+      const totalCO2 = data.reduce((s, d) => s + (d.carbon_offset ?? 0), 0);
+      const completedCount = data.filter((d) => d.status === 'completed').length;
+      setMetrics((prev) => ({
+        ...prev,
+        volumeKg: totalWeight,
+        co2Kg: totalCO2,
+        efficiencyPct: data.length > 0 ? (completedCount / data.length) * 100 : 0,
+      }));
+      setLoading(false);
+    };
+    fetchCollections();
+
+    const channel = supabase
+      .channel('reports_collection_events_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'collection_events' }, fetchCollections)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // ── Format helpers ──────────────────────────────────────────────────────
@@ -142,7 +156,7 @@ export default function Reports() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
-              Live Firestore
+              Live
             </span>
           </div>
 
@@ -266,7 +280,7 @@ export default function Reports() {
 }
 
 // ── Reusable trend chart: single-series line + area with a hover crosshair
-// and tooltip, driven entirely by real Firestore data (no fixtures). ───────
+// and tooltip, driven entirely by real Postgres data (no fixtures). ───────
 function TrendChart({ points, color, height = 240, showArea = true }) {
   const plotRef = useRef(null);
   const [hoverIndex, setHoverIndex] = useState(null);

@@ -1,16 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-  orderBy,
-  query,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
+import { useAuth } from '../AuthContext';
 
 const BIN_SIZES = ['120L', '240L', '360L'];
 
@@ -23,6 +13,8 @@ const defaultPlanForm = {
 };
 
 export default function Settings() {
+  const { session, profile, refreshProfile } = useAuth();
+
   const [superAdminAccess, setSuperAdminAccess] = useState(true);
   const [zones, setZones] = useState([
     { id: 'ZN-01', name: 'Airport Residential Hub', status: 'Active' },
@@ -33,13 +25,13 @@ export default function Settings() {
 
   const [showZoneModal, setShowZoneModal] = useState(false);
 
-  // Admin profile
-  const [adminPhoto, setAdminPhoto] = useState(() => localStorage.getItem('adminPhoto') || null);
-  const [adminName, setAdminName] = useState(() => localStorage.getItem('adminName') || 'Super Admin');
-  const [adminEmail, setAdminEmail] = useState(() => localStorage.getItem('adminEmail') || 'admin@cleanconnect.com');
+  // Admin profile — backed by the real profiles row now
+  const adminName = profile?.full_name || 'Admin';
+  const adminEmail = session?.user?.email || profile?.email || '—';
+  const adminPhoto = profile?.profile_picture_url || null;
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [nameInput, setNameInput] = useState(adminName);
-  const [emailInput, setEmailInput] = useState(adminEmail);
+  const [savingProfile, setSavingProfile] = useState(false);
   const photoInputRef = useRef(null);
 
   // ── Pricing Plans State ──────────────────────────────────────────────────
@@ -50,11 +42,27 @@ export default function Settings() {
   const [planLoading, setPlanLoading] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'pricingPlans'), orderBy('createdAt', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setPricingPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    }, (err) => console.warn('pricingPlans listener:', err));
-    return () => unsub();
+    let mounted = true;
+
+    const fetchPlans = async () => {
+      const { data, error } = await supabase
+        .from('pricing_plans')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (mounted && !error) setPricingPlans(data);
+      if (error) console.warn('pricing_plans fetch:', error);
+    };
+    fetchPlans();
+
+    const channel = supabase
+      .channel('settings_pricing_plans_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_plans' }, fetchPlans)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openCreatePlan = () => {
@@ -69,7 +77,7 @@ export default function Settings() {
       name: plan.name || '',
       frequency: plan.frequency || 'Weekly',
       description: plan.description || '',
-      isPayg: plan.isPayg || false,
+      isPayg: plan.is_payg || false,
       prices: {
         '120L': plan.prices?.['120L'] ?? '',
         '240L': plan.prices?.['240L'] ?? '',
@@ -104,58 +112,60 @@ export default function Settings() {
       name: planForm.name.trim(),
       frequency: planForm.isPayg ? 'Pay-As-You-Go' : planForm.frequency,
       description: planForm.description.trim(),
-      isPayg: planForm.isPayg,
+      is_payg: planForm.isPayg,
       prices,
-      updatedAt: serverTimestamp(),
     };
 
     setPlanLoading(true);
-    try {
-      if (editingPlan) {
-        await updateDoc(doc(db, 'pricingPlans', editingPlan.id), payload);
-      } else {
-        await addDoc(collection(db, 'pricingPlans'), {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
-      }
+    const { error } = editingPlan
+      ? await supabase.from('pricing_plans').update(payload).eq('id', editingPlan.id)
+      : await supabase.from('pricing_plans').insert(payload);
+
+    if (error) {
+      alert('Failed to save plan: ' + error.message);
+    } else {
       setShowPlanModal(false);
-    } catch (err) {
-      alert('Failed to save plan: ' + err.message);
     }
     setPlanLoading(false);
   };
 
   const handleDeletePlan = async (planId) => {
     if (!window.confirm('Delete this pricing plan? This cannot be undone.')) return;
-    try {
-      await deleteDoc(doc(db, 'pricingPlans', planId));
-    } catch (err) {
-      alert('Failed to delete plan: ' + err.message);
-    }
+    const { error } = await supabase.from('pricing_plans').delete().eq('id', planId);
+    if (error) alert('Failed to delete plan: ' + error.message);
   };
 
   // ── Admin profile helpers ────────────────────────────────────────────────
   const handleAdminPhotoUpload = (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !session?.user?.id) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const dataUrl = reader.result;
-      setAdminPhoto(dataUrl);
-      localStorage.setItem('adminPhoto', dataUrl);
-      window.dispatchEvent(new StorageEvent('storage', { key: 'adminPhoto', newValue: dataUrl }));
+      const { error } = await supabase
+        .from('profiles')
+        .update({ profile_picture_url: dataUrl })
+        .eq('id', session.user.id);
+      if (error) alert('Failed to update photo: ' + error.message);
+      else await refreshProfile();
     };
     reader.readAsDataURL(file);
   };
 
-  const handleSaveProfile = () => {
-    setAdminName(nameInput);
-    setAdminEmail(emailInput);
-    localStorage.setItem('adminName', nameInput);
-    localStorage.setItem('adminEmail', emailInput);
-    window.dispatchEvent(new StorageEvent('storage', { key: 'adminName', newValue: nameInput }));
-    setIsEditingProfile(false);
+  const handleSaveProfile = async () => {
+    if (!session?.user?.id) return;
+    setSavingProfile(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: nameInput })
+      .eq('id', session.user.id);
+    if (error) {
+      alert('Failed to update profile: ' + error.message);
+    } else {
+      await refreshProfile();
+      setIsEditingProfile(false);
+    }
+    setSavingProfile(false);
   };
 
   const handleAddZone = (e) => {
@@ -210,9 +220,11 @@ export default function Settings() {
               {isEditingProfile ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="Full Name" style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '14px', border: '1px solid var(--border-divider)', background: 'var(--bg-app)', color: 'var(--text-primary)' }} />
-                  <input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder="Email" style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '13px', border: '1px solid var(--border-divider)', background: 'var(--bg-app)', color: 'var(--text-primary)' }} />
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Email: {adminEmail} (sign-in email — contact another admin to change it)</p>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <button className="btn-primary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={handleSaveProfile}>Save</button>
+                    <button className="btn-primary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={handleSaveProfile} disabled={savingProfile}>
+                      {savingProfile ? 'Saving…' : 'Save'}
+                    </button>
                     <button className="btn-outline" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setIsEditingProfile(false)}>Cancel</button>
                   </div>
                 </div>
@@ -221,14 +233,14 @@ export default function Settings() {
                   <h4 style={{ fontSize: '18px', fontWeight: '800' }}>{adminName}</h4>
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{adminEmail}</p>
                   <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Super Administrator • CleanConnect Platform</p>
-                  <button className="btn-outline" style={{ marginTop: '10px', padding: '5px 12px', fontSize: '11px' }} onClick={() => { setNameInput(adminName); setEmailInput(adminEmail); setIsEditingProfile(true); }}>
+                  <button className="btn-outline" style={{ marginTop: '10px', padding: '5px 12px', fontSize: '11px' }} onClick={() => { setNameInput(adminName); setIsEditingProfile(true); }}>
                     ✏️ Edit Profile
                   </button>
                 </>
               )}
             </div>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Click the avatar above to change your profile photo. Changes are saved locally.</p>
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Click the avatar above to change your profile photo.</p>
         </div>
 
         {/* ── Subscription Pricing Plans ── */}
@@ -268,7 +280,7 @@ export default function Settings() {
                       <td>
                         <div style={{ fontWeight: '800' }}>{plan.name}</div>
                         {plan.description && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{plan.description}</div>}
-                        {plan.isPayg && <span className="badge badge-pending" style={{ fontSize: '9px', marginTop: '4px' }}>PAY-AS-YOU-GO</span>}
+                        {plan.is_payg && <span className="badge badge-pending" style={{ fontSize: '9px', marginTop: '4px' }}>PAY-AS-YOU-GO</span>}
                       </td>
                       <td style={{ fontWeight: '600', textTransform: 'capitalize' }}>{plan.frequency || '—'}</td>
                       <td style={{ color: 'var(--color-success)', fontWeight: '700' }}>{priceLabel(plan, '120L')}</td>

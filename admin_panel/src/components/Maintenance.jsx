@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 const STATUS_OPTIONS = ['Active', 'In Service', 'Repair Needed'];
 
@@ -21,60 +10,59 @@ export default function Maintenance() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'vehicles'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setVehicles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('Vehicles listener:', err);
-        setLoading(false);
-      }
-    );
-    return () => unsub();
+    let mounted = true;
+
+    const fetchVehicles = async () => {
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (mounted && !error) setVehicles(data);
+      if (mounted) setLoading(false);
+      if (error) console.warn('Vehicles fetch:', error);
+    };
+    fetchVehicles();
+
+    const channel = supabase
+      .channel('vehicles_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, fetchVehicles)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleRegisterVehicle = async (e) => {
     e.preventDefault();
     setSaving(true);
     const formData = new FormData(e.target);
-    try {
-      await addDoc(collection(db, 'vehicles'), {
-        name: formData.get('name'),
-        type: formData.get('type'),
-        zone: formData.get('zone'),
-        status: 'Active',
-        load: 0,
-        createdAt: serverTimestamp(),
-      });
+    const { error } = await supabase.from('vehicles').insert({
+      name: formData.get('name'),
+      type: formData.get('type'),
+      zone: formData.get('zone'),
+      status: 'Active',
+      load: 0,
+    });
+    if (error) {
+      alert('Failed to register vehicle: ' + error.message);
+    } else {
       setShowAddModal(false);
       e.target.reset();
-    } catch (err) {
-      alert('Failed to register vehicle: ' + err.message);
     }
     setSaving(false);
   };
 
   const handleSetStatus = async (vehicleId, status) => {
-    try {
-      await updateDoc(doc(db, 'vehicles', vehicleId), {
-        status,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      alert('Failed to update status: ' + err.message);
-    }
+    const { error } = await supabase.from('vehicles').update({ status }).eq('id', vehicleId);
+    if (error) alert('Failed to update status: ' + error.message);
   };
 
   const handleRemoveVehicle = async (vehicleId) => {
     if (!window.confirm('Remove this fleet asset?')) return;
-    try {
-      await deleteDoc(doc(db, 'vehicles', vehicleId));
-    } catch (err) {
-      alert('Failed to remove vehicle: ' + err.message);
-    }
+    const { error } = await supabase.from('vehicles').delete().eq('id', vehicleId);
+    if (error) alert('Failed to remove vehicle: ' + error.message);
   };
 
   const displayId = (id) => `VH-${id.slice(0, 6).toUpperCase()}`;

@@ -73,9 +73,21 @@ export function AuthProvider({ children }) {
 
   const signOut = () => supabase.auth.signOut();
 
+  // Lets pages that edit the admin's own profile (Settings) pull the fresh
+  // row immediately, instead of waiting for the next sign-in to see it.
+  const refreshProfile = async () => {
+    if (!session?.user) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+    if (!error && data) setProfile(data);
+  };
+
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, authError, signIn, signOut, setAuthError }}
+      value={{ session, profile, loading, authError, signIn, signOut, setAuthError, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>
