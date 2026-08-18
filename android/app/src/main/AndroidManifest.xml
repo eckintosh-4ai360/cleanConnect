@@ -1,12 +1,33 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- Live rider tracking. COARSE is declared alongside FINE because Android 12+
+         lets the user grant only approximate location; geolocator still returns
+         fixes in that case, just with a larger accuracy radius. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- Keeps the GPS stream alive while the rider is mid-job and the app is
+         backgrounded (screen off, maps app in front). geolocator starts the
+         service itself when LocationSettings carries a foregroundNotificationConfig. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+
     <application
         android:label="clean_connect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- Injected from MAPS_API_KEY in android/local.properties (see build.gradle.kts).
+             Never hard-code the key here — local.properties is git-ignored. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -49,6 +70,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Lets url_launcher's canLaunchUrl() see the Google Maps app for handoff. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

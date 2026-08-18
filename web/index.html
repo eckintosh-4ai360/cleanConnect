@@ -31,6 +31,16 @@
 
   <title>clean_connect</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Google Maps JavaScript API — required by google_maps_flutter_web.
+    Replace YOUR_BROWSER_MAPS_API_KEY below with a *browser* key restricted by
+    HTTP referrer in Google Cloud Console. A web Maps key is public by nature
+    (it is fetched by the browser), so the referrer restriction is the actual
+    security boundary. Without a key the map renders as a grey box and the
+    console shows an InvalidKeyMapError.
+  -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_BROWSER_MAPS_API_KEY&loading=async&libraries=geometry"></script>
 </head>
 <body>
   <!--

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/entities/incident_report_entity.dart';
+import '../../domain/entities/pickup_tracking_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 
 /// Supabase (Postgres)-backed implementation of [CustomerRepository].
@@ -126,6 +127,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
     double originalAmount = 0.0,
     double discountAppliedPercentage = 0.0,
     double surchargeAppliedPercentage = 0.0,
+    double? locationLat,
+    double? locationLng,
   }) async {
     final receiptNumber =
         'PU-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 100000}';
@@ -142,9 +145,123 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'p_discount_applied_percentage': discountAppliedPercentage,
       'p_surcharge_applied_percentage': surchargeAppliedPercentage,
       'p_receipt_number': receiptNumber,
+      // Sent only when the device actually produced a fix. Omitting the keys
+      // (rather than passing nulls) lets schedule_pickup fall back to parsing
+      // coordinates out of the location text, which is where a saved bin's
+      // gps_location already puts them.
+      if (locationLat != null && locationLng != null) 'p_location_lat': locationLat,
+      if (locationLat != null && locationLng != null) 'p_location_lng': locationLng,
     });
 
     return _requestFromRow(row as Map<String, dynamic>);
+  }
+
+  // -- Live tracking --------------------------------------------------------
+
+  @override
+  Stream<PickupTrackingEntity?> watchPickupTracking(String requestId) {
+    return _db
+        .from('pickup_requests')
+        .stream(primaryKey: ['id'])
+        .eq('id', requestId)
+        .asyncMap((rows) async {
+          if (rows.isEmpty) return null;
+          return _trackingFromRow(rows.first);
+        });
+  }
+
+  @override
+  Stream<PickupTrackingEntity?> watchActivePickupTracking() {
+    // .stream() supports a single .eq(), so the status filter is applied in
+    // Dart. The customer's own request list is small, and doing it here keeps
+    // the Realtime subscription on the same channel the rest of the customer
+    // screens already use.
+    return _db
+        .from('pickup_requests')
+        .stream(primaryKey: ['id'])
+        .eq('customer_id', _uid)
+        .order('created_at', ascending: false)
+        .asyncMap((rows) async {
+          const liveStatuses = {'pending', 'accepted', 'assigned', 'confirmed'};
+          Map<String, dynamic>? best;
+          for (final row in rows) {
+            if (!liveStatuses.contains(row['status'] as String? ?? '')) continue;
+            // An assigned request outranks a still-pending one: that is the
+            // one with a rider to actually follow on the map.
+            if (best == null ||
+                (row['assigned_rider_id'] != null && best['assigned_rider_id'] == null)) {
+              best = row;
+            }
+          }
+          if (best == null) return null;
+          return _trackingFromRow(best);
+        });
+  }
+
+  @override
+  Future<void> setPickupDestination({
+    required String requestId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await _db.rpc('set_pickup_destination', params: {
+      'p_request_id': requestId,
+      'p_lat': latitude,
+      'p_lng': longitude,
+    });
+  }
+
+  /// Rider contact details are fetched through an RPC rather than a join --
+  /// customers have no select policy on `riders` or another user's `profiles`.
+  /// Cached per request id so a position update every few seconds does not
+  /// re-fetch a card that cannot have changed.
+  final Map<String, Map<String, dynamic>?> _riderCardCache = {};
+
+  Future<Map<String, dynamic>?> _riderCard(String requestId, String? riderId) async {
+    if (riderId == null) return null;
+    if (_riderCardCache.containsKey(requestId)) return _riderCardCache[requestId];
+
+    try {
+      final rows = await _db.rpc('get_pickup_rider_card', params: {
+        'p_request_id': requestId,
+      });
+      final list = (rows as List?) ?? const [];
+      final card = list.isEmpty ? null : list.first as Map<String, dynamic>;
+      _riderCardCache[requestId] = card;
+      return card;
+    } catch (_) {
+      // Contact details are a nicety; losing them must not blank the map.
+      return null;
+    }
+  }
+
+  Future<PickupTrackingEntity> _trackingFromRow(Map<String, dynamic> r) async {
+    final requestId = r['id'] as String;
+    final riderId = r['assigned_rider_id'] as String?;
+    final card = await _riderCard(requestId, riderId);
+
+    return PickupTrackingEntity(
+      requestId: requestId,
+      status: r['status'] as String? ?? 'pending',
+      location: r['location'] as String? ?? '',
+      destinationLat: (r['location_lat'] as num?)?.toDouble(),
+      destinationLng: (r['location_lng'] as num?)?.toDouble(),
+      riderId: riderId,
+      riderName: (card?['full_name'] as String?) ??
+          r['assigned_rider_name'] as String?,
+      riderPhone: card?['phone_number'] as String?,
+      riderPhotoUrl: card?['photo_url'] as String?,
+      vehicleType: card?['vehicle_type'] as String?,
+      riderRating: (card?['rating'] as num?)?.toDouble(),
+      riderLat: (r['rider_lat'] as num?)?.toDouble(),
+      riderLng: (r['rider_lng'] as num?)?.toDouble(),
+      riderHeading: (r['rider_heading'] as num?)?.toDouble(),
+      riderSpeed: (r['rider_speed'] as num?)?.toDouble(),
+      riderLocationUpdatedAt:
+          DateTime.tryParse(r['rider_location_updated_at']?.toString() ?? ''),
+      acceptedAt: DateTime.tryParse(r['accepted_at']?.toString() ?? ''),
+      completedAt: DateTime.tryParse(r['completed_at']?.toString() ?? ''),
+    );
   }
 
   PickupRequestEntity _requestFromRow(Map<String, dynamic> r) => PickupRequestEntity(

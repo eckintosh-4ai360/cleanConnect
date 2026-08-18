@@ -69,6 +69,26 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<!-- Keeps the CLLocationManager stream running while a rider is mid-job and
+		     the app is backgrounded. Requires the "Always" authorisation below. -->
+		<string>location</string>
+	</array>
+	<!-- Google Maps iOS SDK key, read by AppDelegate.swift at launch. An iOS Maps
+	     key always ships inside the binary, so restrict it to this bundle ID in
+	     Google Cloud Console rather than trying to hide it. Leave empty and the
+	     map tiles simply fail to load. -->
+	<key>GMSApiKey</key>
+	<string></string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CleanConnect uses your location to show you on the map, guide you to pickups, and let customers track their collection in real time.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>CleanConnect shares your location with dispatch and the customer while you are on an active pickup, including when the app is in the background.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>CleanConnect shares your location with dispatch and the customer while you are on an active pickup, including when the app is in the background.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>maps</string>
 	</array>
 </dict>
 </plist>

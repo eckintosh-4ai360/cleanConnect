@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import '../entities/customer_entities.dart';
 import '../entities/incident_report_entity.dart';
+import '../entities/pickup_tracking_entity.dart';
 
 abstract class CustomerRepository {
   Stream<List<BinEntity>> watchBins();
@@ -36,6 +37,23 @@ abstract class CustomerRepository {
     double originalAmount = 0.0,
     double discountAppliedPercentage = 0.0,
     double surchargeAppliedPercentage = 0.0,
+    double? locationLat,
+    double? locationLng,
+  });
+
+  /// Live position of the rider assigned to [requestId], updated over Realtime.
+  Stream<PickupTrackingEntity?> watchPickupTracking(String requestId);
+
+  /// The request the customer should currently be watching -- the one that is
+  /// accepted or in progress. Null when nothing is active.
+  Stream<PickupTrackingEntity?> watchActivePickupTracking();
+
+  /// Attaches coordinates to a request that was created without them, so the
+  /// tracking map has a destination to plot.
+  Future<void> setPickupDestination({
+    required String requestId,
+    required double latitude,
+    required double longitude,
   });
 
   Stream<List<ServiceRecordEntity>> watchServiceHistory();

@@ -58,3 +58,7 @@ functions/package-lock.json
 .claude/
 .agents/
 skills-lock.json
+
+# Google Maps / secrets
+admin_panel/.env
+admin_panel/.env.local

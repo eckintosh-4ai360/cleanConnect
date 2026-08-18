@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/entities/incident_report_entity.dart';
+import '../../domain/entities/pickup_tracking_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../../data/repositories/customer_repository_impl.dart';
 
@@ -73,6 +74,8 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
     double originalAmount = 0.0,
     double discountAppliedPercentage = 0.0,
     double surchargeAppliedPercentage = 0.0,
+    double? locationLat,
+    double? locationLng,
   }) async {
     await ref
         .read(customerRepositoryProvider)
@@ -87,7 +90,39 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
           originalAmount: originalAmount,
           discountAppliedPercentage: discountAppliedPercentage,
           surchargeAppliedPercentage: surchargeAppliedPercentage,
+          locationLat: locationLat,
+          locationLng: locationLng,
         );
+  }
+}
+
+/// Live rider position for one specific request -- what the tracking screen
+/// opened from a booking watches.
+@riverpod
+class PickupTracking extends _$PickupTracking {
+  @override
+  Stream<PickupTrackingEntity?> build(String requestId) {
+    return ref.watch(customerRepositoryProvider).watchPickupTracking(requestId);
+  }
+
+  /// Backfills coordinates on a legacy request whose location was a plain
+  /// address, once the tracking screen has geocoded it.
+  Future<void> setDestination(double latitude, double longitude) async {
+    await ref.read(customerRepositoryProvider).setPickupDestination(
+          requestId: requestId,
+          latitude: latitude,
+          longitude: longitude,
+        );
+  }
+}
+
+/// The request the customer should currently be tracking, if any. Backs the
+/// "Track your pickup" banner on the dashboard.
+@riverpod
+class ActivePickupTracking extends _$ActivePickupTracking {
+  @override
+  Stream<PickupTrackingEntity?> build() {
+    return ref.watch(customerRepositoryProvider).watchActivePickupTracking();
   }
 }
 
