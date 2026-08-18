@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  doc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  where,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
@@ -30,72 +19,59 @@ export default function Customers() {
   const criticalAccounts = customers.filter(c => (c.outstandingBalance ?? 0) > 0 && c.subscriptionStatus !== 'suspended').length;
   const activeClients = customers.filter(c => c.subscriptionStatus === 'active').length;
 
+  const mapCustomerRow = (c) => ({
+    id: c.id,
+    displayName: c.profiles?.full_name || 'Customer',
+    fullName: c.profiles?.full_name || 'Customer',
+    email: c.profiles?.email || '—',
+    phoneNumber: c.profiles?.phone_number || '—',
+    photoUrl: c.profiles?.profile_picture_url,
+    profilePhotoUrl: c.profiles?.profile_picture_url,
+    contractType: c.contract_type,
+    subscriptionPlan: c.subscription_plan_name,
+    subscriptionStatus: c.subscription_status,
+    outstandingBalance: c.outstanding_balance ?? 0,
+    paymentMethod: c.payment_method,
+  });
+
   useEffect(() => {
-    let custDocs = [];
-    let userDocs = [];
+    let mounted = true;
 
-    const updateCombined = () => {
-      const map = new Map();
-
-      userDocs.forEach((u) => {
-        const role = (u.role || '').toLowerCase();
-        if (role === 'customer' || role === '' || !u.role) {
-          map.set(u.id, {
-            id: u.id,
-            displayName: u.fullName || u.displayName || 'Customer',
-            fullName: u.fullName || u.displayName || 'Customer',
-            email: u.email || '—',
-            phoneNumber: u.phoneNumber || u.phone || '—',
-            contractType: u.contractType || 'Residential',
-            subscriptionPlan: u.subscriptionPlan || 'Weekly Plan',
-            subscriptionStatus: u.status || 'active',
-            outstandingBalance: u.outstandingBalance || 0,
-            ...u,
-          });
-        }
-      });
-
-      custDocs.forEach((c) => {
-        const existing = map.get(c.id) || {};
-        map.set(c.id, {
-          ...existing,
-          ...c,
-          displayName: c.displayName || c.fullName || existing.displayName || 'Customer',
-          fullName: c.fullName || c.displayName || existing.fullName || 'Customer',
-        });
-      });
-
-      const merged = Array.from(map.values());
-      setCustomers(merged);
-      if (merged.length > 0 && !selectedCustomer) {
-        setSelectedCustomer(merged[0]);
+    const fetchCustomers = async () => {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*, profiles(full_name, email, phone_number, profile_picture_url)');
+      if (mounted && !error) {
+        const merged = data.map(mapCustomerRow);
+        setCustomers(merged);
+        setSelectedCustomer((current) => current ?? merged[0] ?? null);
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
+      if (error) console.warn('Customers fetch:', error);
     };
+    fetchCustomers();
 
-    const unsubCust = onSnapshot(collection(db, 'customers'), (snap) => {
-      custDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      updateCombined();
-    }, (err) => {
-      console.warn('Customers listener:', err);
-      setLoading(false);
-    });
-
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      userDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      updateCombined();
-    }, (err) => {
-      console.warn('Users listener:', err);
-      setLoading(false);
-    });
+    const channel = supabase
+      .channel('customers_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, fetchCustomers)
+      .subscribe();
 
     return () => {
-      unsubCust();
-      unsubUsers();
+      mounted = false;
+      supabase.removeChannel(channel);
     };
   }, []);
 
-  // Listen to subcollections (bins & pickupRequests) for selected customer
+  // Keep selectedCustomer in sync with live updates to the customers list
+  useEffect(() => {
+    if (selectedCustomer) {
+      const updated = customers.find((c) => c.id === selectedCustomer.id);
+      if (updated) setSelectedCustomer(updated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers]);
+
+  // Watch bins & pickup requests for selected customer
   useEffect(() => {
     if (!selectedCustomer) {
       setCustomerBins([]);
@@ -103,64 +79,63 @@ export default function Customers() {
       return;
     }
 
-    const binsQ = query(collection(db, 'customers', selectedCustomer.id, 'bins'));
-    const unsubBins = onSnapshot(binsQ, (snap) => {
-      setCustomerBins(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => setCustomerBins([]));
+    let mounted = true;
 
-    const reqsQ = query(collection(db, 'customers', selectedCustomer.id, 'pickupRequests'), orderBy('createdAt', 'desc'));
-    const unsubReqs = onSnapshot(reqsQ, (snap) => {
-      setCustomerRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, () => setCustomerRequests([]));
+    const fetchBins = async () => {
+      const { data, error } = await supabase
+        .from('bins')
+        .select('*')
+        .eq('customer_id', selectedCustomer.id);
+      if (mounted && !error) setCustomerBins(data);
+    };
+    fetchBins();
+    const binsChannel = supabase
+      .channel(`customer_bins_${selectedCustomer.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bins', filter: `customer_id=eq.${selectedCustomer.id}` }, fetchBins)
+      .subscribe();
+
+    const fetchRequests = async () => {
+      const { data, error } = await supabase
+        .from('pickup_requests')
+        .select('*')
+        .eq('customer_id', selectedCustomer.id)
+        .order('created_at', { ascending: false });
+      if (mounted && !error) setCustomerRequests(data);
+    };
+    fetchRequests();
+    const requestsChannel = supabase
+      .channel(`customer_pickup_requests_${selectedCustomer.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests', filter: `customer_id=eq.${selectedCustomer.id}` }, fetchRequests)
+      .subscribe();
 
     return () => {
-      unsubBins();
-      unsubReqs();
+      mounted = false;
+      supabase.removeChannel(binsChannel);
+      supabase.removeChannel(requestsChannel);
     };
   }, [selectedCustomer?.id]);
-
-  // Keep selectedCustomer in sync with live updates
-  useEffect(() => {
-    if (selectedCustomer) {
-      const updated = customers.find(c => c.id === selectedCustomer.id);
-      if (updated) setSelectedCustomer(updated);
-    }
-  }, [customers]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleSuspendConfirm = async () => {
     if (!selectedCustomer) return;
     setActionLoading(true);
-    try {
-      await updateDoc(doc(db, 'customers', selectedCustomer.id), {
-        subscriptionStatus: 'suspended',
-        updatedAt: serverTimestamp(),
-      });
-      setShowSuspendModal(false);
-    } catch (err) {
-      alert('Failed to suspend: ' + err.message);
-    }
+    const { error } = await supabase
+      .from('customers')
+      .update({ subscription_status: 'suspended' })
+      .eq('id', selectedCustomer.id);
+    if (error) alert('Failed to suspend: ' + error.message);
+    else setShowSuspendModal(false);
     setActionLoading(false);
   };
 
   const handleSetCustomerStatus = async (status) => {
     if (!selectedCustomer) return;
     setActionLoading(true);
-    try {
-      await updateDoc(doc(db, 'customers', selectedCustomer.id), {
-        subscriptionStatus: status,
-        updatedAt: serverTimestamp(),
-      });
-      // Also sync users collection
-      try {
-        await updateDoc(doc(db, 'users', selectedCustomer.id), {
-          status,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (_) {}
-    } catch (err) {
-      alert('Failed to update customer status: ' + err.message);
-    }
+    const { error } = await supabase
+      .from('customers')
+      .update({ subscription_status: status })
+      .eq('id', selectedCustomer.id);
+    if (error) alert('Failed to update customer status: ' + error.message);
     setActionLoading(false);
   };
 
@@ -168,41 +143,35 @@ export default function Customers() {
     e.preventDefault();
     const form = new FormData(e.target);
     setActionLoading(true);
-    try {
-      await addDoc(collection(db, 'customers'), {
-        displayName: form.get('name'),
+    const { error } = await supabase.functions.invoke('admin-create-user', {
+      body: {
         email: form.get('email'),
+        fullName: form.get('name'),
         phoneNumber: form.get('phone'),
-        contractType: form.get('type'),
-        subscriptionPlan: 'Weekly Plan',
-        subscriptionFee: 0,
-        subscriptionStatus: 'active',
-        paymentMethod: 'Mobile Money',
-        outstandingBalance: 0,
-        createdAt: serverTimestamp(),
-      });
+        role: 'customer',
+        extra: { contract_type: form.get('type') },
+      },
+    });
+    if (error) {
+      alert('Failed to add customer: ' + error.message);
+    } else {
       setShowAddModal(false);
-    } catch (err) {
-      alert('Failed to add customer: ' + err.message);
+      alert('Customer account created — a password-setup email has been sent to them.');
     }
     setActionLoading(false);
   };
 
   const handleResendInvoice = async () => {
     if (!selectedCustomer) return;
-    // Log communication event in service history subcollection
-    try {
-      await addDoc(collection(db, 'customers', selectedCustomer.id, 'serviceHistory'), {
-        title: 'Invoice Resent',
-        type: 'payment',
-        date: serverTimestamp(),
-        status: 'pending',
-        amountPaid: selectedCustomer.outstandingBalance ?? 0,
-      });
-      alert('Invoice resent successfully!');
-    } catch {
-      alert('Could not log invoice resend.');
-    }
+    const { error } = await supabase.from('service_history').insert({
+      customer_id: selectedCustomer.id,
+      title: 'Invoice Resent',
+      type: 'payment',
+      status: 'pending',
+      amount_paid: selectedCustomer.outstandingBalance ?? 0,
+    });
+    if (error) alert('Could not log invoice resend.');
+    else alert('Invoice resent successfully!');
   };
 
   const handleUploadCustomerPhoto = async (e) => {
@@ -212,23 +181,12 @@ export default function Customers() {
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result;
-      try {
-        await updateDoc(doc(db, 'customers', selectedCustomer.id), {
-          photoUrl: dataUrl,
-          profilePhotoUrl: dataUrl,
-          updatedAt: serverTimestamp(),
-        });
-        try {
-          await updateDoc(doc(db, 'users', selectedCustomer.id), {
-            photoUrl: dataUrl,
-            profilePhotoUrl: dataUrl,
-            updatedAt: serverTimestamp(),
-          });
-        } catch (_) {}
-        alert('Customer photo updated successfully!');
-      } catch (err) {
-        alert('Failed to update photo: ' + err.message);
-      }
+      const { error } = await supabase
+        .from('profiles')
+        .update({ profile_picture_url: dataUrl })
+        .eq('id', selectedCustomer.id);
+      if (error) alert('Failed to update photo: ' + error.message);
+      else alert('Customer photo updated successfully!');
     };
     reader.readAsDataURL(file);
   };
@@ -400,9 +358,9 @@ export default function Customers() {
                       <div key={bin.id} style={{ background: 'var(--bg-app)', padding: '8px 10px', borderRadius: '6px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <strong style={{ textTransform: 'capitalize' }}>{bin.type} Bin</strong> ({bin.size})
-                          <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>S/N: {bin.serialNumber || '—'}</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>S/N: {bin.serial_number || '—'}</div>
                         </div>
-                        <span className="badge badge-active" style={{ fontSize: '9px' }}>{bin.scheduleFrequency || 'Active'}</span>
+                        <span className="badge badge-active" style={{ fontSize: '9px' }}>{bin.schedule_frequency || 'Active'}</span>
                       </div>
                     ))}
                   </div>
@@ -421,8 +379,8 @@ export default function Customers() {
                     {customerRequests.map((req) => (
                       <div key={req.id} style={{ background: 'var(--bg-app)', padding: '8px 10px', borderRadius: '6px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <strong>{Array.isArray(req.binTypes) ? req.binTypes.join(', ') : 'Waste'}</strong>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{req.location || 'Location specified'} ({req.timeSlot || 'Anytime'})</div>
+                          <strong>{Array.isArray(req.bin_types) ? req.bin_types.join(', ') : 'Waste'}</strong>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{req.location || 'Location specified'} ({req.time_slot || 'Anytime'})</div>
                         </div>
                         <span className={`badge ${req.status === 'pending' ? 'badge-pending' : 'badge-active'}`} style={{ fontSize: '9px' }}>
                           {req.status?.toUpperCase()}

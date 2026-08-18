@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { db } from '../firebase';
-import {
-  addDoc,
-  collection,
-  collectionGroup,
-  doc,
-  increment,
-  onSnapshot,
-  serverTimestamp,
-  updateDoc,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 const initialBinForm = {
   customerId: '',
@@ -41,9 +31,8 @@ function qrCodeUrl(serialNumber) {
 }
 
 function formatDate(value) {
-  const date = value?.toDate?.() || value;
-  if (!date) return 'Not recorded';
-  return new Date(date).toLocaleDateString();
+  if (!value) return 'Not recorded';
+  return new Date(value).toLocaleDateString();
 }
 
 function formatPercent(value) {
@@ -71,73 +60,58 @@ export default function Bins() {
   });
 
   useEffect(() => {
-    const unsubBins = onSnapshot(
-      collectionGroup(db, 'bins'),
-      (snap) => {
-        const items = snap.docs.map((d) => {
-          const customerRef = d.ref.parent.parent;
-          const data = d.data();
-          return {
-            id: d.id,
-            customerId: customerRef?.id || data.customerId || '',
-            path: d.ref.path,
-            ref: d.ref,
-            ...data,
-          };
-        });
-        setBins(
-          items.sort((a, b) => {
-            const bTime = b.registeredAt?.toMillis?.() || 0;
-            const aTime = a.registeredAt?.toMillis?.() || 0;
-            return bTime - aTime;
-          })
-        );
-      },
-      (err) => console.warn('Bins listener:', err)
-    );
+    let mounted = true;
 
-    const unsubRequests = onSnapshot(
-      collectionGroup(db, 'binRequests'),
-      (snap) => {
-        const items = snap.docs.map((d) => {
-          const customerRef = d.ref.parent.parent;
-          const data = d.data();
-          return {
-            id: d.id,
-            customerId: customerRef?.id || data.customerId || '',
-            path: d.ref.path,
-            ref: d.ref,
-            ...data,
-          };
-        });
-        setRequests(
-          items.sort((a, b) => {
-            const bTime = b.createdAt?.toMillis?.() || 0;
-            const aTime = a.createdAt?.toMillis?.() || 0;
-            return bTime - aTime;
-          })
-        );
-      },
-      (err) => console.warn('Bin requests listener:', err)
-    );
+    const fetchBins = async () => {
+      const { data, error } = await supabase
+        .from('bins')
+        .select('*')
+        .order('registered_at', { ascending: false });
+      if (mounted && !error) setBins(data);
+    };
+    fetchBins();
+    const binsChannel = supabase
+      .channel('bins_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bins' }, fetchBins)
+      .subscribe();
 
-    const unsubCustomers = onSnapshot(
-      collection(db, 'customers'),
-      (snap) => {
-        setCustomers(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-        );
-      },
-      (err) => console.warn('Customers for bins listener:', err)
-    );
+    const fetchRequests = async () => {
+      const { data, error } = await supabase
+        .from('bin_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (mounted && !error) setRequests(data);
+    };
+    fetchRequests();
+    const requestsChannel = supabase
+      .channel('bin_requests_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bin_requests' }, fetchRequests)
+      .subscribe();
+
+    const fetchCustomers = async () => {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, profiles(full_name, email)');
+      if (mounted && !error) {
+        setCustomers(data.map((c) => ({
+          id: c.id,
+          displayName: c.profiles?.full_name,
+          fullName: c.profiles?.full_name,
+          email: c.profiles?.email,
+        })));
+      }
+    };
+    fetchCustomers();
+    const customersChannel = supabase
+      .channel('bins_customers_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, fetchCustomers)
+      .subscribe();
 
     return () => {
-      unsubBins();
-      unsubRequests();
-      unsubCustomers();
+      mounted = false;
+      supabase.removeChannel(binsChannel);
+      supabase.removeChannel(requestsChannel);
+      supabase.removeChannel(customersChannel);
     };
   }, []);
 
@@ -171,68 +145,37 @@ export default function Bins() {
 
   const createBinForCustomer = async ({
     customerId,
-    customerName: suppliedCustomerName,
     type,
     size,
     ownership = 'company',
     gpsLocation = '',
     scheduleFrequency = 'Weekly',
-    requestRef = null,
     requestId = null,
   }) => {
     const serialNumber = generateSerialNumber(type);
-    const qrUrl = qrCodeUrl(serialNumber);
-    const name = customerName(customerId, suppliedCustomerName);
-
-    const binRef = await addDoc(collection(db, 'customers', customerId, 'bins'), {
-      serialNumber,
-      qrCodeData: serialNumber,
-      qrCodeUrl: qrUrl,
-      type,
-      size,
-      ownership,
-      status: 'active',
-      fillLevelPercentage: 0,
-      scheduleFrequency,
-      pickupDays: ['Monday'],
-      gpsLocation,
-      customerId,
-      customerName: name,
-      assignedFromRequestId: requestId,
-      registeredAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+    const { data, error } = await supabase.rpc('admin_create_bin', {
+      p_customer_id: customerId,
+      p_serial_number: serialNumber,
+      p_type: type,
+      p_size: size,
+      p_ownership: ownership,
+      p_gps_location: gpsLocation,
+      p_schedule_frequency: scheduleFrequency,
+      p_request_id: requestId,
     });
-
-    await updateDoc(doc(db, 'customers', customerId), {
-      registeredBinsCount: increment(1),
-      updatedAt: serverTimestamp(),
-    });
-
-    if (requestRef) {
-      await updateDoc(requestRef, {
-        status: 'assigned',
-        assignedBinId: binRef.id,
-        assignedSerialNumber: serialNumber,
-        qrCodeUrl: qrUrl,
-        assignedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    return { binId: binRef.id, serialNumber, qrUrl };
+    if (error) throw error;
+    return { binId: data.id, serialNumber, qrUrl: data.qr_code_url };
   };
 
   const handleAssignRequest = async (request) => {
     setActionLoading(true);
     try {
       const result = await createBinForCustomer({
-        customerId: request.customerId,
-        customerName: request.customerName,
+        customerId: request.customer_id,
         type: request.type || 'recycling',
         size: request.size || '240L',
         ownership: 'company',
-        gpsLocation: request.gpsLocation || '',
-        requestRef: request.ref,
+        gpsLocation: request.gps_location || '',
         requestId: request.id,
       });
       alert(`Bin assigned with serial number ${result.serialNumber}`);
@@ -265,24 +208,27 @@ export default function Bins() {
     setSelectedBin(bin);
     setEditForm({
       status: bin.status || 'active',
-      fillLevelPercentage: Math.round((bin.fillLevelPercentage || 0) * 100),
-      scheduleFrequency: bin.scheduleFrequency || 'Weekly',
+      fillLevelPercentage: Math.round((bin.fill_level_percentage || 0) * 100),
+      scheduleFrequency: bin.schedule_frequency || 'Weekly',
     });
     setShowEditModal(true);
   };
 
   const handleUpdateBin = async (e) => {
     e.preventDefault();
-    if (!selectedBin?.ref) return;
+    if (!selectedBin?.id) return;
 
     setActionLoading(true);
     try {
-      await updateDoc(selectedBin.ref, {
-        status: editForm.status,
-        fillLevelPercentage: Math.max(0, Math.min(100, Number(editForm.fillLevelPercentage))) / 100,
-        scheduleFrequency: editForm.scheduleFrequency,
-        updatedAt: serverTimestamp(),
-      });
+      const { error } = await supabase
+        .from('bins')
+        .update({
+          status: editForm.status,
+          fill_level_percentage: Math.max(0, Math.min(100, Number(editForm.fillLevelPercentage))) / 100,
+          schedule_frequency: editForm.scheduleFrequency,
+        })
+        .eq('id', selectedBin.id);
+      if (error) throw error;
       setShowEditModal(false);
     } catch (err) {
       alert(`Failed to update bin: ${err.message}`);
@@ -350,12 +296,12 @@ export default function Bins() {
                   </tr>
                 ) : (
                   pendingRequests.map((request) => (
-                    <tr key={request.path}>
-                      <td style={{ fontWeight: '700' }}>{customerName(request.customerId, request.customerName)}</td>
+                    <tr key={request.id}>
+                      <td style={{ fontWeight: '700' }}>{customerName(request.customer_id)}</td>
                       <td style={{ textTransform: 'capitalize' }}>{request.type || 'recycling'}</td>
                       <td>{request.size || '240L'}</td>
-                      <td>{request.gpsLocation || 'Not provided'}</td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{formatDate(request.createdAt)}</td>
+                      <td>{request.gps_location || 'Not provided'}</td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{formatDate(request.created_at)}</td>
                       <td>
                         <button
                           className="btn-primary"
@@ -379,16 +325,16 @@ export default function Bins() {
           {selectedBin ? (
             <>
               <div style={{ background: 'white', padding: '16px', borderRadius: '8px', width: 'fit-content' }}>
-                <img src={selectedBin.qrCodeUrl || qrCodeUrl(selectedBin.serialNumber)} alt={selectedBin.serialNumber} width="160" height="160" />
+                <img src={selectedBin.qr_code_url || qrCodeUrl(selectedBin.serial_number)} alt={selectedBin.serial_number} width="160" height="160" />
               </div>
               <div>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: '800' }}>Serial Number</span>
-                <p style={{ fontSize: '16px', fontWeight: '900', marginTop: '4px' }}>{selectedBin.serialNumber}</p>
+                <p style={{ fontSize: '16px', fontWeight: '900', marginTop: '4px' }}>{selectedBin.serial_number}</p>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                {capitalize(selectedBin.type)} bin assigned to {customerName(selectedBin.customerId, selectedBin.customerName)}.
+                {capitalize(selectedBin.type)} bin assigned to {customerName(selectedBin.customer_id)}.
               </div>
-              <button className="btn-outline" onClick={() => navigator.clipboard?.writeText(selectedBin.serialNumber)}>
+              <button className="btn-outline" onClick={() => navigator.clipboard?.writeText(selectedBin.serial_number)}>
                 Copy Serial
               </button>
             </>
@@ -426,26 +372,26 @@ export default function Bins() {
               ) : (
                 bins.map((bin) => (
                   <tr
-                    key={bin.path}
+                    key={bin.id}
                     onClick={() => setSelectedBin(bin)}
-                    style={{ cursor: 'pointer', background: selectedBin?.path === bin.path ? 'var(--border-divider)' : 'transparent' }}
+                    style={{ cursor: 'pointer', background: selectedBin?.id === bin.id ? 'var(--border-divider)' : 'transparent' }}
                   >
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <img
-                          src={bin.qrCodeUrl || qrCodeUrl(bin.serialNumber)}
-                          alt={bin.serialNumber}
+                          src={bin.qr_code_url || qrCodeUrl(bin.serial_number)}
+                          alt={bin.serial_number}
                           width="44"
                           height="44"
                           style={{ background: 'white', padding: '4px', borderRadius: '6px' }}
                         />
-                        <strong>{bin.serialNumber || 'No serial'}</strong>
+                        <strong>{bin.serial_number || 'No serial'}</strong>
                       </div>
                     </td>
-                    <td>{customerName(bin.customerId, bin.customerName)}</td>
+                    <td>{customerName(bin.customer_id)}</td>
                     <td style={{ textTransform: 'capitalize' }}>{bin.type} ({bin.size})</td>
                     <td style={{ textTransform: 'capitalize' }}>{bin.ownership || 'company'}</td>
-                    <td>{formatPercent(bin.fillLevelPercentage)}</td>
+                    <td>{formatPercent(bin.fill_level_percentage)}</td>
                     <td>
                       <span className={`badge ${
                         bin.status === 'maintenance' ? 'badge-pending'
@@ -455,7 +401,7 @@ export default function Bins() {
                         {(bin.status || 'active').toUpperCase()}
                       </span>
                     </td>
-                    <td>{formatDate(bin.registeredAt)}</td>
+                    <td>{formatDate(bin.registered_at)}</td>
                     <td>
                       <button
                         className="btn-outline"
@@ -544,11 +490,11 @@ export default function Bins() {
           <div className="modal-content">
             <h3 style={{ fontSize: '18px' }}>Manage Bin</h3>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'center', background: 'var(--bg-app)', padding: '12px', borderRadius: '8px' }}>
-              <img src={selectedBin.qrCodeUrl || qrCodeUrl(selectedBin.serialNumber)} alt={selectedBin.serialNumber} width="72" height="72" style={{ background: 'white', padding: '6px', borderRadius: '8px' }} />
+              <img src={selectedBin.qr_code_url || qrCodeUrl(selectedBin.serial_number)} alt={selectedBin.serial_number} width="72" height="72" style={{ background: 'white', padding: '6px', borderRadius: '8px' }} />
               <div>
-                <strong>{selectedBin.serialNumber}</strong>
+                <strong>{selectedBin.serial_number}</strong>
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  {capitalize(selectedBin.type)} bin for {customerName(selectedBin.customerId, selectedBin.customerName)}
+                  {capitalize(selectedBin.type)} bin for {customerName(selectedBin.customer_id)}
                 </p>
               </div>
             </div>
