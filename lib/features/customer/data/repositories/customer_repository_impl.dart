@@ -1,58 +1,40 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/entities/incident_report_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 
-/// Firestore-backed implementation of [CustomerRepository].
-/// All data is scoped to the currently authenticated user's UID.
-/// NOTE: still Firestore-backed pending the Phase 4 migration to Postgres —
-/// only the current-user source below has moved to Supabase Auth.
+/// Supabase (Postgres)-backed implementation of [CustomerRepository].
+/// All data is scoped to the currently authenticated user's id via RLS.
 class CustomerRepositoryImpl implements CustomerRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  SupabaseClient get _db => Supabase.instance.client;
+  GoTrueClient get _auth => _db.auth;
   final Random _random = Random();
-  GoTrueClient get _auth => Supabase.instance.client.auth;
 
   String get _uid => _auth.currentUser?.id ?? '';
 
-  CollectionReference get _binsRef =>
-      _db.collection('customers').doc(_uid).collection('bins');
-
-  CollectionReference get _requestsRef =>
-      _db.collection('customers').doc(_uid).collection('pickupRequests');
-
-  CollectionReference get _binRequestsRef =>
-      _db.collection('customers').doc(_uid).collection('binRequests');
-
-  CollectionReference get _historyRef =>
-      _db.collection('customers').doc(_uid).collection('serviceHistory');
-
-  CollectionReference get _incidentReportsRef =>
-      _db.collection('customers').doc(_uid).collection('incidentReports');
-
-  DocumentReference get _customerRef => _db.collection('customers').doc(_uid);
-
-  // ── Bins
+  // ── Bins ─────────────────────────────────────────────────────────────────
 
   @override
   Stream<List<BinEntity>> watchBins() {
-    return _binsRef
-        .orderBy('registeredAt', descending: false)
-        .snapshots()
-        .map((snap) => snap.docs.map(_binFromDoc).toList());
+    return _db
+        .from('bins')
+        .stream(primaryKey: ['id'])
+        .eq('customer_id', _uid)
+        .order('registered_at')
+        .map((rows) => rows.map(_binFromRow).toList());
   }
 
   @override
   Future<List<BinEntity>> getBins() async {
-    final snap = await _binsRef
-        .orderBy('registeredAt', descending: false)
-        .get();
-    return snap.docs.map(_binFromDoc).toList();
+    final rows = await _db
+        .from('bins')
+        .select()
+        .eq('customer_id', _uid)
+        .order('registered_at');
+    return (rows as List).map((r) => _binFromRow(r as Map<String, dynamic>)).toList();
   }
 
   @override
@@ -65,76 +47,16 @@ class CustomerRepositoryImpl implements CustomerRepository {
     String? photoPath,
   }) async {
     final serialNumber = _generatePersonalBinSerial();
-    final custDoc = await _customerRef.get();
-    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
-    final name =
-        _auth.currentUser?.userMetadata?['full_name'] as String? ??
-        custData['displayName'] ??
-        custData['fullName'] ??
-        'Customer';
-
-    final data = {
-      'serialNumber': serialNumber,
-      'type': type,
-      'size': size,
-      'ownership': 'personal',
-      'status': 'active',
-      'fillLevelPercentage': 0.0,
-      'scheduleFrequency': frequency,
-      'pickupDays': pickupDays,
-      'gpsLocation': gpsLocation,
-      'verificationPhotoUrl': photoPath,
-      'customerId': _uid,
-      'customerName': name,
-      'registeredAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    final docRef = await _binsRef.add(data);
-
-    // Upsert customer profile document in 'customers' collection so Admin Panel sees it
-    try {
-      final email = _auth.currentUser?.email ?? custData['email'] ?? '';
-
-      await _customerRef.set({
-        'displayName': name,
-        'fullName': name,
-        'email': email,
-        'phoneNumber':
-            custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '',
-        'contractType': 'Residential',
-        'subscriptionPlan': '$frequency Plan',
-        'subscriptionFee': 50.0,
-        'subscriptionStatus': 'active',
-        'paymentMethod': 'Mobile Money',
-        'outstandingBalance': 0.0,
-        'registeredBinsCount': FieldValue.increment(1),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // Push real-time notification to admin_notifications
-      await _db.collection('admin_notifications').add({
-        'title': 'New Bin Registered',
-        'message': '$name registered a $size $type bin.',
-        'type': 'bin_registered',
-        'customerId': _uid,
-        'customerName': name,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-
-    return BinEntity(
-      id: docRef.id,
-      serialNumber: serialNumber,
-      type: type,
-      size: size,
-      fillLevelPercentage: 0.0,
-      scheduleFrequency: frequency,
-      pickupDays: pickupDays,
-      verificationPhotoUrl: photoPath,
-      registeredDate: DateTime.now(),
-    );
+    final row = await _db.rpc('register_bin', params: {
+      'p_serial_number': serialNumber,
+      'p_type': type,
+      'p_size': size,
+      'p_frequency': frequency,
+      'p_pickup_days': pickupDays,
+      'p_gps_location': gpsLocation,
+      'p_photo_path': photoPath,
+    });
+    return _binFromRow(row as Map<String, dynamic>);
   }
 
   @override
@@ -143,49 +65,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String size,
     required String gpsLocation,
   }) async {
-    final custDoc = await _customerRef.get();
-    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
-    final name =
-        _auth.currentUser?.userMetadata?['full_name'] as String? ??
-        custData['displayName'] ??
-        custData['fullName'] ??
-        'Customer';
-    final email = _auth.currentUser?.email ?? custData['email'] ?? '';
-
-    final data = {
-      'type': type,
-      'size': size,
-      'gpsLocation': gpsLocation,
-      'status': 'pending',
-      'requestType': 'company_bin',
-      'customerId': _uid,
-      'customerName': name,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-
-    final requestRef = await _binRequestsRef.add(data);
-
-    await _customerRef.set({
-      'displayName': name,
-      'fullName': name,
-      'email': email,
-      'phoneNumber':
-          custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '',
-      'pendingBinRequestsCount': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    await _db.collection('admin_notifications').add({
-      'title': 'New Bin Requested',
-      'message':
-          '$name requested a company-owned $size $type bin. Admin should assign a bin with a serial number.',
-      'type': 'bin_requested',
-      'customerId': _uid,
-      'customerName': name,
-      'requestId': requestRef.id,
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
+    await _db.rpc('request_company_bin', params: {
+      'p_type': type,
+      'p_size': size,
+      'p_gps_location': gpsLocation,
     });
   }
 
@@ -195,41 +78,40 @@ class CustomerRepositoryImpl implements CustomerRepository {
     return 'PB-${timestamp.toRadixString(36).toUpperCase()}-$suffix';
   }
 
-  BinEntity _binFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return BinEntity(
-      id: doc.id,
-      serialNumber: d['serialNumber'] as String? ?? '',
-      type: d['type'] as String? ?? 'general',
-      size: d['size'] as String? ?? '240L',
-      fillLevelPercentage:
-          (d['fillLevelPercentage'] as num?)?.toDouble() ?? 0.0,
-      scheduleFrequency: d['scheduleFrequency'] as String?,
-      pickupDays: (d['pickupDays'] as List<dynamic>?)?.cast<String>(),
-      gpsLocation: d['gpsLocation'] as String?,
-      verificationPhotoUrl: d['verificationPhotoUrl'] as String?,
-      registeredDate: d['registeredAt'] is Timestamp
-          ? (d['registeredAt'] as Timestamp).toDate()
-          : DateTime.now(),
-    );
-  }
+  BinEntity _binFromRow(Map<String, dynamic> r) => BinEntity(
+        id: r['id'] as String,
+        serialNumber: r['serial_number'] as String? ?? '',
+        type: r['type'] as String? ?? 'general',
+        size: r['size'] as String? ?? '240L',
+        fillLevelPercentage: (r['fill_level_percentage'] as num?)?.toDouble() ?? 0.0,
+        scheduleFrequency: r['schedule_frequency'] as String?,
+        pickupDays: (r['pickup_days'] as List<dynamic>?)?.cast<String>(),
+        gpsLocation: r['gps_location'] as String?,
+        verificationPhotoUrl: r['verification_photo_url'] as String?,
+        registeredDate:
+            DateTime.tryParse(r['registered_at']?.toString() ?? '') ?? DateTime.now(),
+      );
 
-  // ── Pickup Requests ───────────────────────────────────────────────────────
+  // ── Pickup Requests ──────────────────────────────────────────────────────
 
   @override
   Stream<List<PickupRequestEntity>> watchPickupRequests() {
-    return _requestsRef
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(_requestFromDoc).toList());
+    return _db
+        .from('pickup_requests')
+        .stream(primaryKey: ['id'])
+        .eq('customer_id', _uid)
+        .order('created_at', ascending: false)
+        .map((rows) => rows.map(_requestFromRow).toList());
   }
 
   @override
   Future<List<PickupRequestEntity>> getPickupRequests() async {
-    final snap = await _requestsRef
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs.map(_requestFromDoc).toList();
+    final rows = await _db
+        .from('pickup_requests')
+        .select()
+        .eq('customer_id', _uid)
+        .order('created_at', ascending: false);
+    return (rows as List).map((r) => _requestFromRow(r as Map<String, dynamic>)).toList();
   }
 
   @override
@@ -245,238 +127,149 @@ class CustomerRepositoryImpl implements CustomerRepository {
     double discountAppliedPercentage = 0.0,
     double surchargeAppliedPercentage = 0.0,
   }) async {
-    final custDoc = await _customerRef.get();
-    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
-    final name =
-        _auth.currentUser?.userMetadata?['full_name'] as String? ??
-        custData['displayName'] ??
-        custData['fullName'] ??
-        'Customer';
-    final email = _auth.currentUser?.email ?? custData['email'] ?? '';
+    final receiptNumber =
+        'PU-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 100000}';
 
-    final data = {
-      'binTypes': binTypes,
-      'date': Timestamp.fromDate(date),
-      'timeSlot': timeSlot,
-      'location': location,
-      'instructions': instructions,
-      'status': 'pending',
-      'paymentStatus': 'paid',
-      'amountPaid': amountPaid,
-      'originalAmount': originalAmount > 0 ? originalAmount : amountPaid,
-      'discountAppliedPercentage': discountAppliedPercentage,
-      'surchargeAppliedPercentage': surchargeAppliedPercentage,
-      'paymentMethod': paymentMethod,
-      'paidAt': FieldValue.serverTimestamp(),
-      'customerId': _uid,
-      'customerName': name,
-      'createdAt': FieldValue.serverTimestamp(),
-    };
-    final docRef = await _requestsRef.add(data);
+    final row = await _db.rpc('schedule_pickup', params: {
+      'p_bin_types': binTypes,
+      'p_date': date.toIso8601String(),
+      'p_time_slot': timeSlot,
+      'p_location': location,
+      'p_amount_paid': amountPaid,
+      'p_payment_method': paymentMethod,
+      'p_instructions': instructions,
+      'p_original_amount': originalAmount,
+      'p_discount_applied_percentage': discountAppliedPercentage,
+      'p_surcharge_applied_percentage': surchargeAppliedPercentage,
+      'p_receipt_number': receiptNumber,
+    });
 
-    try {
-      // 1. Also add to root 'pickupRequests' collection for Admin Panel overview
-      await _db.collection('pickupRequests').doc(docRef.id).set({
-        ...data,
-        'id': docRef.id,
-      });
-
-      await _historyRef.add({
-        'title': discountAppliedPercentage > 0
-            ? 'Pickup Payment (${discountAppliedPercentage.toInt()}% Delay Bonus Applied)'
-            : 'Pickup Request Payment',
-        'type': 'payment',
-        'date': FieldValue.serverTimestamp(),
-        'status': 'completed',
-        'amountPaid': amountPaid,
-        'paymentMethod': paymentMethod,
-        'receiptNumber':
-            'PU-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 100000}',
-        'pickupRequestId': docRef.id,
-      });
-
-      // 2. Upsert customer profile in 'customers' collection & reset delay bonus if used
-      await _customerRef.set({
-        'displayName': name,
-        'fullName': name,
-        'email': email,
-        'phoneNumber':
-            custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '',
-        'contractType': 'Residential',
-        'subscriptionPlan': 'Weekly Plan',
-        'subscriptionFee': 50.0,
-        'subscriptionStatus': 'active',
-        'paymentMethod': paymentMethod,
-        'activeRequestsCount': FieldValue.increment(1),
-        'lastPickupRequestDate': FieldValue.serverTimestamp(),
-        'nextPickupDate': Timestamp.fromDate(date),
-        'nextPickupTimeSlot': timeSlot,
-        'nextPickupBinTypes': binTypes,
-        if (discountAppliedPercentage > 0) 'delayBonusRedeemedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // 3. Add real-time notification to admin_notifications
-      await _db.collection('admin_notifications').add({
-        'title': 'Pickup Requested',
-        'message':
-            '$name paid GHS ${amountPaid.toStringAsFixed(2)}${discountAppliedPercentage > 0 ? " (with ${discountAppliedPercentage.toInt()}% Delay Bonus)" : ""} and requested pickup for ${binTypes.join(", ")} ($timeSlot at $location).',
-        'type': 'pickup_requested',
-        'customerId': _uid,
-        'customerName': name,
-        'requestId': docRef.id,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-
-    return PickupRequestEntity(
-      id: docRef.id,
-      binTypes: binTypes,
-      date: date,
-      timeSlot: timeSlot,
-      location: location,
-      instructions: instructions,
-      status: 'pending',
-      amountPaid: amountPaid,
-      originalAmount: originalAmount > 0 ? originalAmount : amountPaid,
-      discountAppliedPercentage: discountAppliedPercentage,
-      surchargeAppliedPercentage: surchargeAppliedPercentage,
-    );
+    return _requestFromRow(row as Map<String, dynamic>);
   }
 
-  PickupRequestEntity _requestFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return PickupRequestEntity(
-      id: doc.id,
-      binTypes: (d['binTypes'] as List<dynamic>?)?.cast<String>() ?? [],
-      date: d['date'] is Timestamp
-          ? (d['date'] as Timestamp).toDate()
-          : DateTime.now(),
-      timeSlot: d['timeSlot'] as String? ?? '',
-      location: d['location'] as String? ?? '',
-      instructions: d['instructions'] as String?,
-      status: d['status'] as String? ?? 'pending',
-      amountPaid: (d['amountPaid'] as num?)?.toDouble() ?? 0.0,
-      originalAmount: (d['originalAmount'] as num?)?.toDouble() ?? 0.0,
-      discountAppliedPercentage:
-          (d['discountAppliedPercentage'] as num?)?.toDouble() ?? 0.0,
-      surchargeAppliedPercentage:
-          (d['surchargeAppliedPercentage'] as num?)?.toDouble() ?? 0.0,
-    );
-  }
+  PickupRequestEntity _requestFromRow(Map<String, dynamic> r) => PickupRequestEntity(
+        id: r['id'] as String,
+        binTypes: (r['bin_types'] as List<dynamic>?)?.cast<String>() ?? [],
+        date: DateTime.tryParse(r['date']?.toString() ?? '') ?? DateTime.now(),
+        timeSlot: r['time_slot'] as String? ?? '',
+        location: r['location'] as String? ?? '',
+        instructions: r['instructions'] as String?,
+        status: r['status'] as String? ?? 'pending',
+        amountPaid: (r['amount_paid'] as num?)?.toDouble() ?? 0.0,
+        originalAmount: (r['original_amount'] as num?)?.toDouble() ?? 0.0,
+        discountAppliedPercentage:
+            (r['discount_applied_percentage'] as num?)?.toDouble() ?? 0.0,
+        surchargeAppliedPercentage:
+            (r['surcharge_applied_percentage'] as num?)?.toDouble() ?? 0.0,
+      );
 
-  // ── Service History ───────────────────────────────────────────────────────
+  // ── Service History ──────────────────────────────────────────────────────
 
   @override
   Stream<List<ServiceRecordEntity>> watchServiceHistory() {
-    return _historyRef
-        .orderBy('date', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(_recordFromDoc).toList());
+    return _db
+        .from('service_history')
+        .stream(primaryKey: ['id'])
+        .eq('customer_id', _uid)
+        .order('date', ascending: false)
+        .map((rows) => rows.map(_recordFromRow).toList());
   }
 
   @override
   Future<List<ServiceRecordEntity>> getServiceHistory() async {
-    final snap = await _historyRef.orderBy('date', descending: true).get();
-    return snap.docs.map(_recordFromDoc).toList();
+    final rows = await _db
+        .from('service_history')
+        .select()
+        .eq('customer_id', _uid)
+        .order('date', ascending: false);
+    return (rows as List).map((r) => _recordFromRow(r as Map<String, dynamic>)).toList();
   }
 
-  ServiceRecordEntity _recordFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return ServiceRecordEntity(
-      id: doc.id,
-      title: d['title'] as String? ?? 'Service Record',
-      type: d['type'] as String? ?? 'collection',
-      date: d['date'] is Timestamp
-          ? (d['date'] as Timestamp).toDate()
-          : DateTime.now(),
-      status: d['status'] as String? ?? 'completed',
-      weightKg: (d['weightKg'] as num?)?.toDouble(),
-      co2OffsetKg: (d['co2OffsetKg'] as num?)?.toDouble(),
-      compositionPercentages: d['compositionPercentages'] != null
-          ? Map<String, double>.from(
-              (d['compositionPercentages'] as Map).map(
-                (k, v) => MapEntry(k as String, (v as num).toDouble()),
-              ),
-            )
-          : null,
-      amountPaid: (d['amountPaid'] as num?)?.toDouble() ?? 0.0,
-      receiptNumber: d['receiptNumber'] as String?,
-      paymentMethod: d['paymentMethod'] as String?,
-    );
-  }
+  ServiceRecordEntity _recordFromRow(Map<String, dynamic> r) => ServiceRecordEntity(
+        id: r['id'] as String,
+        title: r['title'] as String? ?? 'Service Record',
+        type: r['type'] as String? ?? 'collection',
+        date: DateTime.tryParse(r['date']?.toString() ?? '') ?? DateTime.now(),
+        status: r['status'] as String? ?? 'completed',
+        weightKg: (r['weight_kg'] as num?)?.toDouble(),
+        co2OffsetKg: (r['co2_offset_kg'] as num?)?.toDouble(),
+        compositionPercentages: r['composition_percentages'] != null
+            ? Map<String, double>.from(
+                (r['composition_percentages'] as Map).map(
+                  (k, v) => MapEntry(k as String, (v as num).toDouble()),
+                ),
+              )
+            : null,
+        amountPaid: (r['amount_paid'] as num?)?.toDouble() ?? 0.0,
+        receiptNumber: r['receipt_number'] as String?,
+        paymentMethod: r['payment_method'] as String?,
+      );
 
   // ── Subscription ─────────────────────────────────────────────────────────
 
   @override
   Stream<SubscriptionEntity> watchSubscription() {
-    return _customerRef.snapshots().map((doc) {
-      if (!doc.exists) return _defaultSubscription();
-      return _subscriptionFromDoc(doc);
-    });
+    return _db
+        .from('customers')
+        .stream(primaryKey: ['id'])
+        .eq('id', _uid)
+        .map((rows) => rows.isEmpty ? _defaultSubscription() : _subscriptionFromRow(rows.first));
   }
 
   @override
   Future<SubscriptionEntity> getSubscription() async {
-    final doc = await _customerRef.get();
-    if (!doc.exists) return _defaultSubscription();
-    return _subscriptionFromDoc(doc);
+    final row = await _db.from('customers').select().eq('id', _uid).maybeSingle();
+    if (row == null) return _defaultSubscription();
+    return _subscriptionFromRow(row);
   }
 
-  SubscriptionEntity _subscriptionFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return SubscriptionEntity(
-      currentPlan: d['subscriptionPlan'] as String? ?? 'Weekly Plan',
-      fee: (d['subscriptionFee'] as num?)?.toDouble() ?? 0.0,
-      status: d['subscriptionStatus'] as String? ?? 'active',
-      paymentMethod: d['paymentMethod'] as String? ?? 'Mobile Money',
-      outstandingBalance: (d['outstandingBalance'] as num?)?.toDouble() ?? 0.0,
-      nextPickupDate: d['nextPickupDate'] is Timestamp
-          ? (d['nextPickupDate'] as Timestamp).toDate()
-          : null,
-      nextPickupTimeSlot: d['nextPickupTimeSlot'] as String?,
-      nextPickupBinTypes:
-          (d['nextPickupBinTypes'] as List<dynamic>?)?.cast<String>(),
-      delayBonusAvailable: d['delayBonusAvailable'] as bool? ?? false,
-      lastPickupCompletedAt: d['lastPickupCompletedAt'] is Timestamp
-          ? (d['lastPickupCompletedAt'] as Timestamp).toDate()
-          : null,
-    );
-  }
+  SubscriptionEntity _subscriptionFromRow(Map<String, dynamic> r) => SubscriptionEntity(
+        currentPlan: r['subscription_plan_name'] as String? ?? 'Weekly Plan',
+        fee: (r['subscription_fee'] as num?)?.toDouble() ?? 0.0,
+        status: r['subscription_status'] as String? ?? 'active',
+        paymentMethod: r['payment_method'] as String? ?? 'Mobile Money',
+        outstandingBalance: (r['outstanding_balance'] as num?)?.toDouble() ?? 0.0,
+        nextPickupDate: r['next_pickup_date'] != null
+            ? DateTime.tryParse(r['next_pickup_date'].toString())
+            : null,
+        nextPickupTimeSlot: r['next_pickup_time_slot'] as String?,
+        nextPickupBinTypes: (r['next_pickup_bin_types'] as List<dynamic>?)?.cast<String>(),
+        delayBonusAvailable: r['delay_bonus_available'] as bool? ?? false,
+        lastPickupCompletedAt: r['last_pickup_completed_at'] != null
+            ? DateTime.tryParse(r['last_pickup_completed_at'].toString())
+            : null,
+      );
+
+  SubscriptionEntity _defaultSubscription() => const SubscriptionEntity(
+        currentPlan: 'Weekly Plan',
+        fee: 0.0,
+        status: 'active',
+        paymentMethod: 'Mobile Money',
+        outstandingBalance: 0.0,
+      );
 
   @override
   Stream<List<PricingPlanEntity>> watchPricingPlans() {
     return _db
-        .collection('pricingPlans')
-        .orderBy('createdAt', descending: false)
-        .snapshots()
-        .map((snap) => snap.docs.map((doc) {
-              final d = doc.data();
-              final rawPrices = d['prices'] as Map<String, dynamic>? ?? {};
-              final pricesMap = <String, double>{};
-              rawPrices.forEach((k, v) {
-                pricesMap[k] = (v as num).toDouble();
-              });
-              return PricingPlanEntity(
-                id: doc.id,
-                name: d['name'] as String? ?? '',
-                frequency: d['frequency'] as String? ?? 'Weekly',
-                description: d['description'] as String? ?? '',
-                isPayg: d['isPayg'] as bool? ?? false,
-                prices: pricesMap,
-              );
-            }).toList());
+        .from('pricing_plans')
+        .stream(primaryKey: ['id'])
+        .order('created_at')
+        .map((rows) => rows.map(_pricingPlanFromRow).toList());
   }
 
-  SubscriptionEntity _defaultSubscription() => const SubscriptionEntity(
-    currentPlan: 'Weekly Plan',
-    fee: 0.0,
-    status: 'active',
-    paymentMethod: 'Mobile Money',
-    outstandingBalance: 0.0,
-  );
+  PricingPlanEntity _pricingPlanFromRow(Map<String, dynamic> r) {
+    final rawPrices = r['prices'] as Map<String, dynamic>? ?? {};
+    final pricesMap = <String, double>{};
+    rawPrices.forEach((k, v) => pricesMap[k] = (v as num).toDouble());
+    return PricingPlanEntity(
+      id: r['id'] as String,
+      name: r['name'] as String? ?? '',
+      frequency: r['frequency'] as String? ?? 'Weekly',
+      description: r['description'] as String? ?? '',
+      isPayg: r['is_payg'] as bool? ?? false,
+      prices: pricesMap,
+    );
+  }
 
   @override
   Future<SubscriptionEntity> updateSubscription({
@@ -484,37 +277,20 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required double fee,
     required String paymentMethod,
   }) async {
-    await _customerRef.set({
-      'subscriptionPlan': newPlan,
-      'subscriptionFee': fee,
-      'paymentMethod': paymentMethod,
-      'subscriptionStatus': 'active',
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _db.from('customers').update({
+      'subscription_plan_name': newPlan,
+      'subscription_fee': fee,
+      'payment_method': paymentMethod,
+      'subscription_status': 'active',
+    }).eq('id', _uid);
     return getSubscription();
   }
 
   @override
   Future<void> payOutstandingBalance() async {
-    final current = await getSubscription();
-    final amountPaid = current.outstandingBalance;
-
-    // Atomic: zero the balance + add service history record
-    final batch = _db.batch();
-    batch.set(_customerRef, {
-      'outstandingBalance': 0.0,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    batch.set(_historyRef.doc(), {
-      'title': 'Outstanding Balance Payment',
-      'type': 'payment',
-      'date': FieldValue.serverTimestamp(),
-      'status': 'completed',
-      'amountPaid': amountPaid,
-      'receiptNumber':
-          'REC-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 10000}',
-    });
-    await batch.commit();
+    final receiptNumber =
+        'REC-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    await _db.rpc('pay_outstanding_balance', params: {'p_receipt_number': receiptNumber});
   }
 
   @override
@@ -522,12 +298,12 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String category,
     required String description,
   }) async {
-    await _historyRef.add({
+    await _db.from('service_history').insert({
+      'customer_id': _uid,
       'title': 'Support Ticket: $category',
       'type': 'support',
-      'date': FieldValue.serverTimestamp(),
       'status': 'pending',
-      'amountPaid': 0.0,
+      'amount_paid': 0.0,
       'description': description,
     });
   }
@@ -536,10 +312,12 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
   @override
   Stream<List<IncidentReportEntity>> watchIncidentReports() {
-    return _incidentReportsRef
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs.map(_incidentReportFromDoc).toList());
+    return _db
+        .from('incident_reports')
+        .stream(primaryKey: ['id'])
+        .eq('reporter_id', _uid)
+        .order('created_at', ascending: false)
+        .map((rows) => rows.map(_incidentReportFromRow).toList());
   }
 
   @override
@@ -550,95 +328,35 @@ class CustomerRepositoryImpl implements CustomerRepository {
     String? mediaFileName,
     String? mediaType,
   }) async {
-    final custDoc = await _customerRef.get();
-    final custData = custDoc.data() as Map<String, dynamic>? ?? {};
-    final name =
-        _auth.currentUser?.userMetadata?['full_name'] as String? ??
-        custData['displayName'] ??
-        custData['fullName'] ??
-        'Customer';
-    final phone =
-        custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '';
-
-    // Root 'incidentReports' collection is the source of truth the Admin
-    // Panel reads from, so its id must be generated there.
-    final docRef = _db.collection('incidentReports').doc();
-
     String? mediaUrl;
     if (mediaBytes != null && mediaFileName != null) {
-      final ref = _storage
-          .ref()
-          .child('incident_reports')
-          .child(_uid)
-          .child(docRef.id)
-          .child(mediaFileName);
-      final uploadTask = await ref.putData(mediaBytes);
-      mediaUrl = await uploadTask.ref.getDownloadURL();
+      final reportFolderId = DateTime.now().millisecondsSinceEpoch.toString();
+      final path = '$_uid/$reportFolderId/$mediaFileName';
+      await _db.storage.from('incident-reports').uploadBinary(path, mediaBytes);
+      mediaUrl = _db.storage.from('incident-reports').getPublicUrl(path);
     }
 
-    final data = {
-      'reporterId': _uid,
-      'reporterName': name,
-      'reporterPhone': phone,
-      'description': description,
-      'location': location,
-      'mediaUrl': mediaUrl,
-      'mediaType': mediaType,
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-    };
+    final row = await _db.rpc('submit_incident_report', params: {
+      'p_description': description,
+      'p_location': location,
+      'p_media_url': mediaUrl,
+      'p_media_type': mediaType,
+    });
 
-    // Write to the Admin-visible root collection first. Let failures here
-    // surface to the customer instead of being swallowed — otherwise the
-    // customer sees "submitted" while the admin panel never gets the report.
-    await docRef.set({...data, 'id': docRef.id});
-
-    try {
-      // Best-effort mirror into the customer's own subcollection (used for
-      // their "My Reports" view) and an admin notification badge.
-      await _incidentReportsRef.doc(docRef.id).set(data);
-
-      await _db.collection('admin_notifications').add({
-        'title': 'New Incident Reported',
-        'message': '$name reported an issue: $description',
-        'type': 'incident_reported',
-        'customerId': _uid,
-        'customerName': name,
-        'requestId': docRef.id,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-
-    return IncidentReportEntity(
-      id: docRef.id,
-      reporterName: name,
-      reporterPhone: phone,
-      description: description,
-      mediaUrl: mediaUrl,
-      mediaType: mediaType,
-      location: location,
-      status: 'pending',
-      createdAt: DateTime.now(),
-    );
+    return _incidentReportFromRow(row as Map<String, dynamic>);
   }
 
-  IncidentReportEntity _incidentReportFromDoc(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>? ?? {};
-    return IncidentReportEntity(
-      id: doc.id,
-      reporterName: d['reporterName'] as String? ?? 'Customer',
-      reporterPhone: d['reporterPhone'] as String? ?? '',
-      description: d['description'] as String? ?? '',
-      mediaUrl: d['mediaUrl'] as String?,
-      mediaType: d['mediaType'] as String?,
-      location: d['location'] as String? ?? '',
-      status: d['status'] as String? ?? 'pending',
-      assignedRiderId: d['assignedRiderId'] as String?,
-      assignedRiderName: d['assignedRiderName'] as String?,
-      createdAt: d['createdAt'] is Timestamp
-          ? (d['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-    );
-  }
+  IncidentReportEntity _incidentReportFromRow(Map<String, dynamic> r) => IncidentReportEntity(
+        id: r['id'] as String,
+        reporterName: r['reporter_name'] as String? ?? 'Customer',
+        reporterPhone: r['reporter_phone'] as String? ?? '',
+        description: r['description'] as String? ?? '',
+        mediaUrl: r['media_url'] as String?,
+        mediaType: r['media_type'] as String?,
+        location: r['location'] as String? ?? '',
+        status: r['status'] as String? ?? 'pending',
+        assignedRiderId: r['assigned_rider_id'] as String?,
+        assignedRiderName: r['assigned_rider_name'] as String?,
+        createdAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+      );
 }
