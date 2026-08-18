@@ -21,6 +21,7 @@ import '../../features/customer/presentation/screens/subscription_screen.dart';
 import '../../features/customer/presentation/screens/profile_settings_screen.dart';
 import '../../features/customer/presentation/screens/support_home_screen.dart';
 import '../../features/customer/presentation/screens/report_incident_screen.dart';
+import '../../features/customer/presentation/screens/track_pickup_screen.dart';
 import '../../features/rider/presentation/screens/rider_register_screen.dart';
 import '../../features/rider/presentation/screens/rider_dashboard_screen.dart';
 import '../../features/rider/presentation/screens/route_optimization_screen.dart';
@@ -191,6 +192,14 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: '/customer/report-incident',
         builder: (context, state) => const ReportIncidentScreen(),
+      ),
+      GoRoute(
+        // With no id the screen follows whichever request is currently live,
+        // which is what the dashboard banner links to. Passing a request id as
+        // `extra` pins it to that one booking.
+        path: '/customer/track',
+        builder: (context, state) =>
+            TrackPickupScreen(requestId: state.extra as String?),
       ),
       GoRoute(
         path: '/rider/home',

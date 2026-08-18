@@ -363,6 +363,8 @@ class RiderRepositoryImpl implements RiderRepository {
         customerEmail: r['customer_email'] as String? ?? '',
         customerPhone: r['customer_phone'] as String? ?? '',
         location: r['location'] as String? ?? 'Unknown location',
+        destinationLat: (r['location_lat'] as num?)?.toDouble(),
+        destinationLng: (r['location_lng'] as num?)?.toDouble(),
         timeSlot: r['time_slot'] as String? ?? '',
         binTypes: (r['bin_types'] as List<dynamic>?)?.cast<String>() ?? ['general'],
         status: r['status'] as String? ?? 'pending',

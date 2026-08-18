@@ -109,12 +109,24 @@ class RiderTracking extends _$RiderTracking {
   /// row as well as the rider profile, and Android promotes the stream to a
   /// foreground service so tracking survives the screen locking.
   ///
-  /// Safe to call repeatedly: re-calling with a different [jobId] swaps the
-  /// target without dropping the subscription.
+  /// Safe to call repeatedly. Switching between two jobs only re-points the
+  /// mirror target; switching between "no job" and "on a job" restarts the
+  /// stream, because that is what changes the platform settings underneath it.
   Future<void> start({String? jobId}) async {
     if (state.isBroadcasting && state.jobId == jobId) return;
 
-    if (_subscription != null && state.jobId != jobId) {
+    // Whether we need a foreground service is decided by the presence of a job,
+    // not its identity. Only when that flag is unchanged can we swap the target
+    // without tearing the stream down -- otherwise the rider accepts a job and
+    // the foreground service never starts, so tracking dies the moment they
+    // lock the screen. That failure is invisible on the rider's own device and
+    // only shows up as a frozen marker for dispatch and the customer.
+    final needsForegroundService = jobId != null;
+    final hadForegroundService = state.jobId != null;
+
+    if (_subscription != null &&
+        state.isBroadcasting &&
+        needsForegroundService == hadForegroundService) {
       state = state.copyWith(jobId: jobId, clearJobId: jobId == null);
       return;
     }

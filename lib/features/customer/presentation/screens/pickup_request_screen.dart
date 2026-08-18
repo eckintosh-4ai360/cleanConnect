@@ -4,9 +4,12 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/services/location_service.dart';
 import '../../../../core/services/paystack_service.dart';
+import '../../../../core/utils/geo_utils.dart';
 
 class PickupRequestScreen extends HookConsumerWidget {
   const PickupRequestScreen({super.key});
@@ -273,7 +276,20 @@ class PickupRequestScreen extends HookConsumerWidget {
                 ? addressSelection.value.trim()
                 : 'Primary Service Location');
 
-        // ── Step 2: Save pickup request to Firestore
+        // Coordinates for the rider's map. Prefer whatever the chosen address
+        // already carries (a registered bin's gps_location is stored as a
+        // "lat, lng" string); only wake the GPS when the customer typed a
+        // free-text address, which has nothing to plot. Both paths may end up
+        // null, and schedule_pickup then falls back to parsing the text itself.
+        var destination = GeoUtils.tryParseLatLng(finalLocation);
+        if (destination == null) {
+          final position = await LocationService.instance.currentPosition();
+          if (position != null) {
+            destination = LatLng(position.latitude, position.longitude);
+          }
+        }
+
+        // ── Step 2: Save pickup request
         await ref
             .read(customerPickupRequestsProvider.notifier)
             .requestPickup(
@@ -287,6 +303,8 @@ class PickupRequestScreen extends HookConsumerWidget {
               originalAmount: originalTotal,
               discountAppliedPercentage: discountPercentage,
               surchargeAppliedPercentage: surchargePercentage,
+              locationLat: destination?.latitude,
+              locationLng: destination?.longitude,
             );
 
         if (!context.mounted) return;

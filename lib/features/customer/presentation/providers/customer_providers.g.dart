@@ -130,7 +130,7 @@ final class CustomerPickupRequestsProvider
 }
 
 String _$customerPickupRequestsHash() =>
-    r'b5788ba0d36a2f1f5788397e04e69a882cec248f';
+    r'de24ae9070912e00681064904670b9b9f9cae9f7';
 
 abstract class _$CustomerPickupRequests
     extends $StreamNotifier<List<PickupRequestEntity>> {
@@ -152,6 +152,178 @@ abstract class _$CustomerPickupRequests
                 List<PickupRequestEntity>
               >,
               AsyncValue<List<PickupRequestEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+/// Live rider position for one specific request -- what the tracking screen
+/// opened from a booking watches.
+
+@ProviderFor(PickupTracking)
+final pickupTrackingProvider = PickupTrackingFamily._();
+
+/// Live rider position for one specific request -- what the tracking screen
+/// opened from a booking watches.
+final class PickupTrackingProvider
+    extends $StreamNotifierProvider<PickupTracking, PickupTrackingEntity?> {
+  /// Live rider position for one specific request -- what the tracking screen
+  /// opened from a booking watches.
+  PickupTrackingProvider._({
+    required PickupTrackingFamily super.from,
+    required String super.argument,
+  }) : super(
+         retry: null,
+         name: r'pickupTrackingProvider',
+         isAutoDispose: true,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  @override
+  String debugGetCreateSourceHash() => _$pickupTrackingHash();
+
+  @override
+  String toString() {
+    return r'pickupTrackingProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  PickupTracking create() => PickupTracking();
+
+  @override
+  bool operator ==(Object other) {
+    return other is PickupTrackingProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$pickupTrackingHash() => r'3c28a4700bad831a8321d6d33f9c3957503eae12';
+
+/// Live rider position for one specific request -- what the tracking screen
+/// opened from a booking watches.
+
+final class PickupTrackingFamily extends $Family
+    with
+        $ClassFamilyOverride<
+          PickupTracking,
+          AsyncValue<PickupTrackingEntity?>,
+          PickupTrackingEntity?,
+          Stream<PickupTrackingEntity?>,
+          String
+        > {
+  PickupTrackingFamily._()
+    : super(
+        retry: null,
+        name: r'pickupTrackingProvider',
+        dependencies: null,
+        $allTransitiveDependencies: null,
+        isAutoDispose: true,
+      );
+
+  /// Live rider position for one specific request -- what the tracking screen
+  /// opened from a booking watches.
+
+  PickupTrackingProvider call(String requestId) =>
+      PickupTrackingProvider._(argument: requestId, from: this);
+
+  @override
+  String toString() => r'pickupTrackingProvider';
+}
+
+/// Live rider position for one specific request -- what the tracking screen
+/// opened from a booking watches.
+
+abstract class _$PickupTracking extends $StreamNotifier<PickupTrackingEntity?> {
+  late final _$args = ref.$arg as String;
+  String get requestId => _$args;
+
+  Stream<PickupTrackingEntity?> build(String requestId);
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<AsyncValue<PickupTrackingEntity?>, PickupTrackingEntity?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<PickupTrackingEntity?>,
+                PickupTrackingEntity?
+              >,
+              AsyncValue<PickupTrackingEntity?>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, () => build(_$args));
+  }
+}
+
+/// The request the customer should currently be tracking, if any. Backs the
+/// "Track your pickup" banner on the dashboard.
+
+@ProviderFor(ActivePickupTracking)
+final activePickupTrackingProvider = ActivePickupTrackingProvider._();
+
+/// The request the customer should currently be tracking, if any. Backs the
+/// "Track your pickup" banner on the dashboard.
+final class ActivePickupTrackingProvider
+    extends
+        $StreamNotifierProvider<ActivePickupTracking, PickupTrackingEntity?> {
+  /// The request the customer should currently be tracking, if any. Backs the
+  /// "Track your pickup" banner on the dashboard.
+  ActivePickupTrackingProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'activePickupTrackingProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$activePickupTrackingHash();
+
+  @$internal
+  @override
+  ActivePickupTracking create() => ActivePickupTracking();
+}
+
+String _$activePickupTrackingHash() =>
+    r'680b90b6f64f4e4e8a94552ca1f0da5f968fd8d1';
+
+/// The request the customer should currently be tracking, if any. Backs the
+/// "Track your pickup" banner on the dashboard.
+
+abstract class _$ActivePickupTracking
+    extends $StreamNotifier<PickupTrackingEntity?> {
+  Stream<PickupTrackingEntity?> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<AsyncValue<PickupTrackingEntity?>, PickupTrackingEntity?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<PickupTrackingEntity?>,
+                PickupTrackingEntity?
+              >,
+              AsyncValue<PickupTrackingEntity?>,
               Object?,
               Object?
             >;

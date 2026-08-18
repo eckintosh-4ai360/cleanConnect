@@ -74,9 +74,6 @@ class AppMap extends StatelessWidget {
       liteModeEnabled: liteMode,
       padding: padding,
       minMaxZoomPreference: minMaxZoom,
-      // The map lives inside scrollable sheets on some screens; claiming the
-      // pan gesture stops the parent scroll view from stealing drags.
-      gestureRecognizers: const {},
     );
   }
 }

@@ -148,6 +148,11 @@ class CustomerDashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
+                // Live tracking entry point. Renders nothing until there is
+                // actually something to track, so the dashboard is unchanged
+                // for customers with no booking in flight.
+                const _LiveTrackingBanner(),
+
                 // Next Pickup Summary Card
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -628,6 +633,96 @@ class _ActionCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dashboard banner that appears while a pickup is live and links to the
+/// full-screen tracking map.
+class _LiveTrackingBanner extends ConsumerWidget {
+  const _LiveTrackingBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tracking = ref.watch(activePickupTrackingProvider).value;
+    if (tracking == null || tracking.isComplete) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final assigned = tracking.isAssigned;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: assigned
+            ? theme.colorScheme.primary
+            : theme.colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => context.push('/customer/track', extra: tracking.requestId),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: assigned
+                        ? Colors.white.withValues(alpha: 0.2)
+                        : theme.colorScheme.primary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    assigned
+                        ? Icons.local_shipping_rounded
+                        : Icons.hourglass_top_rounded,
+                    color: assigned ? Colors.white : theme.colorScheme.primary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        assigned
+                            ? '${tracking.riderName ?? 'Your rider'} is on the way'
+                            : 'Finding you a rider',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: assigned
+                              ? Colors.white
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        assigned
+                            ? 'Tap to follow them live on the map'
+                            : 'We will let you know the moment one accepts',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: assigned
+                              ? Colors.white.withValues(alpha: 0.85)
+                              : theme.hintColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: assigned ? Colors.white : theme.colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

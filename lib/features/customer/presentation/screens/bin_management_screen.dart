@@ -19,7 +19,10 @@ class BinManagementScreen extends ConsumerWidget {
       backgroundColor: theme.scaffoldBackgroundColor,
       extendBody: true,
       appBar: AppBar(
-        title: const Text('My Bins', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'My Bins',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -33,9 +36,16 @@ class BinManagementScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.delete_outline, size: 72, color: Colors.grey),
+                    const Icon(
+                      Icons.delete_outline,
+                      size: 72,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(height: 16),
-                    Text('No Bins Registered', style: theme.textTheme.titleMedium),
+                    Text(
+                      'No Bins Registered',
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 8),
                     const Text('Register a bin to start tracking your waste.'),
                     const SizedBox(height: 24),
@@ -64,7 +74,9 @@ class BinManagementScreen extends ConsumerWidget {
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: isDark ? theme.cardTheme.color : Colors.white,
+                            color: isDark
+                                ? theme.cardTheme.color
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
@@ -74,14 +86,17 @@ class BinManagementScreen extends ConsumerWidget {
                               ),
                             ],
                             border: Border.all(
-                              color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                              color: isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade100,
                             ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
                                     child: Row(
@@ -91,20 +106,25 @@ class BinManagementScreen extends ConsumerWidget {
                                           decoration: BoxDecoration(
                                             color: bin.type == 'recycling'
                                                 ? Colors.blue.shade50
-                                                : (bin.type == 'organic' ? Colors.green.shade50 : Colors.grey.shade100),
+                                                : (bin.type == 'organic'
+                                                      ? Colors.green.shade50
+                                                      : Colors.grey.shade100),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Icon(
                                             Icons.delete,
                                             color: bin.type == 'recycling'
                                                 ? Colors.blue
-                                                : (bin.type == 'organic' ? Colors.green : Colors.grey.shade600),
+                                                : (bin.type == 'organic'
+                                                      ? Colors.green
+                                                      : Colors.grey.shade600),
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 '${bin.type[0].toUpperCase()}${bin.type.substring(1)} Waste',
@@ -130,7 +150,10 @@ class BinManagementScreen extends ConsumerWidget {
                                   ),
                                   // QR Code action icon
                                   IconButton(
-                                    icon: const Icon(Icons.qr_code, color: Color(0xFFF0A500)),
+                                    icon: const Icon(
+                                      Icons.qr_code,
+                                      color: Color(0xFFF0A500),
+                                    ),
                                     onPressed: () {
                                       _showQrDialog(context, bin);
                                     },
@@ -139,14 +162,17 @@ class BinManagementScreen extends ConsumerWidget {
                               ),
                               const SizedBox(height: 20),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Flexible(
                                     child: Text(
                                       'Status: ${isHigh ? "Action Needed" : "Active"}',
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: isHigh ? Colors.red : Colors.grey,
+                                        color: isHigh
+                                            ? Colors.red
+                                            : Colors.grey,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
                                       ),
@@ -157,7 +183,9 @@ class BinManagementScreen extends ConsumerWidget {
                                     '${(bin.fillLevelPercentage * 100).toInt()}% Full',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w900,
-                                      color: isHigh ? Colors.red : theme.colorScheme.primary,
+                                      color: isHigh
+                                          ? Colors.red
+                                          : theme.colorScheme.primary,
                                       fontSize: 14,
                                     ),
                                   ),
@@ -169,13 +197,17 @@ class BinManagementScreen extends ConsumerWidget {
                                 child: LinearProgressIndicator(
                                   value: bin.fillLevelPercentage,
                                   minHeight: 10,
-                                  backgroundColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                                  backgroundColor: isDark
+                                      ? Colors.grey.shade900
+                                      : Colors.grey.shade100,
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                     isHigh
                                         ? Colors.red
                                         : (bin.type == 'recycling'
-                                            ? Colors.blue
-                                            : (bin.type == 'organic' ? Colors.green : const Color(0xFFF0A500))),
+                                              ? Colors.blue
+                                              : (bin.type == 'organic'
+                                                    ? Colors.green
+                                                    : const Color(0xFFF0A500))),
                                   ),
                                 ),
                               ),
@@ -183,18 +215,29 @@ class BinManagementScreen extends ConsumerWidget {
                               const Divider(height: 1),
                               const SizedBox(height: 16),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        const Text('Serial Number', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                        const Text(
+                                          'Serial Number',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 11,
+                                          ),
+                                        ),
                                         const SizedBox(height: 2),
                                         Text(
                                           bin.serialNumber,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -202,15 +245,25 @@ class BinManagementScreen extends ConsumerWidget {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
-                                        const Text('Schedule Frequency', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                        const Text(
+                                          'Schedule Frequency',
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 11,
+                                          ),
+                                        ),
                                         const SizedBox(height: 2),
                                         Text(
                                           bin.scheduleFrequency ?? 'Weekly',
                                           overflow: TextOverflow.ellipsis,
                                           textAlign: TextAlign.end,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -251,7 +304,9 @@ class BinManagementScreen extends ConsumerWidget {
       context: context,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: Column(
@@ -262,7 +317,9 @@ class BinManagementScreen extends ConsumerWidget {
                   children: [
                     Text(
                       'Bin QR Code',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -288,7 +345,11 @@ class BinManagementScreen extends ConsumerWidget {
                         width: 180,
                         height: 180,
                         color: Colors.grey.shade100,
-                        child: const Icon(Icons.qr_code, size: 64, color: Colors.grey),
+                        child: const Icon(
+                          Icons.qr_code,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
                       );
                     },
                   ),
@@ -296,7 +357,11 @@ class BinManagementScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Text(
                   bin.serialNumber,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    letterSpacing: 1,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
