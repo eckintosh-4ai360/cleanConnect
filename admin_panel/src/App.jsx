@@ -1,14 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from './firebase';
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  doc,
-  updateDoc,
-  writeBatch,
-} from 'firebase/firestore';
+import { supabase } from './supabase';
+import { useAuth } from './AuthContext';
+import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Customers from './components/Customers';
 import Bins from './components/Bins';
@@ -24,6 +17,25 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 
 export default function App() {
+  const { session, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-app)' }}>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Loading…</span>
+      </div>
+    );
+  }
+
+  if (!session || !profile) {
+    return <Login />;
+  }
+
+  return <AdminShell profile={profile} />;
+}
+
+function AdminShell({ profile }) {
+  const { signOut } = useAuth();
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('activeTab') || 'Dashboard';
   });
@@ -34,23 +46,8 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
 
-  // Admin profile — kept in sync with Settings page via localStorage
-  const [adminPhoto, setAdminPhoto] = useState(
-    () => localStorage.getItem('adminPhoto') || null
-  );
-  const [adminName, setAdminName] = useState(
-    () => localStorage.getItem('adminName') || 'Super Admin'
-  );
-
-  // Listen for storage changes from Settings page
-  useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key === 'adminPhoto') setAdminPhoto(e.newValue);
-      if (e.key === 'adminName') setAdminName(e.newValue);
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  const adminName = profile?.full_name || 'Admin';
+  const adminPhoto = profile?.profile_picture_url || null;
 
   // Synchronize CSS custom data theme values and persist preference
   useEffect(() => {
@@ -64,26 +61,53 @@ export default function App() {
   }, [activeTab]);
 
   // Real-time Platform Notifications
+  const mapNotifRow = (r) => ({
+    id: r.id,
+    title: r.title,
+    message: r.message,
+    type: r.type,
+    isRead: r.is_read,
+    createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+  });
+
   useEffect(() => {
-    const q = query(
-      collection(db, 'admin_notifications'),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const items = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-          createdAt: d.data().createdAt?.toDate?.() || new Date(),
-        }));
-        setNotifications(items);
-      },
-      (err) => {
-        console.warn('Notification snapshot listener:', err);
-      }
-    );
-    return () => unsub();
+    let mounted = true;
+
+    supabase
+      .from('admin_notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (mounted && !error) setNotifications(data.map(mapNotifRow));
+        if (error) console.warn('Notification fetch:', error);
+      });
+
+    const channel = supabase
+      .channel('admin_notifications_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'admin_notifications' },
+        (payload) => {
+          setNotifications((prev) => {
+            if (payload.eventType === 'INSERT') {
+              return [mapNotifRow(payload.new), ...prev];
+            }
+            if (payload.eventType === 'UPDATE') {
+              return prev.map((n) => (n.id === payload.new.id ? mapNotifRow(payload.new) : n));
+            }
+            if (payload.eventType === 'DELETE') {
+              return prev.filter((n) => n.id !== payload.old.id);
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const toggleTheme = () => {
@@ -93,23 +117,22 @@ export default function App() {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const handleMarkAllRead = async () => {
-    try {
-      const unreadDocs = notifications.filter((n) => !n.isRead);
-      const batch = writeBatch(db);
-      unreadDocs.forEach((n) => {
-        batch.update(doc(db, 'admin_notifications', n.id), { isRead: true });
-      });
-      await batch.commit();
-    } catch (err) {
-      console.error('Failed to mark all notifications read:', err);
-    }
+    const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
+    if (unreadIds.length === 0) return;
+    const { error } = await supabase
+      .from('admin_notifications')
+      .update({ is_read: true })
+      .in('id', unreadIds);
+    if (error) console.error('Failed to mark all notifications read:', error);
   };
 
   const handleNotificationClick = async (n) => {
     if (!n.isRead) {
-      try {
-        await updateDoc(doc(db, 'admin_notifications', n.id), { isRead: true });
-      } catch (_) {}
+      const { error } = await supabase
+        .from('admin_notifications')
+        .update({ is_read: true })
+        .eq('id', n.id);
+      if (error) console.warn('Failed to mark notification read:', error);
     }
     if (n.type === 'bin_registered' || n.type === 'bin_requested') {
       setActiveTab('Bins');
@@ -301,7 +324,7 @@ export default function App() {
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)' }}></div>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>Server Live</span>
           </div>
-          <button className="action-btn" style={{ width: '28px', height: '28px' }} onClick={() => alert('Logging out...')}>
+          <button className="action-btn" style={{ width: '28px', height: '28px' }} onClick={signOut} title="Sign out">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
           </button>
         </div>
