@@ -78,7 +78,7 @@
 	     Google Cloud Console rather than trying to hide it. Leave empty and the
 	     map tiles simply fail to load. -->
 	<key>GMSApiKey</key>
-	<string></string>
+	<string>AIzaSyBn_SljQOBGum8OrbXy7aepKidA8LdRw2E</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CleanConnect uses your location to show you on the map, guide you to pickups, and let customers track their collection in real time.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

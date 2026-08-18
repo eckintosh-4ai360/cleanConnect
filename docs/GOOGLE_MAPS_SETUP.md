@@ -1,11 +1,39 @@
 # Google Maps setup
 
-The app ships with real Google Maps wired into four surfaces. None of them
-render until you supply API keys — everything below is the one-time setup.
+The app ships with real Google Maps wired into four surfaces. The rest of this
+document is the one-time setup; read the status box first.
 
-Until keys are added the app still runs: maps show a grey tile, and route/ETA
-figures fall back to straight-line geometry (clearly labelled as such in the
-UI). Nothing crashes and no screen is blocked.
+## Current status — a development key is already wired in
+
+One key (`AIzaSyBn…dRw2E`) is configured in all five locations:
+
+| Location | In git? |
+|---|---|
+| `android/local.properties` | no — git-ignored |
+| `admin_panel/.env.local` | no — git-ignored |
+| `env.json` (for `--dart-define-from-file`) | no — git-ignored |
+| `ios/Runner/Info.plist` | **yes — committed** |
+| `web/index.html` | **yes — committed** |
+
+Two things this key still needs in Google Cloud Console:
+
+1. **Enable the five APIs** in the table below. Until Routes API and Geocoding
+   API are enabled, routes fall back to straight lines and legacy addresses
+   cannot be geocoded — the app works, but degraded.
+2. **Restrict it, or split it.** This single key currently covers both the free
+   rendering SDKs and the *billable* Routes/Geocoding web services, and it is
+   readable in the web bundle and the iOS binary. Before production, split it
+   per the key table in §1 so a scraped browser key cannot bill your Routes
+   quota. At minimum, set per-API quota caps and a budget alert.
+
+Run the app with:
+
+```bash
+flutter run --dart-define-from-file=env.json
+```
+
+Without `--dart-define-from-file`, maps still render but routing is straight-line
+only — `env.json` is what carries the Routes/Geocoding key.
 
 ---
 
