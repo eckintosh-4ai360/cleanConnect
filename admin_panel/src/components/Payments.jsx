@@ -1,20 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  doc,
-  updateDoc,
-  setDoc,
-  addDoc,
-  writeBatch,
-  getDocs,
-  serverTimestamp,
-  increment,
-  query,
-  orderBy,
-  where,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function Payments() {
   const [invoices, setInvoices] = useState([]);
@@ -44,32 +29,43 @@ export default function Payments() {
   const payg240 = (Number(pricingData.weekly240 || 0) * 1.30).toFixed(2);
   const payg360 = (Number(pricingData.weekly360 || 0) * 1.30).toFixed(2);
 
-  // Listen to live pricingPlans from Firestore
+  // Live pricing_plans from Postgres
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'pricingPlans'), (snap) => {
-      if (!snap.empty) {
-        const plansMap = {};
-        snap.docs.forEach(docSnap => {
-          plansMap[docSnap.id] = docSnap.data();
-        });
+    let mounted = true;
 
-        if (plansMap['weekly']?.prices) {
-          setPricingData(prev => ({
-            ...prev,
-            weekly120: plansMap['weekly'].prices['120L'] ?? prev.weekly120,
-            weekly240: plansMap['weekly'].prices['240L'] ?? prev.weekly240,
-            weekly360: plansMap['weekly'].prices['360L'] ?? prev.weekly360,
-            biweekly120: plansMap['biweekly']?.prices?.['120L'] ?? prev.biweekly120,
-            biweekly240: plansMap['biweekly']?.prices?.['240L'] ?? prev.biweekly240,
-            biweekly360: plansMap['biweekly']?.prices?.['360L'] ?? prev.biweekly360,
-            monthly120: plansMap['monthly']?.prices?.['120L'] ?? prev.monthly120,
-            monthly240: plansMap['monthly']?.prices?.['240L'] ?? prev.monthly240,
-            monthly360: plansMap['monthly']?.prices?.['360L'] ?? prev.monthly360,
-          }));
-        }
+    const fetchPlans = async () => {
+      const { data, error } = await supabase.from('pricing_plans').select('*');
+      if (!mounted || error || !data || data.length === 0) return;
+
+      const plansMap = {};
+      data.forEach((plan) => { if (plan.slug) plansMap[plan.slug] = plan; });
+
+      if (plansMap.weekly?.prices) {
+        setPricingData((prev) => ({
+          ...prev,
+          weekly120: plansMap.weekly.prices['120L'] ?? prev.weekly120,
+          weekly240: plansMap.weekly.prices['240L'] ?? prev.weekly240,
+          weekly360: plansMap.weekly.prices['360L'] ?? prev.weekly360,
+          biweekly120: plansMap.biweekly?.prices?.['120L'] ?? prev.biweekly120,
+          biweekly240: plansMap.biweekly?.prices?.['240L'] ?? prev.biweekly240,
+          biweekly360: plansMap.biweekly?.prices?.['360L'] ?? prev.biweekly360,
+          monthly120: plansMap.monthly?.prices?.['120L'] ?? prev.monthly120,
+          monthly240: plansMap.monthly?.prices?.['240L'] ?? prev.monthly240,
+          monthly360: plansMap.monthly?.prices?.['360L'] ?? prev.monthly360,
+        }));
       }
-    });
-    return () => unsub();
+    };
+    fetchPlans();
+
+    const channel = supabase
+      .channel('pricing_plans_payments_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pricing_plans' }, fetchPlans)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleSaveSubscriptionPrices = async (e) => {
@@ -93,76 +89,32 @@ export default function Payments() {
       const p240 = Number((w240 * 1.30).toFixed(2));
       const p360 = Number((w360 * 1.30).toFixed(2));
 
-      // ── Step 1: Save Core Pricing Plans to Firestore
-      const batch = writeBatch(db);
+      const { error: plansError } = await supabase.from('pricing_plans').upsert([
+        { slug: 'weekly', name: 'Weekly Plan', frequency: 'Weekly', description: 'Most popular for busy households', is_payg: false, prices: { '120L': w120, '240L': w240, '360L': w360 } },
+        { slug: 'biweekly', name: 'Bi-weekly Plan', frequency: 'Bi-weekly', description: 'Eco-conscious & flexible', is_payg: false, prices: { '120L': bw120, '240L': bw240, '360L': bw360 } },
+        { slug: 'monthly', name: 'Monthly Plan', frequency: 'Monthly', description: 'Low volume waste collection', is_payg: false, prices: { '120L': m120, '240L': m240, '360L': m360 } },
+        { slug: 'payg', name: 'Pay-As-You-Go', frequency: 'Pay-As-You-Go', description: 'Pay per collection request (Weekly price + 30% surcharge)', is_payg: true, prices: { '120L': p120, '240L': p240, '360L': p360 } },
+      ], { onConflict: 'slug' });
+      if (plansError) throw plansError;
 
-      // 1. Weekly Plan Doc
-      batch.set(doc(db, 'pricingPlans', 'weekly'), {
-        name: 'Weekly Plan',
-        frequency: 'Weekly',
-        description: 'Most popular for busy households',
-        isPayg: false,
-        prices: { '120L': w120, '240L': w240, '360L': w360 },
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-
-      // 2. Bi-weekly Plan Doc
-      batch.set(doc(db, 'pricingPlans', 'biweekly'), {
-        name: 'Bi-weekly Plan',
-        frequency: 'Bi-weekly',
-        description: 'Eco-conscious & flexible',
-        isPayg: false,
-        prices: { '120L': bw120, '240L': bw240, '360L': bw360 },
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-
-      // 3. Monthly Plan Doc
-      batch.set(doc(db, 'pricingPlans', 'monthly'), {
-        name: 'Monthly Plan',
-        frequency: 'Monthly',
-        description: 'Low volume waste collection',
-        isPayg: false,
-        prices: { '120L': m120, '240L': m240, '360L': m360 },
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-
-      // 4. Pay-As-You-Go Plan Doc (Automatically Weekly + 30%)
-      batch.set(doc(db, 'pricingPlans', 'payg'), {
-        name: 'Pay-As-You-Go',
-        frequency: 'Pay-As-You-Go',
-        description: 'Pay per collection request (Weekly price + 30% surcharge)',
-        isPayg: true,
-        prices: { '120L': p120, '240L': p240, '360L': p360 },
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-
-      await batch.commit();
-
-      // ── Step 2: Optional Settings & Admin Notification (silent fallback if rules restrict settings)
       try {
-        await setDoc(doc(db, 'settings', 'subscription_pricing'), {
-          weeklyFee: w240,
-          biweeklyFee: bw240,
-          monthlyFee: m240,
-          paygFee: p240,
-          paygRatio: 1.30,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
+        await supabase.from('app_settings').upsert({
+          id: true,
+          weekly_fee: w240,
+          biweekly_fee: bw240,
+          monthly_fee: m240,
+          payg_fee: p240,
+          payg_ratio: 1.30,
+        }, { onConflict: 'id' });
       } catch (settingsErr) {
-        console.warn('Settings summary doc skipped:', settingsErr);
+        console.warn('Settings summary row skipped:', settingsErr);
       }
 
       try {
-        await addDoc(collection(db, 'admin_notifications'), {
+        await supabase.from('admin_notifications').insert({
           title: 'Subscription Pricing Updated',
           message: `Admin updated subscription plans. Pay-As-You-Go set to Weekly + 30% (GHS ${p240} for 240L bin).`,
           type: 'pricing_updated',
-          isRead: false,
-          createdAt: serverTimestamp(),
         });
       } catch (notifErr) {
         console.warn('Admin notification skipped:', notifErr);
@@ -177,19 +129,35 @@ export default function Payments() {
   };
 
   useEffect(() => {
-    const q = query(collection(db, 'payments'), orderBy('invoiceDate', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const docs = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-        invoiceDate: d.data().invoiceDate?.toDate?.() ?? null,
-      }));
-      setInvoices(docs);
-      if (!selectedInvoice && docs.length > 0) setSelectedInvoice(docs[0]);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    let mounted = true;
+
+    const mapRow = (r) => ({ ...r, invoiceDate: r.invoice_date ? new Date(r.invoice_date) : null });
+
+    const fetchInvoices = async () => {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .order('invoice_date', { ascending: false });
+      if (mounted && !error) {
+        const docs = data.map(mapRow);
+        setInvoices(docs);
+        setSelectedInvoice((current) => current ?? docs[0] ?? null);
+      }
+      if (mounted) setLoading(false);
+      if (error) console.warn('Payments fetch:', error);
+    };
+    fetchInvoices();
+
+    const channel = supabase
+      .channel('payments_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, fetchInvoices)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Keep selectedInvoice in sync with live updates
   useEffect(() => {
@@ -197,128 +165,51 @@ export default function Payments() {
       const updated = invoices.find(i => i.id === selectedInvoice.id);
       if (updated) setSelectedInvoice(updated);
     }
-  }, [invoices]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices]);
 
   const handleMarkPaid = async () => {
     if (!selectedInvoice) return;
     setActionLoading(true);
-    try {
-      await updateDoc(doc(db, 'payments', selectedInvoice.id), {
-        status: 'paid',
-        paidAt: serverTimestamp(),
-      });
-      // If linked to a customer, zero out their outstanding balance
-      if (selectedInvoice.customerId) {
-        await updateDoc(doc(db, 'customers', selectedInvoice.customerId), {
-          outstandingBalance: 0,
-          updatedAt: serverTimestamp(),
-        });
-      }
-      alert(`Invoice marked as Paid. Customer balance cleared.`);
-    } catch (err) {
-      alert('Failed to update payment: ' + err.message);
+    const { error } = await supabase
+      .from('payments')
+      .update({ status: 'paid', paid_at: new Date().toISOString() })
+      .eq('id', selectedInvoice.id);
+    if (error) {
+      alert('Failed to update payment: ' + error.message);
+      setActionLoading(false);
+      return;
     }
+    if (selectedInvoice.customer_id) {
+      await supabase.from('customers').update({ outstanding_balance: 0 }).eq('id', selectedInvoice.customer_id);
+    }
+    alert('Invoice marked as Paid. Customer balance cleared.');
     setActionLoading(false);
   };
 
   const handleGenerateBatch = async () => {
     setActionLoading(true);
-    try {
-      const customersSnap = await getDocs(collection(db, 'customers'));
-      const customers = customersSnap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((customer) => customer.subscriptionStatus !== 'suspended');
+    const now = new Date();
+    const cycleDate =
+      billingCycle === 'previous'
+        ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        : new Date(now.getFullYear(), now.getMonth(), 1);
+    const cycleKey = `${cycleDate.getFullYear()}-${String(cycleDate.getMonth() + 1).padStart(2, '0')}`;
+    const cycleLabel = cycleDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-      if (customers.length === 0) {
-        alert('No active customers found to invoice.');
-        setActionLoading(false);
-        return;
-      }
+    const { data: count, error } = await supabase.rpc('admin_generate_batch_invoices', {
+      p_billing_cycle: cycleKey,
+      p_billing_cycle_label: cycleLabel,
+    });
 
-      const now = new Date();
-      const cycleDate =
-        billingCycle === 'previous'
-          ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
-          : new Date(now.getFullYear(), now.getMonth(), 1);
-      const cycleKey = `${cycleDate.getFullYear()}-${String(cycleDate.getMonth() + 1).padStart(2, '0')}`;
-      const cycleLabel = cycleDate.toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
-      });
-
-      const existingSnap = await getDocs(
-        query(collection(db, 'payments'), where('billingCycle', '==', cycleKey)),
-      );
-      const alreadyInvoiced = new Set(
-        existingSnap.docs.map((invoiceDoc) => invoiceDoc.data().customerId),
-      );
-
-      const invoiceCustomers = customers.filter(
-        (customer) => !alreadyInvoiced.has(customer.id),
-      );
-
-      if (invoiceCustomers.length === 0) {
-        alert(`All active customers already have ${cycleLabel} invoices.`);
-        setActionLoading(false);
-        setShowBatchModal(false);
-        return;
-      }
-
-      const batch = writeBatch(db);
-      invoiceCustomers.forEach((customer) => {
-        const amount = Number(customer.subscriptionFee ?? 0) || 50;
-        const customerName =
-          customer.displayName || customer.fullName || customer.email || 'Customer';
-        const invoiceRef = doc(collection(db, 'payments'));
-        const invoice = {
-          customerId: customer.id,
-          customerName,
-          customerEmail: customer.email ?? '',
-          amount,
-          billingCycle: cycleKey,
-          invoiceDate: serverTimestamp(),
-          dueDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14),
-          status: 'unpaid',
-          method: customer.paymentMethod ?? 'Mobile Money',
-          description: `${cycleLabel} waste collection service invoice`,
-          sentAt: serverTimestamp(),
-        };
-
-        batch.set(invoiceRef, invoice);
-        batch.set(
-          doc(db, 'customers', customer.id),
-          {
-            outstandingBalance: increment(amount),
-            lastInvoiceId: invoiceRef.id,
-            lastInvoiceDate: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
-        batch.set(doc(collection(db, 'customers', customer.id, 'serviceHistory')), {
-          title: `${cycleLabel} Service Invoice`,
-          type: 'payment',
-          date: serverTimestamp(),
-          status: 'pending',
-          amountPaid: amount,
-          receiptNumber: invoiceRef.id,
-          invoiceId: invoiceRef.id,
-        });
-      });
-
-      await batch.commit();
-      await addDoc(collection(db, 'admin_notifications'), {
-        title: 'Batch Invoices Sent',
-        message: `${invoiceCustomers.length} ${cycleLabel} invoice${invoiceCustomers.length === 1 ? '' : 's'} sent to customers.`,
-        type: 'payment',
-        isRead: false,
-        createdAt: serverTimestamp(),
-      });
-
-      alert(`Sent ${invoiceCustomers.length} ${cycleLabel} invoice${invoiceCustomers.length === 1 ? '' : 's'} to customers.`);
+    if (error) {
+      alert('Failed to send batch invoices: ' + error.message);
+    } else if (count === 0) {
+      alert(`All active customers already have ${cycleLabel} invoices.`);
       setShowBatchModal(false);
-    } catch (err) {
-      alert('Failed to send batch invoices: ' + err.message);
+    } else {
+      alert(`Sent ${count} ${cycleLabel} invoice${count === 1 ? '' : 's'} to customers.`);
+      setShowBatchModal(false);
     }
     setActionLoading(false);
   };
@@ -479,7 +370,7 @@ export default function Payments() {
                       style={{ cursor: 'pointer', background: selectedInvoice?.id === inv.id ? 'var(--border-divider)' : 'transparent' }}
                     >
                       <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{inv.id.slice(0, 8).toUpperCase()}</td>
-                      <td style={{ fontWeight: '600' }}>{inv.customerName ?? '—'}</td>
+                      <td style={{ fontWeight: '600' }}>{inv.customer_name ?? '—'}</td>
                       <td>GHS {(inv.amount ?? 0).toFixed(2)}</td>
                       <td>{formatDate(inv.invoiceDate)}</td>
                       <td>
@@ -511,7 +402,7 @@ export default function Payments() {
 
             <div style={{ background: 'var(--bg-app)', padding: '16px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px' }}>
               {[
-                { label: 'Client Name', value: selectedInvoice.customerName ?? '—' },
+                { label: 'Client Name', value: selectedInvoice.customer_name ?? '—' },
                 { label: 'Invoice Date', value: formatDate(selectedInvoice.invoiceDate) },
                 { label: 'Payment Method', value: selectedInvoice.method ?? '—' },
                 { label: 'Description', value: selectedInvoice.description ?? '—' },
@@ -523,7 +414,7 @@ export default function Payments() {
               ))}
 
               {/* Paystack Reference Row */}
-              {selectedInvoice.paymentReference && (
+              {selectedInvoice.payment_reference && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>Paystack Ref:</span>
                   <span
@@ -537,7 +428,7 @@ export default function Payments() {
                       letterSpacing: '0.5px',
                     }}
                   >
-                    {selectedInvoice.paymentReference}
+                    {selectedInvoice.payment_reference}
                   </span>
                 </div>
               )}
