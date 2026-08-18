@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  query,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 // ── Map projection & trip-estimate helpers ──────────────────────────────────
 // This is a self-contained, styled map — no external Maps API/key involved.
@@ -185,54 +180,72 @@ export default function Routes() {
     []
   );
 
-  // Live Firestore snapshot listeners for real-time tracking
+  // Live Postgres tracking for riders + pickup requests
   useEffect(() => {
-    const unsubRiders = onSnapshot(
-      collection(db, 'riders'),
-      (snap) => {
-        const docs = snap.docs.map((d) => ({
-          id: d.id,
-          fullName: d.data().fullName || d.data().displayName || 'Rider',
-          status: d.data().status || 'active',
-          currentLat: d.data().currentLat || d.data().latitude || 5.6037,
-          currentLng: d.data().currentLng || d.data().longitude || -0.1870,
-          speed: d.data().speed ?? 25.0,
-          heading: d.data().heading ?? 0,
-          vehicleType: d.data().vehicleType || 'Motorbike',
-          updatedAt: d.data().updatedAt?.toDate?.() || new Date(),
-          ...d.data(),
-        }));
+    let mounted = true;
 
-        const mergedRiders = docs.length > 0 ? docs : mockRiders;
-        setRiders(mergedRiders);
-        setSelectedRider((prev) =>
-          prev ? mergedRiders.find((r) => r.id === prev.id) || mergedRiders[0] : mergedRiders[0]
-        );
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('Riders live tracking listener error:', err);
+    const mapRiderRow = (r) => ({
+      id: r.id,
+      fullName: r.profiles?.full_name || 'Rider',
+      status: r.status || 'active',
+      currentLat: r.current_lat ?? 5.6037,
+      currentLng: r.current_lng ?? -0.1870,
+      speed: r.speed ?? 25.0,
+      heading: r.heading ?? 0,
+      vehicleType: r.vehicle_type || 'Motorbike',
+      phoneNumber: r.profiles?.phone_number,
+      photoUrl: r.profiles?.profile_picture_url,
+      updatedAt: r.updated_at ? new Date(r.updated_at) : new Date(),
+    });
+
+    const fetchRiders = async () => {
+      const { data, error } = await supabase
+        .from('riders')
+        .select('*, profiles(full_name, phone_number, profile_picture_url)');
+      if (!mounted) return;
+      if (error) {
+        console.warn('Riders live tracking fetch error:', error);
         setRiders(mockRiders);
         setSelectedRider((prev) => prev || mockRiders[0]);
         setLoading(false);
+        return;
       }
-    );
+      const mergedRiders = data.length > 0 ? data.map(mapRiderRow) : mockRiders;
+      setRiders(mergedRiders);
+      setSelectedRider((prev) =>
+        prev ? mergedRiders.find((r) => r.id === prev.id) || mergedRiders[0] : mergedRiders[0]
+      );
+      setLoading(false);
+    };
+    fetchRiders();
+    const ridersChannel = supabase
+      .channel('routes_riders_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, fetchRiders)
+      .subscribe();
 
-    const unsubRequests = onSnapshot(
-      query(collection(db, 'pickupRequests')),
-      (snap) => {
-        const reqs = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-        setPickupRequests(reqs);
-      },
-      () => setPickupRequests([])
-    );
+    const mapPickupRow = (p) => ({
+      id: p.id,
+      assignedRiderId: p.assigned_rider_id,
+      status: p.status,
+      location: p.location,
+      customerName: p.customer_name,
+    });
+
+    const fetchRequests = async () => {
+      const { data, error } = await supabase.from('pickup_requests').select('*');
+      if (mounted && !error) setPickupRequests(data.map(mapPickupRow));
+      if (mounted && error) setPickupRequests([]);
+    };
+    fetchRequests();
+    const requestsChannel = supabase
+      .channel('routes_pickup_requests_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests' }, fetchRequests)
+      .subscribe();
 
     return () => {
-      unsubRiders();
-      unsubRequests();
+      mounted = false;
+      supabase.removeChannel(ridersChannel);
+      supabase.removeChannel(requestsChannel);
     };
   }, [mockRiders]);
 
@@ -272,7 +285,7 @@ export default function Routes() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <button className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
-            Live Firestore Sync
+            Live Sync
           </button>
           <button className="btn-primary" onClick={() => setShowOptimizeModal(true)}>
             ⚡ AI Optimize Routes
