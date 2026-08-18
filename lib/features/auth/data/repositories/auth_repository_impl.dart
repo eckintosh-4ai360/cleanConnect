@@ -1,28 +1,55 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:hive/hive.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
-import '../models/user_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-  fb.FirebaseAuth get _firebaseAuth => fb.FirebaseAuth.instance;
-  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+  sb.SupabaseClient get _client => sb.Supabase.instance.client;
 
   AuthRepositoryImpl();
 
-  bool get _isFirebaseAvailable {
+  /// Whether a real Supabase backend is initialized. Mirrors the app's
+  /// pre-existing Firebase demo-mode precedent: if `Supabase.initialize()`
+  /// was never called (e.g. a stripped-down test harness), fall back to a
+  /// local Hive-backed mock auth instead of crashing.
+  static bool get isSupabaseAvailable {
     try {
-      final app = Firebase.app();
-      if (app.options.apiKey.contains('dummy')) {
-        return false;
-      }
-      fb.FirebaseAuth.instance;
+      sb.Supabase.instance.client;
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  UserRole _roleFromString(String? value) => UserRole.values.firstWhere(
+        (r) => r.name == value,
+        orElse: () => UserRole.customer,
+      );
+
+  UserEntity _entityFromProfileRow(Map<String, dynamic> row) => UserEntity(
+        id: row['id'] as String,
+        fullName: row['full_name'] as String? ?? 'User',
+        email: row['email'] as String? ?? '',
+        phoneNumber: row['phone_number'] as String? ?? '',
+        address: row['address'] as String?,
+        gpsLocation: row['gps_location'] as String?,
+        profilePictureUrl: row['profile_picture_url'] as String?,
+        role: _roleFromString(row['role'] as String?),
+        status: row['status'] as String? ?? 'active',
+        createdAt: DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now(),
+      );
+
+  Future<void> _saveMockSession(UserEntity user) async {
+    try {
+      final box = Hive.box('auth_box');
+      await box.put('userId', user.id);
+      await box.put('fullName', user.fullName);
+      await box.put('email', user.email);
+      await box.put('phoneNumber', user.phoneNumber);
+      await box.put('address', user.address);
+      await box.put('gpsLocation', user.gpsLocation);
+      await box.put('role', user.role.name);
+    } catch (_) {}
   }
 
   @override
@@ -30,7 +57,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    if (!_isFirebaseAvailable) {
+    if (!isSupabaseAvailable) {
       if (email.trim().isEmpty) {
         throw Exception('Please enter email address.');
       }
@@ -61,43 +88,25 @@ class AuthRepositoryImpl implements AuthRepository {
         createdAt: DateTime.now(),
       );
 
-      try {
-        final box = Hive.box('auth_box');
-        await box.put('userId', mockUser.id);
-        await box.put('fullName', mockUser.fullName);
-        await box.put('email', mockUser.email);
-        await box.put('phoneNumber', mockUser.phoneNumber);
-        await box.put('address', mockUser.address);
-        await box.put('gpsLocation', mockUser.gpsLocation);
-        await box.put('role', mockUser.role.name);
-      } catch (_) {}
-
+      await _saveMockSession(mockUser);
       return mockUser;
     }
 
     try {
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+      final response = await _client.auth.signInWithPassword(
         email: email,
         password: password,
       );
 
-      final fbUser = credential.user;
-      if (fbUser == null) {
+      final authUser = response.user;
+      if (authUser == null) {
         throw Exception('User authentication failed.');
       }
 
-      // Fetch user profile from Firestore
-      final doc = await _firestore.collection('users').doc(fbUser.uid).get();
-      if (!doc.exists) {
-        throw Exception('User profile not found in database.');
-      }
-
-      final data = doc.data()!;
-      data['id'] = fbUser.uid; // Ensure ID matches UID
-      final userModel = UserModel.fromJson(data);
-      return userModel.toEntity();
-    } on fb.FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? 'Authentication error occurred.');
+      final row = await _client.from('profiles').select().eq('id', authUser.id).single();
+      return _entityFromProfileRow(row);
+    } on sb.AuthException catch (e) {
+      throw Exception(e.message);
     } catch (e) {
       throw Exception(e.toString());
     }
@@ -114,7 +123,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String? profilePicturePath,
     UserRole role = UserRole.customer,
   }) async {
-    if (!_isFirebaseAvailable) {
+    if (!isSupabaseAvailable) {
       final mockUser = UserEntity(
         id: 'mock-uid-${DateTime.now().millisecondsSinceEpoch}',
         fullName: fullName,
@@ -128,110 +137,53 @@ class AuthRepositoryImpl implements AuthRepository {
         createdAt: DateTime.now(),
       );
 
-      try {
-        final box = Hive.box('auth_box');
-        await box.put('userId', mockUser.id);
-        await box.put('fullName', mockUser.fullName);
-        await box.put('email', mockUser.email);
-        await box.put('phoneNumber', mockUser.phoneNumber);
-        await box.put('address', mockUser.address);
-        await box.put('gpsLocation', mockUser.gpsLocation);
-        await box.put('role', mockUser.role.name);
-      } catch (_) {}
-
+      await _saveMockSession(mockUser);
       return mockUser;
     }
 
     try {
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+      // The handle_new_user() Postgres trigger fans this metadata out into
+      // profiles + customers/riders (and an admin_notifications row) as soon
+      // as the auth.users row is inserted — see supabase/migrations.
+      final response = await _client.auth.signUp(
         email: email,
         password: password,
+        data: {
+          'full_name': fullName,
+          'phone_number': phoneNumber,
+          'address': address,
+          'gps_location': gpsLocation,
+          'role': role.name,
+        },
       );
 
-      final fbUser = credential.user;
-      if (fbUser == null) {
+      final authUser = response.user;
+      if (authUser == null) {
         throw Exception('Registration failed.');
       }
 
-      final userModel = UserModel(
-        id: fbUser.uid,
+      if (profilePicturePath != null) {
+        try {
+          await _client
+              .from('profiles')
+              .update({'profile_picture_url': profilePicturePath}).eq('id', authUser.id);
+        } catch (_) {}
+      }
+
+      return UserEntity(
+        id: authUser.id,
         fullName: fullName,
         email: email,
         phoneNumber: phoneNumber,
-        role: role,
         address: address,
         gpsLocation: gpsLocation,
         profilePictureUrl: profilePicturePath,
+        role: role,
         status: 'active',
         createdAt: DateTime.now(),
       );
-
-      // Save user details to Firestore
-      try {
-        await _firestore.collection('users').doc(fbUser.uid).set(userModel.toJson());
-        if (role == UserRole.customer) {
-          await _firestore.collection('customers').doc(fbUser.uid).set({
-            'displayName': fullName,
-            'fullName': fullName,
-            'email': email,
-            'phoneNumber': phoneNumber,
-            'contractType': 'Residential',
-            'subscriptionPlan': 'Weekly Plan',
-            'subscriptionFee': 50.0,
-            'subscriptionStatus': 'active',
-            'paymentMethod': 'Mobile Money',
-            'outstandingBalance': 0.0,
-            'registeredBinsCount': 0,
-            'activeRequestsCount': 0,
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-
-          await _firestore.collection('admin_notifications').add({
-            'title': 'New Customer Registered',
-            'message': '$fullName ($email) created a new account.',
-            'type': 'customer_registered',
-            'customerId': fbUser.uid,
-            'customerName': fullName,
-            'isRead': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        } else if (role == UserRole.rider) {
-          await _firestore.collection('riders').doc(fbUser.uid).set({
-            'fullName': fullName,
-            'email': email,
-            'phoneNumber': phoneNumber,
-            'vehicleType': 'Motorbike',
-            'licenseNumber': 'DL-GH-20240312',
-            'nationalIdNumber': 'GHA-0012345678',
-            'status': 'active',
-            'rating': 5.0,
-            'totalCollections': 0,
-            'totalWeightKg': 0.0,
-            'earningsThisMonth': 0.0,
-            'efficiencyScore': 100.0,
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-
-          await _firestore.collection('admin_notifications').add({
-            'title': 'New Rider Registered',
-            'message': '$fullName ($email) registered as a rider.',
-            'type': 'rider_registered',
-            'riderId': fbUser.uid,
-            'riderName': fullName,
-            'isRead': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-      } catch (e) {
-        // Log error but proceed to let the user log in locally even if Firestore write fails
-        print('Firestore save failed during registration: $e');
-      }
-
-      return userModel.toEntity();
-    } on fb.FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? 'Registration error occurred.');
+    } on sb.AuthException catch (e) {
+      throw Exception(e.message);
     } catch (e) {
       throw Exception(e.toString());
     }
@@ -240,9 +192,9 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> sendPasswordResetEmail(String email) async {
     try {
-      await _firebaseAuth.sendPasswordResetEmail(email: email);
-    } on fb.FirebaseAuthException catch (e) {
-      throw Exception(e.message ?? 'Error sending password reset email.');
+      await _client.auth.resetPasswordForEmail(email);
+    } on sb.AuthException catch (e) {
+      throw Exception(e.message);
     } catch (e) {
       throw Exception(e.toString());
     }
@@ -250,19 +202,19 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> verifyOtp(String phoneNumber, String otpCode) async {
-    // Left unimplemented as we use Firebase Email/Password Auth for production
+    // Left unimplemented as we use email/password auth for production
     throw UnimplementedError('SMS OTP is not supported.');
   }
 
   @override
   Future<void> resendOtp(String phoneNumber) async {
-    // Left unimplemented as we use Firebase Email/Password Auth for production
+    // Left unimplemented as we use email/password auth for production
     throw UnimplementedError('SMS OTP is not supported.');
   }
 
   @override
   Future<UserEntity?> getCurrentUser() async {
-    if (!_isFirebaseAvailable) {
+    if (!isSupabaseAvailable) {
       try {
         final box = Hive.box('auth_box');
         final savedUserId = box.get('userId');
@@ -273,10 +225,7 @@ class AuthRepositoryImpl implements AuthRepository {
           final address = box.get('address');
           final gpsLocation = box.get('gpsLocation');
           final roleStr = box.get('role') ?? 'customer';
-          final role = UserRole.values.firstWhere(
-            (r) => r.name == roleStr,
-            orElse: () => UserRole.customer,
-          );
+          final role = _roleFromString(roleStr);
 
           return UserEntity(
             id: savedUserId,
@@ -295,16 +244,11 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     try {
-      final fbUser = _firebaseAuth.currentUser;
-      if (fbUser == null) return null;
+      final authUser = _client.auth.currentUser;
+      if (authUser == null) return null;
 
-      final doc = await _firestore.collection('users').doc(fbUser.uid).get();
-      if (!doc.exists) return null;
-
-      final data = doc.data()!;
-      data['id'] = fbUser.uid;
-      final userModel = UserModel.fromJson(data);
-      return userModel.toEntity();
+      final row = await _client.from('profiles').select().eq('id', authUser.id).single();
+      return _entityFromProfileRow(row);
     } catch (e) {
       return null;
     }
@@ -312,7 +256,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> signOut() async {
-    if (!_isFirebaseAvailable) {
+    if (!isSupabaseAvailable) {
       try {
         final box = Hive.box('auth_box');
         await box.clear();
@@ -321,7 +265,7 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     try {
-      await _firebaseAuth.signOut();
+      await _client.auth.signOut();
     } catch (e) {
       throw Exception('Error signing out.');
     }

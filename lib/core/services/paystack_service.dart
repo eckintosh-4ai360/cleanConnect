@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:paystack_flutter_sdk/paystack_flutter_sdk.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,20 +80,19 @@ class PaystackService {
     }
 
     try {
-      // ── 1. Attempt Cloud Function access_code generation ──────────────
+      // ── 1. Attempt Edge Function access_code generation ────────────────
       try {
-        final callable = FirebaseFunctions.instance.httpsCallable(
-          'initializePaystackTransaction',
+        final response = await Supabase.instance.client.functions.invoke(
+          'initialize-paystack-transaction',
+          body: {
+            'email': email,
+            'amount': amountInSmallest,
+            'currency': currency,
+            'metadata': metadata ?? {},
+          },
         );
 
-        final response = await callable.call<Map<String, dynamic>>({
-          'email': email,
-          'amount': amountInSmallest,
-          'currency': currency,
-          'metadata': metadata ?? {},
-        });
-
-        final data = response.data;
+        final data = response.data as Map<String, dynamic>;
         final accessCode = data['access_code'] as String?;
         final reference = data['reference'] as String?;
 
@@ -123,8 +122,11 @@ class PaystackService {
             rethrow;
           }
         }
-      } on FirebaseFunctionsException catch (e) {
-        debugPrint('[PaystackService] Cloud Function notice: ${e.code} — ${e.message}');
+      } on FunctionException catch (e) {
+        final errorBody = e.details;
+        final errorMessage =
+            errorBody is Map ? errorBody['error']?.toString() : null;
+        debugPrint('[PaystackService] Edge Function notice: ${e.status} — $errorMessage');
         // If in debug/test environment and function is not yet deployed or secret not set, fallback to test payment
         if (kDebugMode) {
           debugPrint('[PaystackService] Debug mode: Simulated Paystack payment approval.');
@@ -135,7 +137,7 @@ class PaystackService {
         }
         return PaymentResult(
           status: PaymentStatus.failed,
-          errorMessage: e.message ?? 'Payment server error. Please try again.',
+          errorMessage: errorMessage ?? 'Payment server error. Please try again.',
         );
       }
     } catch (e) {

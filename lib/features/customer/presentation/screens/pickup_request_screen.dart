@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -62,7 +62,7 @@ class PickupRequestScreen extends HookConsumerWidget {
 
       if (!isInitialized.value && binsState.hasValue) {
         final bins = binsState.value ?? [];
-        final currentUser = FirebaseAuth.instance.currentUser;
+        final currentUser = Supabase.instance.client.auth.currentUser;
 
         if (bins.isNotEmpty) {
           final primaryBin = bins.first;
@@ -101,7 +101,8 @@ class PickupRequestScreen extends HookConsumerWidget {
         // Fallback address from user profile if bin location is empty
         if (addressSelection.value.isEmpty) {
           if (currentUser?.email != null && currentUser!.email!.isNotEmpty) {
-            addressSelection.value = '${currentUser.displayName ?? "Customer"} Address';
+            final userName = currentUser.userMetadata?['full_name'] as String? ?? 'Customer';
+            addressSelection.value = '$userName Address';
           } else {
             addressSelection.value = 'Primary Service Location';
           }
@@ -197,7 +198,7 @@ class PickupRequestScreen extends HookConsumerWidget {
 
         // ── Step 1: Process Paystack payment if user is on Pay-As-You-Go ────
         if (isPayAsYouGo) {
-          final currentUser = FirebaseAuth.instance.currentUser;
+          final currentUser = Supabase.instance.client.auth.currentUser;
           final email = currentUser?.email ?? '';
 
           if (email.isEmpty) {
@@ -505,7 +506,8 @@ class PickupRequestScreen extends HookConsumerWidget {
                 builder: (context) {
                   final bins = binsState.value ?? [];
                   final requests = requestsState.value ?? [];
-                  final currentUser = FirebaseAuth.instance.currentUser;
+                  final currentUser = Supabase.instance.client.auth.currentUser;
+                  final currentUserName = currentUser?.userMetadata?['full_name'] as String?;
 
                   final locationOptions = <String>{};
 
@@ -530,8 +532,8 @@ class PickupRequestScreen extends HookConsumerWidget {
 
                   // 4. Default user location tag
                   if (locationOptions.isEmpty) {
-                    final defaultLoc = currentUser?.displayName != null
-                        ? '${currentUser!.displayName}\'s Service Location'
+                    final defaultLoc = currentUserName != null
+                        ? '$currentUserName\'s Service Location'
                         : 'Primary Service Location';
                     locationOptions.add(defaultLoc);
                   }

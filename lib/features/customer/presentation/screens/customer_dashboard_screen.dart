@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
@@ -36,10 +36,10 @@ class CustomerDashboardScreen extends ConsumerWidget {
 
     final authState = ref.watch(authStateControllerProvider);
     final user = authState is AuthAuthenticated ? authState.user : null;
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUser = Supabase.instance.client.auth.currentUser;
 
-    final displayName = user?.fullName ?? currentUser?.displayName ?? 'Customer';
-    final photoUrl = currentUser?.photoURL ?? user?.profilePictureUrl;
+    final displayName = user?.fullName ?? currentUser?.userMetadata?['full_name'] as String? ?? 'Customer';
+    final photoUrl = currentUser?.userMetadata?['avatar_url'] as String? ?? user?.profilePictureUrl;
     final firstName = displayName.split(' ').first;
 
     final theme = Theme.of(context);

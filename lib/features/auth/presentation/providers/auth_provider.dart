@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:hive/hive.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/user_entity.dart';
@@ -41,23 +40,13 @@ AuthRepository authRepository(Ref ref) {
 
 @riverpod
 class AuthStateController extends _$AuthStateController {
-  StreamSubscription<fb.User?>? _subscription;
+  StreamSubscription<sb.AuthState>? _subscription;
 
   @override
   AuthState build() {
     _subscription?.cancel();
-    
-    bool useMock = false;
-    try {
-      final app = Firebase.app();
-      if (app.options.apiKey.contains('dummy')) {
-        useMock = true;
-      } else {
-        fb.FirebaseAuth.instance;
-      }
-    } catch (_) {
-      useMock = true;
-    }
+
+    final useMock = !AuthRepositoryImpl.isSupabaseAvailable;
 
     if (useMock) {
       try {
@@ -95,9 +84,9 @@ class AuthStateController extends _$AuthStateController {
     }
 
     try {
-      // Listen to Firebase auth changes in real-time
-      _subscription = fb.FirebaseAuth.instance.authStateChanges().listen((fbUser) async {
-        if (fbUser == null) {
+      // Listen to Supabase auth changes in real-time
+      _subscription = sb.Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+        if (data.session == null) {
           state = const AuthUnauthenticated();
         } else {
           try {
@@ -112,13 +101,13 @@ class AuthStateController extends _$AuthStateController {
           }
         }
       });
-      
+
       ref.onDispose(() {
         _subscription?.cancel();
       });
     } catch (e) {
-      // Return AuthError to prevent app crash if Firebase core is not initialized
-      return AuthError('Firebase is not initialized: ${e.toString()}');
+      // Return AuthError to prevent app crash if Supabase is not initialized
+      return AuthError('Supabase is not initialized: ${e.toString()}');
     }
 
     return const AuthLoading();

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/profile_image_picker_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -53,13 +53,15 @@ class ProfileSettingsScreen extends HookConsumerWidget {
 
     final authState = ref.watch(authStateControllerProvider);
     final user = authState is AuthAuthenticated ? authState.user : null;
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final photoUrlState = useState<String?>(currentUser?.photoURL);
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    final currentPhotoUrlFromAuth = currentUser?.userMetadata?['avatar_url'] as String?;
+    final photoUrlState = useState<String?>(currentPhotoUrlFromAuth);
     final isUploading = useState(false);
 
-    final displayName = user?.fullName ?? currentUser?.displayName ?? 'Mark Aggrey';
+    final displayName =
+        user?.fullName ?? currentUser?.userMetadata?['full_name'] as String? ?? 'Mark Aggrey';
     final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@ecowaste.com';
-    final currentPhotoUrl = photoUrlState.value ?? currentUser?.photoURL;
+    final currentPhotoUrl = photoUrlState.value ?? currentPhotoUrlFromAuth;
 
     void handleLogout() async {
       await ref.read(authStateControllerProvider.notifier).logout();

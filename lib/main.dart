@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:device_preview/device_preview.dart';
@@ -34,6 +35,16 @@ void main() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint('Firebase initialization warning: $e');
+  }
+
+  // Initialize Supabase (auth, database, realtime, storage)
+  try {
+    await Supabase.initialize(
+      url: 'https://mfysompctaxldphbxvkv.supabase.co',
+      publishableKey: 'sb_publishable_BXemNj8edIkUZQ70h3LHvA_4Bl3iaan',
+    );
+  } catch (e) {
+    debugPrint('Supabase initialization warning: $e');
   }
 
   // Initialize Paystack SDK

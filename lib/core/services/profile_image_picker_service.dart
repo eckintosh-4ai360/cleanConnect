@@ -1,15 +1,15 @@
 ﻿import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileImagePickerService {
   static final ImagePicker _picker = ImagePicker();
-  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static GoTrueClient get _auth => Supabase.instance.client.auth;
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Pick an image from camera or gallery and update profile photo in Firestore and FirebaseAuth.
+  /// Pick an image from camera or gallery and update profile photo in Firestore and Supabase Auth.
   static Future<String?> pickAndUploadProfileImage({
     required ImageSource source,
     String? customUid,
@@ -28,7 +28,7 @@ class ProfileImagePickerService {
       final base64String = base64Encode(bytes);
       final photoUrl = 'data:image/jpeg;base64,$base64String';
 
-      final uid = customUid ?? _auth.currentUser?.uid;
+      final uid = customUid ?? _auth.currentUser?.id;
       if (uid == null || uid.isEmpty) return photoUrl;
 
       final batch = _db.batch();
@@ -71,10 +71,10 @@ class ProfileImagePickerService {
 
       await batch.commit();
 
-      // 4. Update FirebaseAuth user profile photo if current logged in user
-      if (uid == _auth.currentUser?.uid) {
+      // 4. Update Supabase Auth user profile photo if current logged in user
+      if (uid == _auth.currentUser?.id) {
         try {
-          await _auth.currentUser?.updatePhotoURL(photoUrl);
+          await _auth.updateUser(UserAttributes(data: {'avatar_url': photoUrl}));
         } catch (_) {}
       }
 

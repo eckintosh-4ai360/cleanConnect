@@ -2,7 +2,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/entities/incident_report_entity.dart';
@@ -10,13 +10,15 @@ import '../../domain/repositories/customer_repository.dart';
 
 /// Firestore-backed implementation of [CustomerRepository].
 /// All data is scoped to the currently authenticated user's UID.
+/// NOTE: still Firestore-backed pending the Phase 4 migration to Postgres —
+/// only the current-user source below has moved to Supabase Auth.
 class CustomerRepositoryImpl implements CustomerRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final Random _random = Random();
+  GoTrueClient get _auth => Supabase.instance.client.auth;
 
-  String get _uid => _auth.currentUser?.uid ?? '';
+  String get _uid => _auth.currentUser?.id ?? '';
 
   CollectionReference get _binsRef =>
       _db.collection('customers').doc(_uid).collection('bins');
@@ -66,7 +68,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     final custDoc = await _customerRef.get();
     final custData = custDoc.data() as Map<String, dynamic>? ?? {};
     final name =
-        _auth.currentUser?.displayName ??
+        _auth.currentUser?.userMetadata?['full_name'] as String? ??
         custData['displayName'] ??
         custData['fullName'] ??
         'Customer';
@@ -98,7 +100,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'fullName': name,
         'email': email,
         'phoneNumber':
-            custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '',
+            custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '',
         'contractType': 'Residential',
         'subscriptionPlan': '$frequency Plan',
         'subscriptionFee': 50.0,
@@ -144,7 +146,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     final custDoc = await _customerRef.get();
     final custData = custDoc.data() as Map<String, dynamic>? ?? {};
     final name =
-        _auth.currentUser?.displayName ??
+        _auth.currentUser?.userMetadata?['full_name'] as String? ??
         custData['displayName'] ??
         custData['fullName'] ??
         'Customer';
@@ -168,7 +170,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'fullName': name,
       'email': email,
       'phoneNumber':
-          custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '',
+          custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '',
       'pendingBinRequestsCount': FieldValue.increment(1),
       'updatedAt': FieldValue.serverTimestamp(),
       'createdAt': custData['createdAt'] ?? FieldValue.serverTimestamp(),
@@ -246,7 +248,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     final custDoc = await _customerRef.get();
     final custData = custDoc.data() as Map<String, dynamic>? ?? {};
     final name =
-        _auth.currentUser?.displayName ??
+        _auth.currentUser?.userMetadata?['full_name'] as String? ??
         custData['displayName'] ??
         custData['fullName'] ??
         'Customer';
@@ -299,7 +301,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'fullName': name,
         'email': email,
         'phoneNumber':
-            custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '',
+            custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '',
         'contractType': 'Residential',
         'subscriptionPlan': 'Weekly Plan',
         'subscriptionFee': 50.0,
@@ -551,12 +553,12 @@ class CustomerRepositoryImpl implements CustomerRepository {
     final custDoc = await _customerRef.get();
     final custData = custDoc.data() as Map<String, dynamic>? ?? {};
     final name =
-        _auth.currentUser?.displayName ??
+        _auth.currentUser?.userMetadata?['full_name'] as String? ??
         custData['displayName'] ??
         custData['fullName'] ??
         'Customer';
     final phone =
-        custData['phoneNumber'] ?? _auth.currentUser?.phoneNumber ?? '';
+        custData['phoneNumber'] ?? _auth.currentUser?.phone ?? '';
 
     // Root 'incidentReports' collection is the source of truth the Admin
     // Panel reads from, so its id must be generated there.

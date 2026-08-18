@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../domain/entities/incident_report_entity.dart';
@@ -7,9 +7,9 @@ import '../../domain/repositories/rider_repository.dart';
 
 class RiderRepositoryImpl implements RiderRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  GoTrueClient get _auth => Supabase.instance.client.auth;
 
-  String get _uid => _auth.currentUser?.uid ?? 'rider_default';
+  String get _uid => _auth.currentUser?.id ?? 'rider_default';
 
   DocumentReference get _riderRef => _db.collection('riders').doc(_uid);
 
@@ -71,7 +71,7 @@ class RiderRepositoryImpl implements RiderRepository {
 
   RiderEntity _fallbackProfile() => RiderEntity(
         id: _uid,
-        fullName: _auth.currentUser?.displayName ?? 'Marcus Sterling',
+        fullName: _auth.currentUser?.userMetadata?['full_name'] as String? ?? 'Marcus Sterling',
         email: _auth.currentUser?.email ?? 'marcus@ecowaste.com',
         phoneNumber: '+1 (555) 234-5678',
         profilePhotoUrl:
