@@ -1,13 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  addDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function Sites() {
   const [sites, setSites] = useState([]);
@@ -16,47 +8,56 @@ export default function Sites() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'garbageSites'), (snap) => {
-      setSites(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    }, (err) => {
-      console.warn('Sites listener:', err);
-      setLoading(false);
-    });
-    return () => unsub();
+    let mounted = true;
+
+    const fetchSites = async () => {
+      const { data, error } = await supabase.from('garbage_sites').select('*');
+      if (mounted && !error) setSites(data);
+      if (mounted) setLoading(false);
+      if (error) console.warn('Sites fetch:', error);
+    };
+    fetchSites();
+
+    const channel = supabase
+      .channel('garbage_sites_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'garbage_sites' }, fetchSites)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleAddSite = async (e) => {
     e.preventDefault();
     setSaving(true);
     const formData = new FormData(e.target);
-    try {
-      await addDoc(collection(db, 'garbageSites'), {
-        name: formData.get('name'),
-        region: formData.get('region'),
-        capacity: formData.get('capacity'),
-        fill: 0,
-        status: 'Normal',
-        lastCollected: null,
-        createdAt: serverTimestamp(),
-      });
+    const { error } = await supabase.from('garbage_sites').insert({
+      name: formData.get('name'),
+      region: formData.get('region'),
+      capacity: formData.get('capacity'),
+      fill: 0,
+      status: 'Normal',
+      last_collected: null,
+    });
+    if (error) {
+      console.error('Failed to add site:', error);
+    } else {
       setShowAddModal(false);
       e.target.reset();
-    } catch (err) {
-      console.error('Failed to add site:', err);
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   };
 
   const handleDeleteSite = async (siteId) => {
     if (!window.confirm('Remove this site?')) return;
-    await deleteDoc(doc(db, 'garbageSites', siteId));
+    await supabase.from('garbage_sites').delete().eq('id', siteId);
   };
 
   const formatDate = (ts) => {
     if (!ts) return 'Never';
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const d = new Date(ts);
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
@@ -158,7 +159,7 @@ export default function Sites() {
 
                 <div style={{ borderTop: '1px solid var(--border-divider)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
                   <span>Bin: <strong>{site.capacity || '—'}</strong></span>
-                  <span>Last collected: <strong>{formatDate(site.lastCollected)}</strong></span>
+                  <span>Last collected: <strong>{formatDate(site.last_collected)}</strong></span>
                 </div>
               </div>
             );

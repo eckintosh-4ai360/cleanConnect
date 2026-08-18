@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  query,
-  orderBy,
-  limit,
-  onSnapshot,
-  where,
-  getDocs,
-  getAggregateFromServer,
-  sum as fsSum,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function Dashboard() {
   const [topRiders, setTopRiders] = useState([]);
@@ -27,168 +16,156 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
 
+  // ── Today's Activities: pickups scheduled for today ─────────────────────
   useEffect(() => {
-    // ── Today's Activities: pickups scheduled for today ────────────────────
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const startOfTomorrow = new Date(startOfToday);
     startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
-    const todaysPickupsQ = query(
-      collection(db, 'pickupRequests'),
-      where('date', '>=', startOfToday),
-      where('date', '<', startOfTomorrow)
-    );
-    const unsubTodaysPickups = onSnapshot(
-      todaysPickupsQ,
-      (snap) => {
-        setTodaysPickups(
-          snap.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            date: doc.data().date?.toDate?.() ?? null,
-          }))
-        );
-        setActivitiesLoading(false);
-      },
-      () => { setTodaysPickups([]); setActivitiesLoading(false); }
-    );
+    const mapPickupRow = (r) => ({ ...r, date: r.date ? new Date(r.date) : null });
 
-    // ── Today's Activities: waste/gutter reports still open ────────────────
-    const incidentsQ = query(collection(db, 'incidentReports'));
-    const unsubIncidents = onSnapshot(
-      incidentsQ,
-      (snap) => {
-        const docs = snap.docs
-          .map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate?.() ?? new Date(),
-          }))
-          .filter((r) => r.status !== 'resolved');
-        setOpenIncidents(docs);
-      },
-      () => setOpenIncidents([])
-    );
+    let mounted = true;
+    const fetchTodaysPickups = async () => {
+      const { data, error } = await supabase
+        .from('pickup_requests')
+        .select('*')
+        .gte('date', startOfToday.toISOString())
+        .lt('date', startOfTomorrow.toISOString());
+      if (mounted && !error) setTodaysPickups(data.map(mapPickupRow));
+      if (mounted) setActivitiesLoading(false);
+    };
+    fetchTodaysPickups();
+
+    const pickupsChannel = supabase
+      .channel('dashboard_todays_pickups')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests' }, fetchTodaysPickups)
+      .subscribe();
+
+    const mapIncidentRow = (r) => ({ ...r, createdAt: r.created_at ? new Date(r.created_at) : new Date() });
+
+    const fetchOpenIncidents = async () => {
+      const { data, error } = await supabase.from('incident_reports').select('*');
+      if (mounted && !error) {
+        setOpenIncidents(data.map(mapIncidentRow).filter((r) => r.status !== 'resolved'));
+      }
+    };
+    fetchOpenIncidents();
+
+    const incidentsChannel = supabase
+      .channel('dashboard_open_incidents')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incident_reports' }, fetchOpenIncidents)
+      .subscribe();
 
     return () => {
-      unsubTodaysPickups();
-      unsubIncidents();
+      mounted = false;
+      supabase.removeChannel(pickupsChannel);
+      supabase.removeChannel(incidentsChannel);
     };
   }, []);
 
+  // ── Live metrics + activity feeds ────────────────────────────────────────
   useEffect(() => {
-    // ── 0. Real-time Pickup Requests ──────────────────────────────────────
-    const requestsQ = query(
-      collection(db, 'pickupRequests'),
-      orderBy('createdAt', 'desc'),
-      limit(5)
-    );
-    const unsubRequests = onSnapshot(
-      requestsQ,
-      (snap) => {
-        setPickupRequests(
-          snap.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            createdAt: doc.data().createdAt?.toDate?.() ?? new Date(),
-          }))
-        );
-        setLoading(false);
-      },
-      () => { setPickupRequests([]); setLoading(false); }
-    );
+    let mounted = true;
 
-    // ── 1. Real-time: Recent Collections ──────────────────────────────────
-    const collectionsQ = query(
-      collection(db, 'collections'),
-      orderBy('collectedAt', 'desc'),
-      limit(10)
-    );
-    // ── 1b. Waste/CO2 totals across ALL collections (not just the 10 most
-    // recent shown below) — an aggregate query so this doesn't require
-    // downloading every collection doc just to sum two fields.
-    const fetchCollectionTotals = async () => {
-      try {
-        const totals = await getAggregateFromServer(
-          collection(db, 'collections'),
-          {
-            totalWeight: fsSum('weightKg'),
-            totalCO2: fsSum('carbonOffset'),
-          }
-        );
-        setMetrics((prev) => ({
-          ...prev,
-          wasteCollectedKg: parseFloat((totals.data().totalWeight ?? 0).toFixed(1)),
-          co2SavedKg: parseFloat((totals.data().totalCO2 ?? 0).toFixed(1)),
-        }));
-      } catch (_) {}
+    const mapPickupRequestRow = (r) => ({ ...r, createdAt: r.created_at ? new Date(r.created_at) : new Date() });
+    const fetchRecentPickupRequests = async () => {
+      const { data, error } = await supabase
+        .from('pickup_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (mounted && !error) setPickupRequests(data.map(mapPickupRequestRow));
+      if (mounted) setLoading(false);
     };
+    fetchRecentPickupRequests();
+    const pickupRequestsChannel = supabase
+      .channel('dashboard_pickup_requests')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests' }, fetchRecentPickupRequests)
+      .subscribe();
 
-    const unsubCollections = onSnapshot(collectionsQ, (snap) => {
-      setRecentCollections(
-        snap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          collectedAt: doc.data().collectedAt?.toDate?.() ?? new Date(),
-        }))
-      );
-      setLoading(false);
-      fetchCollectionTotals();
-    });
-
-    // ── 2. Real-time: Active Riders Count ─────────────────────────────────
-    const ridersQ = query(
-      collection(db, 'riders'),
-      where('status', '==', 'active')
-    );
-    const unsubRiders = onSnapshot(ridersQ, (snap) => {
-      setMetrics((prev) => ({ ...prev, activeRiders: snap.size }));
-    });
-
-    // ── 3. Real-time: Top Riders by totalCollections ───────────────────────
-    const topRidersQ = query(
-      collection(db, 'riders'),
-      orderBy('totalCollections', 'desc'),
-      limit(4)
-    );
-    const unsubTopRiders = onSnapshot(topRidersQ, (snap) => {
-      setTopRiders(
-        snap.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().fullName ?? 'Unknown',
-          collections: doc.data().totalCollections ?? 0,
-          rating: doc.data().rating ?? 0,
-          avatar: doc.data().photoUrl ?? `https://api.dicebear.com/7.x/initials/svg?seed=${doc.data().fullName}`,
-        }))
-      );
-    });
-
-    // ── 4. One-time: Total Revenue from payments ────────────────────────
-    const fetchRevenue = async () => {
-      try {
-        const paidQ = query(
-          collection(db, 'payments'),
-          where('status', '==', 'paid')
-        );
-        const snap = await getDocs(paidQ);
-        const total = snap.docs.reduce(
-          (sum, d) => sum + (d.data().amount ?? 0),
-          0
-        );
+    const mapCollectionRow = (r) => ({ ...r, collectedAt: r.collected_at ? new Date(r.collected_at) : new Date() });
+    const fetchCollectionTotals = async () => {
+      const { data, error } = await supabase.from('collection_events').select('weight_kg, carbon_offset');
+      if (mounted && !error) {
+        const totalWeight = data.reduce((s, r) => s + (r.weight_kg ?? 0), 0);
+        const totalCO2 = data.reduce((s, r) => s + (r.carbon_offset ?? 0), 0);
         setMetrics((prev) => ({
           ...prev,
-          totalRevenue: parseFloat(total.toFixed(2)),
+          wasteCollectedKg: parseFloat(totalWeight.toFixed(1)),
+          co2SavedKg: parseFloat(totalCO2.toFixed(1)),
         }));
-      } catch (_) {}
+      }
+    };
+    const fetchRecentCollections = async () => {
+      const { data, error } = await supabase
+        .from('collection_events')
+        .select('*')
+        .order('collected_at', { ascending: false })
+        .limit(10);
+      if (mounted && !error) setRecentCollections(data.map(mapCollectionRow));
+      if (mounted) setLoading(false);
+      fetchCollectionTotals();
+    };
+    fetchRecentCollections();
+    const collectionsChannel = supabase
+      .channel('dashboard_collections')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'collection_events' }, fetchRecentCollections)
+      .subscribe();
+
+    const fetchActiveRiderCount = async () => {
+      const { count, error } = await supabase
+        .from('riders')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active');
+      if (mounted && !error) setMetrics((prev) => ({ ...prev, activeRiders: count ?? 0 }));
+    };
+    fetchActiveRiderCount();
+
+    const mapTopRiderRow = (r) => ({
+      id: r.id,
+      name: r.profiles?.full_name ?? 'Unknown',
+      collections: r.total_collections ?? 0,
+      rating: r.rating ?? 0,
+      avatar: r.profiles?.profile_picture_url || `https://api.dicebear.com/7.x/initials/svg?seed=${r.profiles?.full_name}`,
+    });
+    const fetchTopRiders = async () => {
+      const { data, error } = await supabase
+        .from('riders')
+        .select('id, total_collections, rating, profiles(full_name, profile_picture_url)')
+        .order('total_collections', { ascending: false })
+        .limit(4);
+      if (mounted && !error) setTopRiders(data.map(mapTopRiderRow));
+    };
+    fetchTopRiders();
+
+    const ridersChannel = supabase
+      .channel('dashboard_riders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, () => {
+        fetchActiveRiderCount();
+        fetchTopRiders();
+      })
+      .subscribe();
+
+    const fetchRevenue = async () => {
+      const { data, error } = await supabase.from('payments').select('amount').eq('status', 'paid');
+      if (mounted && !error) {
+        const total = data.reduce((s, d) => s + (d.amount ?? 0), 0);
+        setMetrics((prev) => ({ ...prev, totalRevenue: parseFloat(total.toFixed(2)) }));
+      }
     };
     fetchRevenue();
+    const paymentsChannel = supabase
+      .channel('dashboard_payments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, fetchRevenue)
+      .subscribe();
 
     return () => {
-      unsubRequests();
-      unsubCollections();
-      unsubRiders();
-      unsubTopRiders();
+      mounted = false;
+      supabase.removeChannel(pickupRequestsChannel);
+      supabase.removeChannel(collectionsChannel);
+      supabase.removeChannel(ridersChannel);
+      supabase.removeChannel(paymentsChannel);
     };
   }, []);
 
@@ -223,8 +200,8 @@ export default function Dashboard() {
     ...todaysPickups.map((p) => ({
       key: `pickup-${p.id}`,
       type: 'Pickup',
-      title: p.customerName ?? 'Customer',
-      subtitle: `${Array.isArray(p.binTypes) ? p.binTypes.join(', ') : 'General'} — ${p.timeSlot ?? 'Flexible'}`,
+      title: p.customer_name ?? 'Customer',
+      subtitle: `${Array.isArray(p.bin_types) ? p.bin_types.join(', ') : 'General'} — ${p.time_slot ?? 'Flexible'}`,
       status: p.status ?? 'pending',
       badgeClass: pickupBadgeClass(p.status),
       sortTime: p.date,
@@ -232,7 +209,7 @@ export default function Dashboard() {
     ...openIncidents.map((r) => ({
       key: `incident-${r.id}`,
       type: 'Waste/Gutter Report',
-      title: r.reporterName ?? 'Customer',
+      title: r.reporter_name ?? 'Customer',
       subtitle: r.description ?? 'No description provided',
       status: r.status ?? 'pending',
       badgeClass: incidentBadgeClass(r.status),
@@ -253,7 +230,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
           <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
-            Live Firestore
+            Live
           </span>
         </div>
       </div>
@@ -398,7 +375,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Top Performers - Live from Firestore */}
+        {/* Top Performers - Live from Postgres */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <h3 style={{ fontSize: '16px' }}>Top Performing Riders</h3>
           {loading ? (
@@ -456,9 +433,9 @@ export default function Dashboard() {
                 pickupRequests.map((req) => (
                   <tr key={req.id}>
                     <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{req.id.slice(0, 8).toUpperCase()}</td>
-                    <td style={{ fontWeight: '700' }}>{req.customerName ?? 'Customer'}</td>
-                    <td>{Array.isArray(req.binTypes) ? req.binTypes.join(', ') : 'General'}</td>
-                    <td>{req.location ?? '—'} ({req.timeSlot ?? 'Flexible'})</td>
+                    <td style={{ fontWeight: '700' }}>{req.customer_name ?? 'Customer'}</td>
+                    <td>{Array.isArray(req.bin_types) ? req.bin_types.join(', ') : 'General'}</td>
+                    <td>{req.location ?? '—'} ({req.time_slot ?? 'Flexible'})</td>
                     <td>
                       <span className={`badge ${req.status === 'pending' ? 'badge-pending' : 'badge-active'}`}>
                         {req.status?.toUpperCase() ?? 'PENDING'}
@@ -497,9 +474,9 @@ export default function Dashboard() {
                 recentCollections.map((log) => (
                   <tr key={log.id}>
                     <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{log.id.slice(0, 8).toUpperCase()}</td>
-                    <td>{log.customerName ?? log.address ?? '—'}</td>
-                    <td>{log.riderName ?? '—'}</td>
-                    <td>{log.weightKg ? `${log.weightKg} kg` : '—'}</td>
+                    <td>{log.customer_name ?? log.address ?? '—'}</td>
+                    <td>{log.rider_name ?? '—'}</td>
+                    <td>{log.weight_kg ? `${log.weight_kg} kg` : '—'}</td>
                     <td>
                       <span className={`badge ${log.status === 'completed' ? 'badge-active' : 'badge-pending'}`}>
                         {log.status ?? 'pending'}

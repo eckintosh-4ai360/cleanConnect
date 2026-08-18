@@ -1,12 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  where,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function Collections() {
   const [collections, setCollections] = useState([]);
@@ -14,18 +7,29 @@ export default function Collections() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'collections'), orderBy('collectedAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setCollections(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-          collectedAt: d.data().collectedAt?.toDate?.() ?? null,
-        }))
-      );
-      setLoading(false);
-    });
-    return () => unsub();
+    let mounted = true;
+
+    const mapRow = (r) => ({ ...r, collectedAt: r.collected_at ? new Date(r.collected_at) : null });
+
+    const fetchCollections = async () => {
+      const { data, error } = await supabase
+        .from('collection_events')
+        .select('*')
+        .order('collected_at', { ascending: false });
+      if (mounted && !error) setCollections(data.map(mapRow));
+      if (mounted) setLoading(false);
+    };
+    fetchCollections();
+
+    const channel = supabase
+      .channel('collection_events_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'collection_events' }, fetchCollections)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredLogs = collections.filter((c) => {
@@ -42,8 +46,8 @@ export default function Collections() {
   };
 
   const completedCount = collections.filter(c => c.status === 'completed').length;
-  const totalWeight = collections.reduce((sum, c) => sum + (c.weightKg ?? 0), 0);
-  const totalOffset = collections.reduce((sum, c) => sum + (c.carbonOffset ?? 0), 0);
+  const totalWeight = collections.reduce((sum, c) => sum + (c.weight_kg ?? 0), 0);
+  const totalOffset = collections.reduce((sum, c) => sum + (c.carbon_offset ?? 0), 0);
 
   return (
     <div className="page-content">
@@ -116,22 +120,22 @@ export default function Collections() {
                 filteredLogs.map((log) => (
                   <tr key={log.id}>
                     <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{log.id.slice(0, 8).toUpperCase()}</td>
-                    <td style={{ fontWeight: '600' }}>{log.customerName ?? log.address ?? '—'}</td>
-                    <td>{log.riderName ?? '—'}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{log.binType ?? '—'}</td>
-                    <td>{log.weightKg != null ? `${log.weightKg} kg` : '—'}</td>
+                    <td style={{ fontWeight: '600' }}>{log.customer_name ?? log.address ?? '—'}</td>
+                    <td>{log.rider_name ?? '—'}</td>
+                    <td style={{ textTransform: 'capitalize' }}>{log.bin_type ?? '—'}</td>
+                    <td>{log.weight_kg != null ? `${log.weight_kg} kg` : '—'}</td>
                     <td style={{ color: 'var(--color-success)', fontWeight: 'bold' }}>
-                      {log.carbonOffset != null ? `${log.carbonOffset} kg` : '—'}
+                      {log.carbon_offset != null ? `${log.carbon_offset} kg` : '—'}
                     </td>
                     <td>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: log.qrVerified ? 'var(--color-success)' : 'var(--text-muted)', fontSize: '12px', fontWeight: 'bold' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: log.qr_verified ? 'var(--color-success)' : 'var(--text-muted)', fontSize: '12px', fontWeight: 'bold' }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          {log.qrVerified
+                          {log.qr_verified
                             ? <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3" />
                             : (<><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>)
                           }
                         </svg>
-                        {log.qrVerified ? 'Verified' : 'Bypassed'}
+                        {log.qr_verified ? 'Verified' : 'Bypassed'}
                       </span>
                     </td>
                     <td style={{ color: 'var(--text-secondary)' }}>{formatDateTime(log.collectedAt)}</td>
