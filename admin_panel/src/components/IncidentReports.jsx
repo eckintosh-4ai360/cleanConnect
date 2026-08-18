@@ -1,15 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  doc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function IncidentReports() {
   const [reports, setReports] = useState([]);
@@ -20,69 +10,53 @@ export default function IncidentReports() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'incidentReports'),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const docs = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-          createdAt: d.data().createdAt?.toDate?.() ?? new Date(),
-        }));
-        setReports(docs);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('IncidentReports listener error:', err);
-        setLoading(false);
-      }
-    );
-    return () => unsub();
-  }, []);
+    let mounted = true;
 
-  // Merge 'riders' + 'users' (role === 'rider') the same way the Riders screen does,
-  // so newly-registered riders show up in the assignment dropdown right away.
-  useEffect(() => {
-    let riderDocs = [];
-    let userDocs = [];
+    const mapRow = (r) => ({ ...r, createdAt: r.created_at ? new Date(r.created_at) : new Date() });
 
-    const updateCombined = () => {
-      const map = new Map();
-      userDocs.forEach((u) => {
-        if ((u.role || '').toLowerCase() === 'rider') {
-          map.set(u.id, {
-            id: u.id,
-            fullName: u.fullName || u.displayName || 'Rider',
-            status: u.status || 'active',
-          });
-        }
-      });
-      riderDocs.forEach((r) => {
-        const existing = map.get(r.id) || {};
-        map.set(r.id, {
-          id: r.id,
-          fullName: r.fullName || r.displayName || existing.fullName || 'Rider',
-          status: r.status || existing.status || 'active',
-        });
-      });
-      setRiders(Array.from(map.values()));
+    const fetchReports = async () => {
+      const { data, error } = await supabase
+        .from('incident_reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (mounted && !error) setReports(data.map(mapRow));
+      if (mounted) setLoading(false);
+      if (error) console.warn('IncidentReports fetch:', error);
     };
+    fetchReports();
 
-    const unsubRiders = onSnapshot(collection(db, 'riders'), (snap) => {
-      riderDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      updateCombined();
-    });
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      userDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      updateCombined();
-    });
+    const channel = supabase
+      .channel('incident_reports_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'incident_reports' }, fetchReports)
+      .subscribe();
 
     return () => {
-      unsubRiders();
-      unsubUsers();
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchRiders = async () => {
+      const { data, error } = await supabase
+        .from('riders')
+        .select('id, status, profiles(full_name)');
+      if (mounted && !error) {
+        setRiders(data.map((r) => ({ id: r.id, fullName: r.profiles?.full_name || 'Rider', status: r.status || 'active' })));
+      }
+    };
+    fetchRiders();
+
+    const channel = supabase
+      .channel('incident_reports_riders_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, fetchRiders)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -141,61 +115,26 @@ export default function IncidentReports() {
 
   const handleAssign = async (report, riderId) => {
     if (!riderId) return;
-    const rider = riders.find((r) => r.id === riderId);
-    if (!rider) return;
-
     setActionLoading(true);
-    try {
-      const update = {
-        assignedRiderId: rider.id,
-        assignedRiderName: rider.fullName,
-        status: 'assigned',
-        updatedAt: serverTimestamp(),
-      };
-
-      await updateDoc(doc(db, 'incidentReports', report.id), update);
-
-      if (report.reporterId) {
-        try {
-          await updateDoc(
-            doc(db, 'customers', report.reporterId, 'incidentReports', report.id),
-            update
-          );
-        } catch (_) {}
-      }
-
-      await addDoc(collection(db, 'riders', rider.id, 'notifications'), {
-        title: 'New Report Assigned',
-        message: `You've been assigned a new incident report: ${report.description?.slice(0, 80) || 'Waste/gutter issue'}`,
-        type: 'incident_assigned',
-        reportId: report.id,
-        isRead: false,
-        createdAt: serverTimestamp(),
-      });
-
-      setSelectedReport((prev) => (prev?.id === report.id ? { ...prev, ...update } : prev));
-    } catch (err) {
-      alert('Failed to assign worker: ' + err.message);
+    const { data, error } = await supabase.rpc('assign_incident_to_rider', {
+      p_report_id: report.id,
+      p_rider_id: riderId,
+    });
+    if (error) {
+      alert('Failed to assign worker: ' + error.message);
+    } else {
+      setSelectedReport((prev) => (prev?.id === report.id ? { ...prev, ...data } : prev));
     }
     setActionLoading(false);
   };
 
   const handleUpdateStatus = async (report, newStatus) => {
     setActionLoading(true);
-    try {
-      const update = { status: newStatus, updatedAt: serverTimestamp() };
-      await updateDoc(doc(db, 'incidentReports', report.id), update);
-      if (report.reporterId) {
-        try {
-          await updateDoc(
-            doc(db, 'customers', report.reporterId, 'incidentReports', report.id),
-            update
-          );
-        } catch (_) {}
-      }
-      setSelectedReport((prev) => (prev?.id === report.id ? { ...prev, ...update } : prev));
-    } catch (err) {
-      alert('Failed to update status: ' + err.message);
+    const { error } = await supabase.from('incident_reports').update({ status: newStatus }).eq('id', report.id);
+    if (error) {
+      alert('Failed to update status: ' + error.message);
+    } else {
+      setSelectedReport((prev) => (prev?.id === report.id ? { ...prev, status: newStatus } : prev));
     }
     setActionLoading(false);
   };
@@ -286,7 +225,7 @@ export default function IncidentReports() {
                       style={{ cursor: 'pointer', background: selectedReport?.id === report.id ? 'var(--border-divider)' : 'transparent' }}
                     >
                       <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{report.id.slice(0, 8).toUpperCase()}</td>
-                      <td style={{ fontWeight: '600' }}>{report.reporterName ?? 'Customer'}</td>
+                      <td style={{ fontWeight: '600' }}>{report.reporter_name ?? 'Customer'}</td>
                       <td style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {report.description ?? '—'}
                       </td>
@@ -313,12 +252,12 @@ export default function IncidentReports() {
               </span>
             </div>
 
-            {selectedReport.mediaUrl && (
-              selectedReport.mediaType === 'video' ? (
-                <video controls src={selectedReport.mediaUrl} style={{ width: '100%', borderRadius: '10px', maxHeight: '220px' }} />
+            {selectedReport.media_url && (
+              selectedReport.media_type === 'video' ? (
+                <video controls src={selectedReport.media_url} style={{ width: '100%', borderRadius: '10px', maxHeight: '220px' }} />
               ) : (
                 <img
-                  src={selectedReport.mediaUrl}
+                  src={selectedReport.media_url}
                   alt="Incident"
                   style={{ width: '100%', borderRadius: '10px', maxHeight: '220px', objectFit: 'cover' }}
                 />
@@ -327,8 +266,8 @@ export default function IncidentReports() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-app)', padding: '14px', borderRadius: '10px' }}>
               {[
-                { label: 'Reporter', value: selectedReport.reporterName ?? '—' },
-                { label: 'Contact', value: selectedReport.reporterPhone || 'Not provided' },
+                { label: 'Reporter', value: selectedReport.reporter_name ?? '—' },
+                { label: 'Contact', value: selectedReport.reporter_phone || 'Not provided' },
                 { label: 'Description', value: selectedReport.description ?? '—' },
                 {
                   label: 'Location',
@@ -336,8 +275,8 @@ export default function IncidentReports() {
                   link: mapsUrl(selectedReport.location),
                 },
                 { label: 'Submitted', value: formatDateTime(selectedReport.createdAt) },
-                ...(selectedReport.assignedRiderName
-                  ? [{ label: 'Assigned Worker', value: selectedReport.assignedRiderName }]
+                ...(selectedReport.assigned_rider_name
+                  ? [{ label: 'Assigned Worker', value: selectedReport.assigned_rider_name }]
                   : []),
               ].map(({ label, value, link }) => (
                 <div key={label}>

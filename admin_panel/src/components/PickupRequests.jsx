@@ -1,14 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  doc,
-  updateDoc,
-  serverTimestamp,
-} from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabase';
 
 export default function PickupRequests() {
   const [requests, setRequests] = useState([]);
@@ -18,28 +9,34 @@ export default function PickupRequests() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'pickupRequests'),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const docs = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-          createdAt: d.data().createdAt?.toDate?.() ?? new Date(),
-          date: d.data().date?.toDate?.() ?? null,
-        }));
-        setRequests(docs);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn('PickupRequests listener error:', err);
-        setLoading(false);
-      }
-    );
-    return () => unsub();
+    let mounted = true;
+
+    const mapRow = (r) => ({
+      ...r,
+      createdAt: r.created_at ? new Date(r.created_at) : new Date(),
+      date: r.date ? new Date(r.date) : null,
+    });
+
+    const fetchRequests = async () => {
+      const { data, error } = await supabase
+        .from('pickup_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (mounted && !error) setRequests(data.map(mapRow));
+      if (mounted) setLoading(false);
+      if (error) console.warn('PickupRequests fetch:', error);
+    };
+    fetchRequests();
+
+    const channel = supabase
+      .channel('pickup_requests_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests' }, fetchRequests)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filtered = requests.filter((r) => {
@@ -83,37 +80,28 @@ export default function PickupRequests() {
 
   const handleUpdateStatus = async (requestId, newStatus) => {
     setActionLoading(true);
-    try {
-      const update = { status: newStatus, updatedAt: serverTimestamp() };
-      if (newStatus === 'completed') {
-        update.completedAt = serverTimestamp();
-      }
+    const update = { status: newStatus };
+    if (newStatus === 'completed') update.completed_at = new Date().toISOString();
 
-      await updateDoc(doc(db, 'pickupRequests', requestId), update);
+    const { error } = await supabase.from('pickup_requests').update(update).eq('id', requestId);
+    if (error) {
+      alert('Failed to update status: ' + error.message);
+      setActionLoading(false);
+      return;
+    }
 
+    if (newStatus === 'completed') {
       const req = requests.find((r) => r.id === requestId);
-      if (req?.customerId) {
-        try {
-          await updateDoc(
-            doc(db, 'customers', req.customerId, 'pickupRequests', requestId),
-            update
-          );
-        } catch (_) {}
-
-        if (newStatus === 'completed') {
-          try {
-            await updateDoc(doc(db, 'customers', req.customerId), {
-              lastPickupCompletedAt: serverTimestamp(),
-            });
-          } catch (_) {}
-        }
+      if (req?.customer_id) {
+        await supabase
+          .from('customers')
+          .update({ last_pickup_completed_at: new Date().toISOString() })
+          .eq('id', req.customer_id);
       }
+    }
 
-      if (selectedReq?.id === requestId) {
-        setSelectedReq((prev) => ({ ...prev, status: newStatus }));
-      }
-    } catch (err) {
-      alert('Failed to update status: ' + err.message);
+    if (selectedReq?.id === requestId) {
+      setSelectedReq((prev) => ({ ...prev, status: newStatus }));
     }
     setActionLoading(false);
   };
@@ -203,10 +191,10 @@ export default function PickupRequests() {
                       style={{ cursor: 'pointer', background: selectedReq?.id === req.id ? 'var(--border-divider)' : 'transparent' }}
                     >
                       <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{req.id.slice(0, 8).toUpperCase()}</td>
-                      <td style={{ fontWeight: '600' }}>{req.customerName ?? 'Customer'}</td>
-                      <td style={{ textTransform: 'capitalize' }}>{Array.isArray(req.binTypes) ? req.binTypes.join(', ') : 'General'}</td>
+                      <td style={{ fontWeight: '600' }}>{req.customer_name ?? 'Customer'}</td>
+                      <td style={{ textTransform: 'capitalize' }}>{Array.isArray(req.bin_types) ? req.bin_types.join(', ') : 'General'}</td>
                       <td>{req.date ? req.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'}</td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{req.timeSlot ?? '—'}</td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{req.time_slot ?? '—'}</td>
                       <td><span className={`badge ${statusBadgeClass(req.status)}`}>{req.status?.toUpperCase() ?? 'PENDING'}</span></td>
                       <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{formatRelative(req.createdAt)}</td>
                     </tr>
@@ -231,18 +219,18 @@ export default function PickupRequests() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-app)', padding: '14px', borderRadius: '10px' }}>
               {[
-                { label: 'Customer', value: selectedReq.customerName ?? '—' },
-                { label: 'Bin Types', value: Array.isArray(selectedReq.binTypes) ? selectedReq.binTypes.join(', ') : 'General' },
+                { label: 'Customer', value: selectedReq.customer_name ?? '—' },
+                { label: 'Bin Types', value: Array.isArray(selectedReq.bin_types) ? selectedReq.bin_types.join(', ') : 'General' },
                 { label: 'Pickup Date', value: selectedReq.date ? selectedReq.date.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '—' },
-                { label: 'Time Slot', value: selectedReq.timeSlot ?? '—' },
+                { label: 'Time Slot', value: selectedReq.time_slot ?? '—' },
                 { label: 'Location', value: selectedReq.location ?? '—' },
                 { label: 'Instructions', value: selectedReq.instructions || 'None provided' },
                 { label: 'Submitted', value: formatDateTime(selectedReq.createdAt) },
-                ...(selectedReq.discountAppliedPercentage > 0
-                  ? [{ label: 'Discount Applied', value: `${selectedReq.discountAppliedPercentage}% (rider delay bonus)` }]
+                ...(selectedReq.discount_applied_percentage > 0
+                  ? [{ label: 'Discount Applied', value: `${selectedReq.discount_applied_percentage}% (rider delay bonus)` }]
                   : []),
-                ...(selectedReq.surchargeAppliedPercentage > 0
-                  ? [{ label: 'Surcharge Applied', value: `${selectedReq.surchargeAppliedPercentage}% (late payment)` }]
+                ...(selectedReq.surcharge_applied_percentage > 0
+                  ? [{ label: 'Surcharge Applied', value: `${selectedReq.surcharge_applied_percentage}% (late payment)` }]
                   : []),
               ].map(({ label, value }) => (
                 <div key={label}>

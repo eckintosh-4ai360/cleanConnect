@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection,
-  onSnapshot,
-  doc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-  where,
-} from 'firebase/firestore';
+import { supabase } from '../supabase';
 
 export default function Riders() {
   const [riders, setRiders] = useState([]);
@@ -19,73 +8,51 @@ export default function Riders() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const mapRiderRow = (r) => ({
+    id: r.id,
+    fullName: r.profiles?.full_name || 'Rider',
+    email: r.profiles?.email || '—',
+    phoneNumber: r.profiles?.phone_number || '—',
+    photoUrl: r.profiles?.profile_picture_url,
+    profilePhotoUrl: r.profiles?.profile_picture_url,
+    vehicleType: r.vehicle_type || 'Motorbike',
+    licenseNumber: r.license_number || '—',
+    nationalIdNumber: r.national_id_number || '—',
+    status: r.status || 'active',
+    rating: r.rating || 0,
+    totalCollections: r.total_collections ?? 0,
+    totalWeightKg: r.total_weight_kg ?? 0,
+    earningsThisMonth: r.earnings_this_month ?? 0,
+    efficiencyScore: r.efficiency_score ?? 0,
+  });
+
   useEffect(() => {
-    let riderDocs = [];
-    let userDocs = [];
+    let mounted = true;
 
-    const updateCombined = () => {
-      const map = new Map();
-
-      userDocs.forEach((u) => {
-        const role = (u.role || '').toLowerCase();
-        if (role === 'rider') {
-          map.set(u.id, {
-            id: u.id,
-            fullName: u.fullName || u.displayName || 'Rider',
-            email: u.email || '—',
-            phoneNumber: u.phoneNumber || u.phone || '—',
-            vehicleType: u.vehicleType || 'Motorbike',
-            licenseNumber: u.licenseNumber || 'DL-GH-20240312',
-            nationalIdNumber: u.nationalIdNumber || 'GHA-0012345678',
-            status: u.status || 'active',
-            rating: u.rating || 5.0,
-            totalCollections: u.totalCollections || 0,
-            totalWeightKg: u.totalWeightKg || 0.0,
-            earningsThisMonth: u.earningsThisMonth || 0.0,
-            efficiencyScore: u.efficiencyScore || 100.0,
-            ...u,
-          });
-        }
-      });
-
-      riderDocs.forEach((r) => {
-        const existing = map.get(r.id) || {};
-        map.set(r.id, {
-          ...existing,
-          ...r,
-          fullName: r.fullName || r.displayName || existing.fullName || 'Rider',
-        });
-      });
-
-      const merged = Array.from(map.values());
-      setRiders(merged);
-      if (merged.length > 0 && !selectedRider) {
-        setSelectedRider(merged[0]);
+    const fetchRiders = async () => {
+      const { data, error } = await supabase
+        .from('riders')
+        .select('*, profiles(full_name, email, phone_number, profile_picture_url)');
+      if (mounted && !error) {
+        const merged = data.map(mapRiderRow);
+        setRiders(merged);
+        setSelectedRider((current) => current ?? merged[0] ?? null);
       }
-      setLoading(false);
+      if (mounted) setLoading(false);
+      if (error) console.warn('Riders fetch:', error);
     };
+    fetchRiders();
 
-    const unsubRiders = onSnapshot(collection(db, 'riders'), (snap) => {
-      riderDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      updateCombined();
-    }, (err) => {
-      console.warn('Riders listener:', err);
-      setLoading(false);
-    });
-
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      userDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      updateCombined();
-    }, (err) => {
-      console.warn('Users listener:', err);
-      setLoading(false);
-    });
+    const channel = supabase
+      .channel('riders_admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, fetchRiders)
+      .subscribe();
 
     return () => {
-      unsubRiders();
-      unsubUsers();
+      mounted = false;
+      supabase.removeChannel(channel);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keep selectedRider in sync with live updates
   useEffect(() => {
@@ -93,51 +60,37 @@ export default function Riders() {
       const updated = riders.find(r => r.id === selectedRider.id);
       if (updated) setSelectedRider(updated);
     }
-  }, [riders]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riders]);
 
   const handleAddRider = async (e) => {
     e.preventDefault();
     const form = new FormData(e.target);
     setActionLoading(true);
-    try {
-      await addDoc(collection(db, 'riders'), {
+    const { error } = await supabase.functions.invoke('admin-create-user', {
+      body: {
+        email: form.get('email'),
         fullName: form.get('name'),
         phoneNumber: form.get('phone'),
-        vehicleType: form.get('vehicle'),
-        licenseNumber: form.get('license') || '',
-        nationalIdNumber: '',
-        email: form.get('email') || '',
-        status: 'active',
-        rating: 0,
-        totalCollections: 0,
-        totalWeightKg: 0,
-        earningsThisMonth: 0,
-        efficiencyScore: 0,
-        createdAt: serverTimestamp(),
-      });
+        role: 'rider',
+        extra: {
+          vehicle_type: form.get('vehicle'),
+          license_number: form.get('license') || null,
+        },
+      },
+    });
+    if (error) {
+      alert('Failed to register rider: ' + error.message);
+    } else {
       setShowAddModal(false);
-    } catch (err) {
-      alert('Failed to register rider: ' + err.message);
+      alert('Rider account created — a password-setup email has been sent to them.');
     }
     setActionLoading(false);
   };
 
   const handleSetRiderStatus = async (rider, status) => {
-    try {
-      await updateDoc(doc(db, 'riders', rider.id), {
-        status,
-        updatedAt: serverTimestamp(),
-      });
-      // Also sync users collection
-      try {
-        await updateDoc(doc(db, 'users', rider.id), {
-          status,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (_) {}
-    } catch (err) {
-      alert('Failed to update rider status: ' + err.message);
-    }
+    const { error } = await supabase.from('riders').update({ status }).eq('id', rider.id);
+    if (error) alert('Failed to update rider status: ' + error.message);
   };
 
   const handleUploadRiderPhoto = async (e) => {
@@ -147,23 +100,12 @@ export default function Riders() {
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result;
-      try {
-        await updateDoc(doc(db, 'riders', selectedRider.id), {
-          photoUrl: dataUrl,
-          profilePhotoUrl: dataUrl,
-          updatedAt: serverTimestamp(),
-        });
-        try {
-          await updateDoc(doc(db, 'users', selectedRider.id), {
-            photoUrl: dataUrl,
-            profilePhotoUrl: dataUrl,
-            updatedAt: serverTimestamp(),
-          });
-        } catch (_) {}
-        alert('Rider photo updated successfully!');
-      } catch (err) {
-        alert('Failed to update photo: ' + err.message);
-      }
+      const { error } = await supabase
+        .from('profiles')
+        .update({ profile_picture_url: dataUrl })
+        .eq('id', selectedRider.id);
+      if (error) alert('Failed to update photo: ' + error.message);
+      else alert('Rider photo updated successfully!');
     };
     reader.readAsDataURL(file);
   };
@@ -394,7 +336,7 @@ export default function Riders() {
               </div>
               <div className="form-group">
                 <label>Email Address</label>
-                <input name="email" type="email" placeholder="e.g. rider@cleanconnect.com" />
+                <input name="email" type="email" placeholder="e.g. rider@cleanconnect.com" required />
               </div>
               <div className="form-group">
                 <label>Mobile Number</label>
