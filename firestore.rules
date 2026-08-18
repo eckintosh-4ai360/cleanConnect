@@ -1,98 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ── Helper Functions ──────────────────────────────────────────────────────
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    // ── CollectionGroup Rules (required for cross-collection queries) ──────────
-    // The admin panel uses collectionGroup('bins') and collectionGroup('binRequests')
-    // to fetch all bins/requests across every customer. Firestore requires these
-    // top-level wildcard rules in addition to the nested customer subcollection rules.
-    match /{path=**}/bins/{binId} {
-      allow read, write: if true;
-    }
-
-    match /{path=**}/binRequests/{requestId} {
-      allow read, write: if true;
-    }
-
-    // ── Users Collection ──────────────────────────────────────────────────────
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-
-    // ── Customers Collection & Subcollections ─────────────────────────────────
-    match /customers/{customerId} {
-      allow read, write: if true;
-
-      match /{document=**} {
-        allow read, write: if true;
-      }
-    }
-
-    // ── Riders Collection & Subcollections ────────────────────────────────────
-    match /riders/{riderId} {
-      allow read, write: if true;
-
-      match /{document=**} {
-        allow read, write: if true;
-      }
-    }
-
-    // ── Routes & Route Stops ──────────────────────────────────────────────────
-    match /routes/{routeId} {
-      allow read, write: if true;
-
-      match /{document=**} {
-        allow read, write: if true;
-      }
-    }
-
-    // ── Collections Audits ────────────────────────────────────────────────────
-    match /collections/{collectionId} {
-      allow read, write: if true;
-    }
-
-    // ── Fleet Vehicles (Maintenance & Fleet Assets) ───────────────────────────
-    match /vehicles/{vehicleId} {
-      allow read, write: if true;
-    }
-
-    // ── Payments & Invoicing ──────────────────────────────────────────────────
-    match /payments/{paymentId} {
-      allow read, write: if true;
-    }
-
-    // ── Platform / Admin Notifications ────────────────────────────────────────
-    match /admin_notifications/{notifId} {
-      allow read, write: if true;
-    }
-
-    // ── Root Pickup Requests ──────────────────────────────────────────────────
-    match /pickupRequests/{requestId} {
-      allow read, write: if true;
-    }
-
-    // ── Root Incident Reports (waste dumps / choked gutters) ─────────────────
-    match /incidentReports/{reportId} {
-      allow read, write: if true;
-    }
-
-    // ── Pricing Plans ─────────────────────────────────────────────────────────
-    match /pricingPlans/{planId} {
-      allow read, write: if true;
-    }
-
-    // ── Settings & App Settings ───────────────────────────────────────────────
-    match /settings/{settingId} {
-      allow read, write: if true;
-    }
-
-    match /app_settings/{settingId} {
-      allow read, write: if true;
+    // The app has fully migrated to Supabase (Postgres) — see
+    // supabase/migrations/ and the Firebase -> Supabase migration plan.
+    // Firestore is no longer read or written by any client. These rules
+    // were previously wide open (allow read, write: if true) on every
+    // collection, which was a real exposure once this repo went public;
+    // locked to deny-all now that nothing depends on Firestore access.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

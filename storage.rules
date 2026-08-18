@@ -1,9 +1,13 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // ── Incident Report Media (photos/videos of waste dumps, choked gutters) ──
-    match /incident_reports/{allPaths=**} {
-      allow read, write: if true;
+    // Migrated to Supabase Storage (incident-reports bucket) — see
+    // supabase/migrations/20260818095435_customer_rpcs_and_storage.sql.
+    // Firebase Storage is no longer used by any client; previously this
+    // allowed unauthenticated read/write on incident_reports, a real
+    // exposure now that this repo is public. Locked to deny-all.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }
