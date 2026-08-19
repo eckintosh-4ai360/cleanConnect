@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../entities/user_entity.dart';
 
 abstract class AuthRepository {
@@ -13,7 +15,8 @@ abstract class AuthRepository {
     required String password,
     required String address,
     required String gpsLocation,
-    String? profilePicturePath,
+    Uint8List? housePhotoBytes,
+    String? housePhotoFileName,
     UserRole role = UserRole.customer,
   });
 

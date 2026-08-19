@@ -133,7 +133,8 @@ class AuthStateController extends _$AuthStateController {
     required String password,
     required String address,
     required String gpsLocation,
-    String? profilePicturePath,
+    Uint8List? housePhotoBytes,
+    String? housePhotoFileName,
     UserRole role = UserRole.customer,
   }) async {
     state = const AuthLoading();
@@ -145,7 +146,8 @@ class AuthStateController extends _$AuthStateController {
             password: password,
             address: address,
             gpsLocation: gpsLocation,
-            profilePicturePath: profilePicturePath,
+            housePhotoBytes: housePhotoBytes,
+            housePhotoFileName: housePhotoFileName,
             role: role,
           );
       state = AuthAuthenticated(user);

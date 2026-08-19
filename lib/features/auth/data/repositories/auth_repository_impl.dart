@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:hive/hive.dart';
 import '../../domain/entities/user_entity.dart';
@@ -120,7 +122,8 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
     required String address,
     required String gpsLocation,
-    String? profilePicturePath,
+    Uint8List? housePhotoBytes,
+    String? housePhotoFileName,
     UserRole role = UserRole.customer,
   }) async {
     if (!isSupabaseAvailable) {
@@ -131,7 +134,6 @@ class AuthRepositoryImpl implements AuthRepository {
         phoneNumber: phoneNumber,
         address: address,
         gpsLocation: gpsLocation,
-        profilePictureUrl: profilePicturePath,
         role: role,
         status: 'active',
         createdAt: DateTime.now(),
@@ -162,12 +164,31 @@ class AuthRepositoryImpl implements AuthRepository {
         throw Exception('Registration failed.');
       }
 
-      if (profilePicturePath != null) {
+      // House photo goes to customers.house_photo_url (not
+      // profiles.profile_picture_url — that column is the shared account
+      // avatar, and a house/building photo is a customer-only, pickup-facing
+      // concept riders read straight off pickup_requests). Uploaded to
+      // Storage rather than kept as a local path, which only ever resolved
+      // on the device that took the photo.
+      if (housePhotoBytes != null && housePhotoBytes.isNotEmpty) {
         try {
+          final extension = (housePhotoFileName ?? '').contains('.')
+              ? housePhotoFileName!.split('.').last
+              : 'jpg';
+          final path = '${authUser.id}/house.$extension';
+          await _client.storage.from('house-photos').uploadBinary(
+                path,
+                housePhotoBytes,
+                fileOptions: const sb.FileOptions(upsert: true),
+              );
+          final photoUrl = _client.storage.from('house-photos').getPublicUrl(path);
           await _client
-              .from('profiles')
-              .update({'profile_picture_url': profilePicturePath}).eq('id', authUser.id);
-        } catch (_) {}
+              .from('customers')
+              .update({'house_photo_url': photoUrl}).eq('id', authUser.id);
+        } catch (_) {
+          // Non-fatal: registration already succeeded. A missing house photo
+          // just means the rider falls back to the map pin alone.
+        }
       }
 
       return UserEntity(
@@ -177,7 +198,6 @@ class AuthRepositoryImpl implements AuthRepository {
         phoneNumber: phoneNumber,
         address: address,
         gpsLocation: gpsLocation,
-        profilePictureUrl: profilePicturePath,
         role: role,
         status: 'active',
         createdAt: DateTime.now(),
