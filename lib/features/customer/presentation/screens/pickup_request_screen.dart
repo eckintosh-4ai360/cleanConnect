@@ -7,9 +7,12 @@ import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/config/map_config.dart';
+import '../../../../core/services/directions_service.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/services/paystack_service.dart';
 import '../../../../core/utils/geo_utils.dart';
+import 'location_picker_screen.dart';
 
 class PickupRequestScreen extends HookConsumerWidget {
   const PickupRequestScreen({super.key});
@@ -31,9 +34,12 @@ class PickupRequestScreen extends HookConsumerWidget {
     final selectedTimeSlot = useState(defaultTimeSlot);
 
     final driverNotesController = useTextEditingController();
-    final addressSelection = useState('');
-    final isCustomAddress = useState(false);
-    final customAddressController = useTextEditingController();
+    // Pickup location is always a real GPS fix -- either the device's current
+    // position or a pin the customer dropped on the map -- never typed text,
+    // since riders navigate off these coordinates.
+    final selectedLocation = useState<LatLng?>(null);
+    final selectedLocationLabel = useState<String?>(null);
+    final isLocating = useState(false);
 
     // Dynamic payment method initialized from customer subscription profile
     final selectedPaymentMethod = useState(
@@ -65,7 +71,6 @@ class PickupRequestScreen extends HookConsumerWidget {
 
       if (!isInitialized.value && binsState.hasValue) {
         final bins = binsState.value ?? [];
-        final currentUser = Supabase.instance.client.auth.currentUser;
 
         if (bins.isNotEmpty) {
           final primaryBin = bins.first;
@@ -79,10 +84,12 @@ class PickupRequestScreen extends HookConsumerWidget {
             selectedBins.value = [primaryType];
           }
 
-          // 2. Pre-select location from registered bin GPS location
-          if (primaryBin.gpsLocation != null &&
-              primaryBin.gpsLocation!.trim().isNotEmpty) {
-            addressSelection.value = primaryBin.gpsLocation!;
+          // 2. Pre-select location from the registered bin's GPS fix -- it is
+          // already real coordinates, not typed text, so it is safe to default
+          // to. The customer can still override it below.
+          final binLocation = GeoUtils.tryParseLatLng(primaryBin.gpsLocation);
+          if (binLocation != null) {
+            selectedLocation.value = binLocation;
           }
 
           // 3. Pre-select date matching customer's preferred pickup day
@@ -101,20 +108,77 @@ class PickupRequestScreen extends HookConsumerWidget {
           }
         }
 
-        // Fallback address from user profile if bin location is empty
-        if (addressSelection.value.isEmpty) {
-          if (currentUser?.email != null && currentUser!.email!.isNotEmpty) {
-            final userName = currentUser.userMetadata?['full_name'] as String? ?? 'Customer';
-            addressSelection.value = '$userName Address';
-          } else {
-            addressSelection.value = 'Primary Service Location';
-          }
-        }
-
         isInitialized.value = true;
       }
       return null;
     }, [binsState.hasValue, subState.hasValue]);
+
+    Future<void> useCurrentLocation() async {
+      isLocating.value = true;
+      final access = await LocationService.instance.ensurePermission();
+
+      if (!context.mounted) {
+        isLocating.value = false;
+        return;
+      }
+
+      switch (access) {
+        case LocationAccess.granted:
+          final position = await LocationService.instance.currentPosition();
+          if (position != null) {
+            selectedLocation.value = LatLng(position.latitude, position.longitude);
+            selectedLocationLabel.value = await DirectionsService.instance
+                .reverseGeocode(selectedLocation.value!);
+          } else if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not get your current location. Try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        case LocationAccess.serviceDisabled:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Turn on location services to use this.'),
+              action: SnackBarAction(
+                label: 'Open settings',
+                onPressed: LocationService.instance.openLocationSettings,
+              ),
+            ),
+          );
+        case LocationAccess.deniedForever:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Location permission is blocked for CleanConnect.'),
+              action: SnackBarAction(
+                label: 'Open settings',
+                onPressed: LocationService.instance.openAppSettings,
+              ),
+            ),
+          );
+        case LocationAccess.denied:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission was not granted.')),
+          );
+      }
+
+      isLocating.value = false;
+    }
+
+    Future<void> chooseOnMap() async {
+      final result = await Navigator.of(context).push<PickedLocation>(
+        MaterialPageRoute(
+          builder: (_) => LocationPickerScreen(
+            initialPosition: selectedLocation.value ?? MapConfig.fallbackCenter,
+          ),
+        ),
+      );
+      if (result != null) {
+        selectedLocation.value = result.position;
+        selectedLocationLabel.value = result.label;
+      }
+    }
 
     final requestsState = ref.watch(customerPickupRequestsProvider);
 
@@ -186,6 +250,18 @@ class PickupRequestScreen extends HookConsumerWidget {
           const SnackBar(
             content: Text(
               'Please select at least one bin type to schedule collection.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      if (selectedLocation.value == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please set a pickup location using your current location or the map.',
             ),
             backgroundColor: Colors.orange,
           ),
@@ -269,25 +345,10 @@ class PickupRequestScreen extends HookConsumerWidget {
           finalAmountPaid = pickupTotal;
         }
 
-        final finalLocation = isCustomAddress.value &&
-                customAddressController.text.trim().isNotEmpty
-            ? customAddressController.text.trim()
-            : (addressSelection.value.trim().isNotEmpty
-                ? addressSelection.value.trim()
-                : 'Primary Service Location');
-
-        // Coordinates for the rider's map. Prefer whatever the chosen address
-        // already carries (a registered bin's gps_location is stored as a
-        // "lat, lng" string); only wake the GPS when the customer typed a
-        // free-text address, which has nothing to plot. Both paths may end up
-        // null, and schedule_pickup then falls back to parsing the text itself.
-        var destination = GeoUtils.tryParseLatLng(finalLocation);
-        if (destination == null) {
-          final position = await LocationService.instance.currentPosition();
-          if (position != null) {
-            destination = LatLng(position.latitude, position.longitude);
-          }
-        }
+        final destination = selectedLocation.value!;
+        final finalLocation = selectedLocationLabel.value?.trim().isNotEmpty == true
+            ? selectedLocationLabel.value!.trim()
+            : GeoUtils.formatCoordinates(destination.latitude, destination.longitude);
 
         // ── Step 2: Save pickup request
         await ref
@@ -303,8 +364,8 @@ class PickupRequestScreen extends HookConsumerWidget {
               originalAmount: originalTotal,
               discountAppliedPercentage: discountPercentage,
               surchargeAppliedPercentage: surchargePercentage,
-              locationLat: destination?.latitude,
-              locationLng: destination?.longitude,
+              locationLat: destination.latitude,
+              locationLng: destination.longitude,
             );
 
         if (!context.mounted) return;
@@ -519,106 +580,76 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
               const SizedBox(height: 12),
 
-              // Dynamic Location Dropdown & Custom Address Field
-              Builder(
-                builder: (context) {
-                  final bins = binsState.value ?? [];
-                  final requests = requestsState.value ?? [];
-                  final currentUser = Supabase.instance.client.auth.currentUser;
-                  final currentUserName = currentUser?.userMetadata?['full_name'] as String?;
-
-                  final locationOptions = <String>{};
-
-                  // 1. Registered bin locations
-                  for (final bin in bins) {
-                    if (bin.gpsLocation != null && bin.gpsLocation!.trim().isNotEmpty) {
-                      locationOptions.add(bin.gpsLocation!.trim());
-                    }
-                  }
-
-                  // 2. Previous requests' locations
-                  for (final req in requests) {
-                    if (req.location.trim().isNotEmpty) {
-                      locationOptions.add(req.location.trim());
-                    }
-                  }
-
-                  // 3. Current selected address
-                  if (addressSelection.value.trim().isNotEmpty) {
-                    locationOptions.add(addressSelection.value.trim());
-                  }
-
-                  // 4. Default user location tag
-                  if (locationOptions.isEmpty) {
-                    final defaultLoc = currentUserName != null
-                        ? '$currentUserName\'s Service Location'
-                        : 'Primary Service Location';
-                    locationOptions.add(defaultLoc);
-                  }
-
-                  final optionsList = locationOptions.toList();
-                  optionsList.add('+ Enter Custom Address');
-
-                  final currentSelection = isCustomAddress.value
-                      ? '+ Enter Custom Address'
-                      : (optionsList.contains(addressSelection.value)
-                          ? addressSelection.value
-                          : optionsList.first);
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: currentSelection,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                        ),
-                        items: optionsList.map((loc) {
-                          return DropdownMenuItem<String>(
-                            value: loc,
-                            child: Text(
-                              loc,
+              // Pickup location is set by GPS fix or map pin only -- never by
+              // typing an address -- so riders always navigate to a real point.
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: selectedLocation.value == null
+                        ? Colors.orange.shade300
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.location_on,
+                      color: selectedLocation.value == null
+                          ? Colors.orange
+                          : theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: selectedLocation.value == null
+                          ? const Text(
+                              'No pickup location set yet',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            )
+                          : Text(
+                              selectedLocationLabel.value ??
+                                  '${selectedLocation.value!.latitude.toStringAsFixed(6)}, '
+                                      '${selectedLocation.value!.longitude.toStringAsFixed(6)}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: loc.startsWith('+')
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: loc.startsWith('+')
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                              ),
                             ),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val == '+ Enter Custom Address') {
-                            isCustomAddress.value = true;
-                          } else if (val != null) {
-                            isCustomAddress.value = false;
-                            addressSelection.value = val;
-                          }
-                        },
-                      ),
-                      if (isCustomAddress.value) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: customAddressController,
-                          decoration: const InputDecoration(
-                            labelText: 'Enter Custom Pickup Address',
-                            hintText: 'e.g. House 42, Palm Avenue, East Legon',
-                            prefixIcon: Icon(Icons.edit_location_alt_outlined),
-                          ),
-                          onChanged: (val) {
-                            if (val.trim().isNotEmpty) {
-                              addressSelection.value = val.trim();
-                            }
-                          },
-                        ),
-                      ],
-                    ],
-                  );
-                },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: isLocating.value ? null : useCurrentLocation,
+                      icon: isLocating.value
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location, size: 18),
+                      label: const Text('Use Current Location'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: chooseOnMap,
+                      icon: const Icon(Icons.map_outlined, size: 18),
+                      label: const Text('Choose on Map'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Picking up for someone else? Use "Choose on Map" to drop a pin at their address.',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
 
               const SizedBox(height: 24),
