@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../providers/auth_provider.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/image_source_picker_sheet.dart';
 
 class RegisterScreen extends HookConsumerWidget {
   const RegisterScreen({super.key});
@@ -21,6 +22,7 @@ class RegisterScreen extends HookConsumerWidget {
     final emailController = useTextEditingController();
     final phoneController = useTextEditingController();
     final passwordController = useTextEditingController();
+    final confirmPasswordController = useTextEditingController();
     final addressController = useTextEditingController();
     final gpsController = useTextEditingController();
 
@@ -88,7 +90,13 @@ class RegisterScreen extends HookConsumerWidget {
 
     // Image Picker logic
     Future<void> pickImage() async {
-      if (!kIsWeb) {
+      final source = await showImageSourcePickerSheet(
+        context,
+        title: 'Upload House Picture',
+      );
+      if (source == null) return;
+
+      if (!kIsWeb && source == ImageSource.gallery) {
         final status = await Permission.photos.request();
         if (status.isDenied) {
           // Fallback for newer Android/iOS or custom handling
@@ -97,7 +105,7 @@ class RegisterScreen extends HookConsumerWidget {
 
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         maxWidth: 600,
         maxHeight: 600,
         imageQuality: 85,
@@ -291,6 +299,22 @@ class RegisterScreen extends HookConsumerWidget {
                             }
                             if (value.length < 6) {
                               return 'Password must be at least 6 characters';
+                            }
+                            return null;
+                          },
+                        ),
+                        EcoTextField(
+                          labelText: 'Confirm Password',
+                          hintText: '••••••••',
+                          controller: confirmPasswordController,
+                          isPassword: true,
+                          prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please confirm your password';
+                            }
+                            if (value != passwordController.text) {
+                              return 'Passwords do not match';
                             }
                             return null;
                           },

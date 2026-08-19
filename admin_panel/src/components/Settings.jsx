@@ -135,6 +135,50 @@ export default function Settings() {
     if (error) alert('Failed to delete plan: ' + error.message);
   };
 
+  // ── SMS Provider (mNotify) Settings ──────────────────────────────────────
+  const [smsForm, setSmsForm] = useState({ apiKey: '', senderId: '' });
+  const [smsKeyVisible, setSmsKeyVisible] = useState(false);
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsSaving, setSmsSaving] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchSmsSettings = async () => {
+      setSmsLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('mnotify_api_key, mnotify_sender_id')
+        .eq('id', true)
+        .maybeSingle();
+      if (mounted && !error && data) {
+        setSmsForm({
+          apiKey: data.mnotify_api_key || '',
+          senderId: data.mnotify_sender_id || '',
+        });
+      }
+      if (error) console.warn('app_settings (sms) fetch:', error);
+      if (mounted) setSmsLoading(false);
+    };
+    fetchSmsSettings();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSaveSmsSettings = async (e) => {
+    e.preventDefault();
+    setSmsSaving(true);
+    const { error } = await supabase.from('app_settings').upsert({
+      id: true,
+      mnotify_api_key: smsForm.apiKey.trim() || null,
+      mnotify_sender_id: smsForm.senderId.trim() || null,
+    }, { onConflict: 'id' });
+    if (error) {
+      alert('Failed to save SMS settings: ' + error.message);
+    } else {
+      alert('SMS settings saved.');
+    }
+    setSmsSaving(false);
+  };
+
   // ── Admin profile helpers ────────────────────────────────────────────────
   const handleAdminPhotoUpload = (e) => {
     const file = e.target.files?.[0];
@@ -303,6 +347,58 @@ export default function Settings() {
               </table>
             </div>
           )}
+        </div>
+
+        {/* ── SMS Provider (mNotify) ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px' }}>SMS Notifications (mNotify)</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Used to text customers their bin serial number when a company bin is assigned. Overrides the
+              server-side MNOTIFY_API_KEY / MNOTIFY_SENDER_ID secrets once saved here.
+            </p>
+          </div>
+          <form onSubmit={handleSaveSmsSettings} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group">
+              <label>mNotify API Key</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type={smsKeyVisible ? 'text' : 'password'}
+                  value={smsForm.apiKey}
+                  onChange={(e) => setSmsForm((prev) => ({ ...prev, apiKey: e.target.value }))}
+                  placeholder={smsLoading ? 'Loading…' : 'Enter mNotify API key'}
+                  autoComplete="off"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn-outline"
+                  style={{ padding: '8px 12px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                  onClick={() => setSmsKeyVisible((v) => !v)}
+                >
+                  {smsKeyVisible ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Sender ID</label>
+              <input
+                type="text"
+                value={smsForm.senderId}
+                onChange={(e) => setSmsForm((prev) => ({ ...prev, senderId: e.target.value }))}
+                placeholder={smsLoading ? 'Loading…' : 'e.g. CleanConnect'}
+                maxLength={11}
+              />
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Must match a sender ID already registered with mNotify (max 11 characters).
+              </p>
+            </div>
+            <div>
+              <button className="btn-primary" type="submit" disabled={smsSaving || smsLoading} style={{ padding: '8px 16px', fontSize: '12px' }}>
+                {smsSaving ? 'Saving…' : 'Save SMS Settings'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* ── Roles & Permissions ── */}

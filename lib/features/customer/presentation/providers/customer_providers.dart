@@ -54,6 +54,20 @@ class CustomerBins extends _$CustomerBins {
           gpsLocation: gpsLocation,
         );
   }
+
+  Future<void> updateBin({
+    required String binId,
+    required String frequency,
+    required List<String> pickupDays,
+  }) async {
+    await ref
+        .read(customerRepositoryProvider)
+        .updateBin(binId: binId, frequency: frequency, pickupDays: pickupDays);
+  }
+
+  Future<void> deleteBin(String binId) async {
+    await ref.read(customerRepositoryProvider).deleteBin(binId);
+  }
 }
 
 @riverpod

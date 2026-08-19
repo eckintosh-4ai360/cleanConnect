@@ -9,6 +9,7 @@ class BinEntity {
   final String? gpsLocation;
   final String? verificationPhotoUrl;
   final DateTime registeredDate;
+  final String ownership; // 'personal' or 'company'
 
   const BinEntity({
     required this.id,
@@ -21,7 +22,10 @@ class BinEntity {
     this.gpsLocation,
     this.verificationPhotoUrl,
     required this.registeredDate,
+    this.ownership = 'personal',
   });
+
+  bool get isPersonal => ownership == 'personal';
 
   BinEntity copyWith({
     String? id,
@@ -34,6 +38,7 @@ class BinEntity {
     String? gpsLocation,
     String? verificationPhotoUrl,
     DateTime? registeredDate,
+    String? ownership,
   }) {
     return BinEntity(
       id: id ?? this.id,
@@ -46,6 +51,7 @@ class BinEntity {
       gpsLocation: gpsLocation ?? this.gpsLocation,
       verificationPhotoUrl: verificationPhotoUrl ?? this.verificationPhotoUrl,
       registeredDate: registeredDate ?? this.registeredDate,
+      ownership: ownership ?? this.ownership,
     );
   }
 }

@@ -428,7 +428,7 @@ class CustomerDashboardScreen extends ConsumerWidget {
                   crossAxisCount: 2,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
-                  childAspectRatio: 1.4,
+                  childAspectRatio: 1.2,
                   children: [
                     _ActionCard(
                       title: 'Request Bin',
@@ -626,6 +626,8 @@ class _ActionCard extends StatelessWidget {
             ),
             Text(
               title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,

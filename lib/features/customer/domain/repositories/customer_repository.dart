@@ -23,6 +23,14 @@ abstract class CustomerRepository {
     required String gpsLocation,
   });
 
+  Future<BinEntity> updateBin({
+    required String binId,
+    required String frequency,
+    required List<String> pickupDays,
+  });
+
+  Future<void> deleteBin(String binId);
+
   Stream<List<PickupRequestEntity>> watchPickupRequests();
   Future<List<PickupRequestEntity>> getPickupRequests();
 

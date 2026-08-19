@@ -53,13 +53,15 @@ class PickupRequestScreen extends HookConsumerWidget {
     final currentPlan = subState.value?.currentPlan ?? 'Pay-As-You-Go';
     final isPayAsYouGo = currentPlan == 'Pay-As-You-Go';
 
-    // List of date options (next 7 days)
+    // List of date options (next 7 days). Pay-as-you-go pickups are paid for
+    // immediately at booking time, so those customers can also book same-day.
     final dateOptions = useMemoized(() {
-      return List.generate(
+      final upcoming = List.generate(
         7,
         (index) => DateTime.now().add(Duration(days: index + 1)),
       );
-    });
+      return isPayAsYouGo ? [DateTime.now(), ...upcoming] : upcoming;
+    }, [isPayAsYouGo]);
 
     // Auto-populate dynamic defaults from customer's profile, bin registration, and subscription
     useEffect(() {
@@ -456,6 +458,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                     final isSelected =
                         DateFormat('yyyy-MM-dd').format(selectedDate.value) ==
                         DateFormat('yyyy-MM-dd').format(date);
+                    final isToday =
+                        DateFormat('yyyy-MM-dd').format(DateTime.now()) ==
+                        DateFormat('yyyy-MM-dd').format(date);
                     return GestureDetector(
                       onTap: () => selectedDate.value = date,
                       child: Container(
@@ -476,7 +481,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              DateFormat('E').format(date).toUpperCase(),
+                              isToday
+                                  ? 'TODAY'
+                                  : DateFormat('E').format(date).toUpperCase(),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
