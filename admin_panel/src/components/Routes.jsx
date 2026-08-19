@@ -1,26 +1,27 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  APIProvider,
+  Map,
+  AdvancedMarker,
+  Polyline,
+  useMap,
+  useMapsLibrary,
+} from '@vis.gl/react-google-maps';
 import { supabase } from '../supabase';
 
-// ── Map projection & trip-estimate helpers ──────────────────────────────────
-// This is a self-contained, styled map — no external Maps API/key involved.
-// Rider positions come from real Firestore GPS fields (currentLat/currentLng,
-// speed, heading). Distance/ETA/traffic are derived from that real data;
-// a stable per-rider fallback target is only used when no real pickup
-// coordinate exists yet, so numbers don't look randomly generated.
-const MAP_W = 900;
-const MAP_H = 380;
-const MAP_CENTER = { lat: 5.6037, lng: -0.1870 }; // Accra
-const LAT_SPAN = 0.05;
-const LNG_SPAN = 0.09;
+const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
-function project(lat, lng) {
-  const x = ((lng - (MAP_CENTER.lng - LNG_SPAN / 2)) / LNG_SPAN) * MAP_W;
-  const y = MAP_H - ((lat - (MAP_CENTER.lat - LAT_SPAN / 2)) / LAT_SPAN) * MAP_H;
-  return {
-    x: Math.min(Math.max(x, 30), MAP_W - 30),
-    y: Math.min(Math.max(y, 30), MAP_H - 30),
-  };
-}
+// Accra — opening camera position, replaced as soon as any rider reports a fix.
+const FALLBACK_CENTER = { lat: 5.6037, lng: -0.187 };
+
+// ── Trip-estimate helpers ────────────────────────────────────────────────────
+// Rider positions come from real riders.current_lat/current_lng GPS fields.
+// Distance/ETA start from haversine + reported speed (cheap, computed for
+// every rider on every render) and get upgraded to a real driving route via
+// the Directions API for whichever rider is currently selected — see
+// useDrivingRoute below. That mirrors the mobile app's DirectionsService,
+// which also only fetches a real route for the trip actually on screen.
 
 function toRad(deg) {
   return (deg * Math.PI) / 180;
@@ -59,22 +60,22 @@ function fallbackTarget(rider) {
   const latOffset = ((seed % 100) / 100 - 0.5) * 0.035;
   const lngOffset = (((seed >> 8) % 100) / 100 - 0.5) * 0.035;
   return {
-    lat: (rider.currentLat ?? MAP_CENTER.lat) + latOffset,
-    lng: (rider.currentLng ?? MAP_CENTER.lng) + lngOffset,
+    lat: (rider.currentLat ?? FALLBACK_CENTER.lat) + latOffset,
+    lng: (rider.currentLng ?? FALLBACK_CENTER.lng) + lngOffset,
   };
 }
 
 function trafficForSpeed(speedKmh) {
   if (speedKmh == null || speedKmh <= 1) {
-    return { label: 'Stopped', color: 'var(--color-danger)', bg: 'rgba(239, 68, 68, 0.12)', crawlKmh: 4 };
+    return { label: 'Stopped', color: 'var(--color-danger)', hex: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', crawlKmh: 4 };
   }
   if (speedKmh < 15) {
-    return { label: 'Heavy traffic', color: 'var(--color-danger)', bg: 'rgba(239, 68, 68, 0.12)', crawlKmh: speedKmh };
+    return { label: 'Heavy traffic', color: 'var(--color-danger)', hex: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', crawlKmh: speedKmh };
   }
   if (speedKmh < 28) {
-    return { label: 'Moderate traffic', color: 'var(--color-accent)', bg: 'rgba(245, 158, 11, 0.12)', crawlKmh: speedKmh };
+    return { label: 'Moderate traffic', color: 'var(--color-accent)', hex: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', crawlKmh: speedKmh };
   }
-  return { label: 'Light traffic', color: 'var(--color-success)', bg: 'rgba(16, 185, 129, 0.12)', crawlKmh: speedKmh };
+  return { label: 'Light traffic', color: 'var(--color-success)', hex: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', crawlKmh: speedKmh };
 }
 
 function findAssignedPickup(riderId, pickupRequests) {
@@ -86,8 +87,8 @@ function findAssignedPickup(riderId, pickupRequests) {
 }
 
 function tripEstimate(rider, pickupRequests) {
-  const lat = rider.currentLat ?? MAP_CENTER.lat;
-  const lng = rider.currentLng ?? MAP_CENTER.lng;
+  const lat = rider.currentLat ?? FALLBACK_CENTER.lat;
+  const lng = rider.currentLng ?? FALLBACK_CENTER.lng;
   const pickup = findAssignedPickup(rider.id, pickupRequests);
   const targetCoord =
     parseCoords(pickup?.location) ||
@@ -104,32 +105,6 @@ function tripEstimate(rider, pickupRequests) {
   return { targetCoord, targetLabel, distanceKm, etaMins, traffic };
 }
 
-// ── Decorative city backdrop (static — purely visual, like map tile art) ───
-const cityBlocks = [
-  { x: 60, y: 55, w: 90, h: 55 },
-  { x: 200, y: 35, w: 70, h: 45 },
-  { x: 340, y: 65, w: 110, h: 65 },
-  { x: 540, y: 45, w: 80, h: 50 },
-  { x: 660, y: 85, w: 100, h: 55 },
-  { x: 90, y: 155, w: 95, h: 50 },
-  { x: 270, y: 145, w: 80, h: 45 },
-  { x: 480, y: 165, w: 90, h: 55 },
-  { x: 630, y: 195, w: 105, h: 65 },
-  { x: 790, y: 55, w: 85, h: 85 },
-  { x: 480, y: 265, w: 100, h: 55 },
-  { x: 660, y: 285, w: 80, h: 45 },
-];
-
-const roadNetwork = [
-  { d: 'M 0 92 L 900 92', width: 9 },
-  { d: 'M 0 232 L 900 232', width: 13, arterial: true },
-  { d: 'M 152 0 L 152 380', width: 8 },
-  { d: 'M 432 0 L 432 380', width: 11, arterial: true },
-  { d: 'M 702 0 L 702 380', width: 8 },
-  { d: 'M 0 332 L 900 332', width: 8 },
-  { d: 'M 20 15 L 520 365', width: 6 },
-];
-
 export default function Routes() {
   const [riders, setRiders] = useState([]);
   const [pickupRequests, setPickupRequests] = useState([]);
@@ -137,15 +112,16 @@ export default function Routes() {
   const [loading, setLoading] = useState(true);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
 
-  // Fallback initial riders if Firestore collection has non-GPS docs
+  // Fallback initial riders if Supabase returns nothing (e.g. dev DB with no
+  // riders yet) so the page still demonstrates the layout.
   const mockRiders = useMemo(
     () => [
       {
         id: 'rider-01',
         fullName: 'Kofi Mensah',
         status: 'active',
-        currentLat: 5.6080,
-        currentLng: -0.1820,
+        currentLat: 5.608,
+        currentLng: -0.182,
         speed: 32.4,
         heading: 45,
         targetCustomer: 'Sarah Jenkins (123 Green St)',
@@ -156,8 +132,8 @@ export default function Routes() {
         id: 'rider-02',
         fullName: 'Ama Osei',
         status: 'active',
-        currentLat: 5.6150,
-        currentLng: -0.1760,
+        currentLat: 5.615,
+        currentLng: -0.176,
         speed: 12.0,
         heading: 120,
         targetCustomer: 'Michael Scott (45 Corporate Way)',
@@ -168,8 +144,8 @@ export default function Routes() {
         id: 'rider-03',
         fullName: 'Kwame Antwi',
         status: 'active',
-        currentLat: 5.5990,
-        currentLng: -0.1910,
+        currentLat: 5.599,
+        currentLng: -0.191,
         speed: 0.0,
         heading: 0,
         targetCustomer: 'Standby / Idle',
@@ -189,7 +165,7 @@ export default function Routes() {
       fullName: r.profiles?.full_name || 'Rider',
       status: r.status || 'active',
       currentLat: r.current_lat ?? 5.6037,
-      currentLng: r.current_lng ?? -0.1870,
+      currentLng: r.current_lng ?? -0.187,
       speed: r.speed ?? 25.0,
       heading: r.heading ?? 0,
       vehicleType: r.vehicle_type || 'Motorbike',
@@ -255,8 +231,9 @@ export default function Routes() {
     ? activeRiders.reduce((sum, r) => sum + (r.speed || 0), 0) / activeRiders.length
     : 0;
 
-  // Trip estimate (distance/ETA/traffic) per rider, recomputed whenever
-  // riders or pickup assignments change.
+  // Straight-line distance/ETA per rider, recomputed whenever riders or
+  // pickup assignments change. Cheap enough to run for the whole fleet; the
+  // real driving route (below) is only ever fetched for the selected rider.
   const riderTrips = useMemo(() => {
     const map = {};
     riders.forEach((r) => {
@@ -266,6 +243,24 @@ export default function Routes() {
   }, [riders, pickupRequests]);
 
   const selectedTrip = selectedRider ? riderTrips[selectedRider.id] : null;
+
+  const selectedOrigin = selectedRider
+    ? { lat: selectedRider.currentLat ?? FALLBACK_CENTER.lat, lng: selectedRider.currentLng ?? FALLBACK_CENTER.lng }
+    : null;
+  const selectedDestination = selectedTrip?.targetCoord ?? null;
+
+  // Populated by RouteOverlay, which calls useMapsLibrary('routes') — that
+  // hook only works inside the <APIProvider> tree, so the fetch itself has
+  // to live in a component rendered inside <Map>, not here. RouteOverlay
+  // reports back up through this setter (referentially stable, so it is
+  // safe as an effect dependency there).
+  const [driving, setDriving] = useState(EMPTY_ROUTE);
+
+  // Real routed numbers win once the Directions API answers; until then (or
+  // if it errors — no key, quota, no road route) the haversine estimate above
+  // keeps the card populated instead of showing nothing.
+  const displayDistanceKm = driving.distanceKm ?? selectedTrip?.distanceKm ?? null;
+  const displayEtaMins = driving.etaMins ?? selectedTrip?.etaMins ?? null;
 
   const triggerOptimization = () => {
     alert('AI Route optimization pipeline executed. 4 collection pathways recalculated for maximum efficiency.');
@@ -317,7 +312,7 @@ export default function Routes() {
 
       {/* ── Live GPS Map & Fleet List Split Layout ── */}
       <div className="split-layout">
-        {/* Left: Interactive Real-Time Map Canvas */}
+        {/* Left: Real Google Map */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -333,7 +328,6 @@ export default function Routes() {
             </span>
           </div>
 
-          {/* Map Canvas */}
           <div
             style={{
               position: 'relative',
@@ -344,65 +338,55 @@ export default function Routes() {
               border: '1px solid var(--border-divider)',
             }}
           >
-            <svg
-              viewBox={`0 0 ${MAP_W} ${MAP_H}`}
-              width="100%"
-              height="100%"
-              preserveAspectRatio="xMidYMid slice"
-              style={{ display: 'block' }}
-            >
-              {/* Land base */}
-              <rect width={MAP_W} height={MAP_H} fill="#eae7e1" />
+            {!MAPS_API_KEY ? (
+              <MissingKeyNotice />
+            ) : loading ? (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                Loading map…
+              </div>
+            ) : (
+              <APIProvider apiKey={MAPS_API_KEY}>
+                <Map
+                  mapId={MAP_ID}
+                  defaultCenter={
+                    riders.length > 0
+                      ? { lat: riders[0].currentLat ?? FALLBACK_CENTER.lat, lng: riders[0].currentLng ?? FALLBACK_CENTER.lng }
+                      : FALLBACK_CENTER
+                  }
+                  defaultZoom={13}
+                  gestureHandling="greedy"
+                  disableDefaultUI={false}
+                  mapTypeControl={false}
+                  streetViewControl={false}
+                  fullscreenControl={false}
+                  zoomControl={true}
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  <FitBounds riders={riders} />
 
-              {/* City blocks */}
-              {cityBlocks.map((b, i) => (
-                <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} rx="6" fill="#e0dcd1" />
-              ))}
+                  {selectedRider && selectedTrip && (
+                    <RouteOverlay
+                      origin={selectedOrigin}
+                      destination={selectedDestination}
+                      color={selectedTrip.traffic.hex}
+                      label={selectedTrip.targetLabel}
+                      onRouteUpdate={setDriving}
+                    />
+                  )}
 
-              {/* Park */}
-              <path d="M 40 260 Q 120 215 190 268 Q 150 322 65 320 Z" fill="#cfe8d1" />
-
-              {/* Lagoon */}
-              <path
-                d={`M ${MAP_W - 230} ${MAP_H - 35} Q ${MAP_W - 140} ${MAP_H - 130} ${MAP_W} ${MAP_H - 95} L ${MAP_W} ${MAP_H} L ${MAP_W - 230} ${MAP_H} Z`}
-                fill="#bcd9ec"
-              />
-
-              {/* Road network */}
-              {roadNetwork.map((road, i) => (
-                <g key={i}>
-                  <path d={road.d} fill="none" stroke="#ffffff" strokeWidth={road.width + 3} strokeLinecap="round" opacity="0.9" />
-                  <path d={road.d} fill="none" stroke={road.arterial ? '#f7c98a' : '#f5f3ee'} strokeWidth={road.width} strokeLinecap="round" />
-                </g>
-              ))}
-
-              {/* Route + destination for the selected rider */}
-              {selectedRider && selectedTrip && (
-                <>
-                  <RoutePath
-                    from={project(selectedRider.currentLat ?? MAP_CENTER.lat, selectedRider.currentLng ?? MAP_CENTER.lng)}
-                    to={project(selectedTrip.targetCoord.lat, selectedTrip.targetCoord.lng)}
-                    color={selectedTrip.traffic.color}
-                  />
-                  <DestinationPin
-                    pos={project(selectedTrip.targetCoord.lat, selectedTrip.targetCoord.lng)}
-                    label={selectedTrip.targetLabel}
-                  />
-                </>
-              )}
-
-              {/* Rider markers */}
-              {riders.map((r) => (
-                <RiderMarker
-                  key={r.id}
-                  pos={project(r.currentLat ?? MAP_CENTER.lat, r.currentLng ?? MAP_CENTER.lng)}
-                  rider={r}
-                  isSelected={selectedRider?.id === r.id}
-                  distanceKm={riderTrips[r.id]?.distanceKm}
-                  onClick={() => setSelectedRider(r)}
-                />
-              ))}
-            </svg>
+                  {riders.map((r) => (
+                    <AdvancedMarker
+                      key={r.id}
+                      position={{ lat: r.currentLat ?? FALLBACK_CENTER.lat, lng: r.currentLng ?? FALLBACK_CENTER.lng }}
+                      onClick={() => setSelectedRider(r)}
+                      title={r.fullName}
+                    >
+                      <RiderPin rider={r} isSelected={selectedRider?.id === r.id} />
+                    </AdvancedMarker>
+                  ))}
+                </Map>
+              </APIProvider>
+            )}
 
             {/* Top status bar */}
             <div
@@ -419,43 +403,11 @@ export default function Routes() {
                 alignItems: 'center',
                 gap: '8px',
                 boxShadow: 'var(--shadow-premium)',
+                pointerEvents: 'none',
               }}
             >
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)' }} />
               Live Radar: Tracking {riders.length} Active Riders
-            </div>
-
-            {/* Zoom controls (decorative, matches map-app affordances) */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: '12px',
-                right: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                boxShadow: 'var(--shadow-premium)',
-              }}
-            >
-              {['+', '−'].map((sym) => (
-                <button
-                  key={sym}
-                  style={{
-                    width: '30px',
-                    height: '30px',
-                    border: 'none',
-                    borderBottom: sym === '+' ? '1px solid var(--border-divider)' : 'none',
-                    background: 'var(--bg-sidebar)',
-                    color: 'var(--text-primary)',
-                    fontSize: '15px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {sym}
-                </button>
-              ))}
             </div>
 
             {/* Bottom trip card (Uber-style) for the selected rider */}
@@ -464,7 +416,7 @@ export default function Routes() {
                 style={{
                   position: 'absolute',
                   left: '12px',
-                  right: '84px',
+                  right: '12px',
                   bottom: '12px',
                   background: 'var(--bg-sidebar)',
                   backdropFilter: 'var(--glass-blur)',
@@ -482,7 +434,9 @@ export default function Routes() {
                     {selectedRider.fullName.split(' ')[0]} → {selectedTrip.targetLabel}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {selectedTrip.distanceKm.toFixed(1)} km · {selectedTrip.etaMins} min
+                    {displayDistanceKm != null ? `${displayDistanceKm.toFixed(1)} km` : '—'} ·{' '}
+                    {displayEtaMins != null ? `${displayEtaMins} min` : '—'}
+                    {driving.isReal ? ' · driving route' : ' · straight-line est.'}
                   </div>
                 </div>
                 <span
@@ -539,13 +493,13 @@ export default function Routes() {
                     <div>
                       <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>Distance Ahead</span>
                       <p style={{ fontSize: '15px', fontWeight: '800', marginTop: '2px' }}>
-                        {selectedTrip.distanceKm.toFixed(1)} km
+                        {displayDistanceKm != null ? `${displayDistanceKm.toFixed(1)} km` : '—'}
                       </p>
                     </div>
                     <div>
                       <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>Time to Complete</span>
                       <p style={{ fontSize: '15px', fontWeight: '800', color: selectedTrip.traffic.color, marginTop: '2px' }}>
-                        {selectedTrip.etaMins} min
+                        {displayEtaMins != null ? `${displayEtaMins} min` : '—'}
                       </p>
                     </div>
                   </>
@@ -649,62 +603,250 @@ export default function Routes() {
   );
 }
 
-// ── Map sub-elements ─────────────────────────────────────────────────────
+// ── Real driving route ───────────────────────────────────────────────────────
 
-function RoutePath({ from, to, color }) {
-  // Gentle bend so the route reads as road-following rather than a straight ruler line.
-  const midX = (from.x + to.x) / 2 + (to.y - from.y) * 0.18;
-  const midY = (from.y + to.y) / 2 - (to.x - from.x) * 0.18;
-  const d = `M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`;
-  return (
-    <g>
-      <path d={d} fill="none" stroke="white" strokeWidth="7" strokeLinecap="round" opacity="0.85" />
-      <path d={d} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" />
-      <circle r="5" fill="white" stroke={color} strokeWidth="2.5">
-        <animateMotion dur="3s" repeatCount="indefinite" path={d} />
-      </circle>
-    </g>
-  );
+const EMPTY_ROUTE = { path: null, distanceKm: null, etaMins: null, isReal: false };
+
+/**
+ * Fetches a real road-following route from the Directions API for one
+ * origin/destination pair (the currently selected rider only — fetching this
+ * for the whole fleet on every position tick would be needless Directions
+ * calls). Degrades to EMPTY_ROUTE (never throws) when the 'routes' library
+ * hasn't loaded yet, there is no key, or the API errors — callers fall back
+ * to the haversine estimate, same pattern as the mobile app's
+ * DirectionsService.
+ *
+ * Must be called from a component rendered inside <APIProvider> (i.e. inside
+ * <Map>) — useMapsLibrary reads that context and returns null forever
+ * otherwise, which silently stuck this on the straight-line fallback the
+ * first time this was wired up one level too high in the tree.
+ */
+function useDrivingRoute(origin, destination) {
+  const routesLibrary = useMapsLibrary('routes');
+  const [state, setState] = useState(EMPTY_ROUTE);
+
+  // Round to ~11m so GPS jitter doesn't re-trigger a Directions request.
+  const originKey = origin ? `${origin.lat.toFixed(4)},${origin.lng.toFixed(4)}` : null;
+  const destKey = destination ? `${destination.lat.toFixed(4)},${destination.lng.toFixed(4)}` : null;
+
+  useEffect(() => {
+    if (!routesLibrary || !origin || !destination) {
+      setState(EMPTY_ROUTE);
+      return;
+    }
+
+    // Clear any previous rider's route immediately rather than leaving it on
+    // screen until the new one resolves.
+    setState(EMPTY_ROUTE);
+
+    let cancelled = false;
+    const service = new routesLibrary.DirectionsService();
+
+    service
+      .route({
+        origin,
+        destination,
+        travelMode: window.google.maps.TravelMode.DRIVING,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        const route = result.routes?.[0];
+        const leg = route?.legs?.[0];
+        if (!route || !leg) {
+          setState(EMPTY_ROUTE);
+          return;
+        }
+        setState({
+          path: route.overview_path.map((p) => ({ lat: p.lat(), lng: p.lng() })),
+          distanceKm: leg.distance ? leg.distance.value / 1000 : null,
+          etaMins: leg.duration ? Math.max(1, Math.round(leg.duration.value / 60)) : null,
+          isReal: true,
+        });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.warn('Directions request failed, falling back to straight-line estimate:', e);
+        setState(EMPTY_ROUTE);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routesLibrary, originKey, destKey]);
+
+  return state;
 }
 
-function DestinationPin({ pos, label }) {
-  const shortLabel = label.length > 16 ? `${label.slice(0, 15)}…` : label;
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <ellipse cx="0" cy="4" rx="9" ry="3" fill="rgba(0,0,0,0.18)" />
-      <path
-        d="M0 -30 C 9 -30 16 -23 16 -14 C16 -3 0 4 0 4 C0 4 -16 -3 -16 -14 C-16 -23 -9 -30 0 -30 Z"
-        fill="#ef4444"
-        stroke="white"
-        strokeWidth="2"
-      />
-      <circle cx="0" cy="-15" r="5" fill="white" />
-      <rect x="-48" y="10" width="96" height="18" rx="9" fill="rgba(15,23,42,0.85)" />
-      <text x="0" y="23" fill="white" fontSize="10" fontWeight="bold" textAnchor="middle">
-        {shortLabel}
-      </text>
-    </g>
-  );
-}
+// Standard Google Maps dashed-line recipe: hide the solid stroke and draw a
+// repeating line symbol along the path instead.
+const DASHED_LINE_ICON = [
+  { icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' },
+];
 
-function RiderMarker({ pos, rider, isSelected, distanceKm, onClick }) {
-  const moving = (rider.speed ?? 0) > 0;
-  const baseColor = isSelected ? 'var(--color-primary)' : moving ? 'var(--color-accent)' : 'var(--text-muted)';
-  const label = `${rider.fullName.split(' ')[0]}${distanceKm != null ? ` • ${distanceKm.toFixed(1)}km` : ''}`;
+/**
+ * Route polyline + destination pin for the selected rider's trip. Owns the
+ * Directions fetch itself (via useDrivingRoute) since this is the component
+ * actually rendered inside <Map>, and reports the result back up to the
+ * parent panel/roster through onRouteUpdate.
+ */
+function RouteOverlay({ origin, destination, color, label, onRouteUpdate }) {
+  const driving = useDrivingRoute(origin, destination);
+
+  useEffect(() => {
+    onRouteUpdate(driving);
+  }, [driving, onRouteUpdate]);
+
+  const linePath = driving.path ?? (origin && destination ? [origin, destination] : null);
+  // A real road-following route is drawn solid; the straight-line fallback
+  // used while it loads (or if Directions errors) is drawn dashed so it
+  // never reads as an actual road-following path.
+  const polylineProps = driving.path
+    ? { strokeOpacity: 0.95 }
+    : { strokeOpacity: 0, icons: DASHED_LINE_ICON };
+
   return (
-    <g transform={`translate(${pos.x}, ${pos.y})`} style={{ cursor: 'pointer' }} onClick={onClick}>
-      {moving && (
-        <circle r={isSelected ? 20 : 14} fill={baseColor} opacity="0.22">
-          <animate attributeName="r" values={isSelected ? '14;24;14' : '10;18;10'} dur="1.8s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.3;0.05;0.3" dur="1.8s" repeatCount="indefinite" />
-        </circle>
+    <>
+      {linePath && (
+        <Polyline path={linePath} strokeColor={color} strokeWeight={5} {...polylineProps} />
       )}
-      <circle r="11" fill="white" stroke={baseColor} strokeWidth="2.5" />
-      <path d="M0 -6 L4.5 5 L0 2 L-4.5 5 Z" fill={baseColor} transform={`rotate(${rider.heading || 0})`} />
-      <rect x="-34" y="15" width="68" height="16" rx="8" fill="rgba(15,23,42,0.85)" />
-      <text x="0" y="27" fill="white" fontSize="8.5" fontWeight="bold" textAnchor="middle">
-        {label}
-      </text>
-    </g>
+      {destination && <AdvancedMarker position={destination}><DestinationPin label={label} /></AdvancedMarker>}
+    </>
+  );
+}
+
+/**
+ * Frames every rider once on load, then steps back so an admin who has
+ * zoomed into one neighbourhood is not yanked out every time a marker moves.
+ */
+function FitBounds({ riders }) {
+  const map = useMap();
+  const hasFitted = useRef(false);
+
+  useEffect(() => {
+    if (!map || riders.length === 0 || hasFitted.current) return;
+    hasFitted.current = true;
+
+    if (riders.length === 1) {
+      map.setCenter({ lat: riders[0].currentLat ?? FALLBACK_CENTER.lat, lng: riders[0].currentLng ?? FALLBACK_CENTER.lng });
+      map.setZoom(14);
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    riders.forEach((r) => bounds.extend({ lat: r.currentLat ?? FALLBACK_CENTER.lat, lng: r.currentLng ?? FALLBACK_CENTER.lng }));
+    map.fitBounds(bounds, 64);
+  }, [map, riders]);
+
+  return null;
+}
+
+function RiderPin({ rider, isSelected }) {
+  const moving = (rider.speed ?? 0) > 0;
+  const color = isSelected ? '#2563eb' : moving ? '#f59e0b' : '#94a3b8';
+
+  return (
+    <div style={{ position: 'relative', transform: isSelected ? 'scale(1.15)' : 'scale(1)', transition: 'transform 0.2s ease' }}>
+      <div
+        style={{
+          width: '30px',
+          height: '30px',
+          borderRadius: '50%',
+          background: color,
+          border: '3px solid #fff',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.28)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          style={{ transform: `rotate(${rider.heading || 0}deg)`, transition: 'transform 0.6s ease' }}
+        >
+          <path d="M12 2 L19 21 L12 17 L5 21 Z" />
+        </svg>
+      </div>
+      {moving && (
+        <span
+          style={{
+            position: 'absolute',
+            inset: '-6px',
+            borderRadius: '50%',
+            border: `2px solid ${color}`,
+            opacity: 0.35,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DestinationPin({ label }) {
+  const shortLabel = label && label.length > 18 ? `${label.slice(0, 17)}…` : label;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: 'translateY(-10px)' }}>
+      <div
+        style={{
+          width: '26px',
+          height: '26px',
+          borderRadius: '50% 50% 50% 0',
+          background: '#ef4444',
+          border: '2px solid #fff',
+          transform: 'rotate(-45deg)',
+          boxShadow: '0 3px 8px rgba(0,0,0,0.3)',
+        }}
+      />
+      {shortLabel && (
+        <span
+          style={{
+            marginTop: '4px',
+            background: 'rgba(15,23,42,0.85)',
+            color: '#fff',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            padding: '3px 8px',
+            borderRadius: '8px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {shortLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MissingKeyNotice() {
+  return (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', background: 'var(--bg-card)' }}>
+      <div style={{ maxWidth: '420px', textAlign: 'center' }}>
+        <h4 style={{ fontSize: '15px', marginBottom: '10px' }}>Google Maps key not configured</h4>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '12.5px', lineHeight: 1.6 }}>
+          Create <code>admin_panel/.env.local</code> with a browser key that has the{' '}
+          <strong>Maps JavaScript API</strong> and <strong>Directions API</strong> enabled, then
+          restart the dev server:
+        </p>
+        <pre
+          style={{
+            background: 'var(--bg-app)',
+            border: '1px solid var(--border-divider)',
+            borderRadius: 'var(--border-radius-sm)',
+            padding: '10px 14px',
+            fontSize: '11.5px',
+            margin: '12px 0',
+            textAlign: 'left',
+            overflowX: 'auto',
+          }}
+        >
+          VITE_GOOGLE_MAPS_API_KEY=AIza...
+        </pre>
+      </div>
+    </div>
   );
 }
