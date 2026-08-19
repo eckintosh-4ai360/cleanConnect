@@ -1,5 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
+import TrendChart from './TrendChart';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const dayKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+const weekKey = (date) => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return dayKey(d);
+};
+const monthKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}`;
+
+const buildEmptyDailyTrend = (days) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(today.getTime() - i * DAY_MS);
+    out.push({ date, key: dayKey(date) });
+  }
+  return out;
+};
+
+const buildEmptyWeeklyTrend = (weeks) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  today.setDate(today.getDate() - today.getDay());
+  const out = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const date = new Date(today.getTime() - i * 7 * DAY_MS);
+    out.push({ date, key: dayKey(date) });
+  }
+  return out;
+};
+
+const buildEmptyMonthlyTrend = (months) => {
+  const today = new Date();
+  const out = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    out.push({ date, key: monthKey(date) });
+  }
+  return out;
+};
+
+// Buckets raw collection events into a trend series for the given period —
+// keeps the "Growth & Volume Trends" chart driven by real Postgres data
+// instead of a fixed decorative path.
+const buildTrend = (period, events) => {
+  const keyFor = period === 'monthly' ? monthKey : period === 'weekly' ? weekKey : dayKey;
+  const buckets = new Map();
+  events.forEach((e) => {
+    const key = keyFor(e.collectedAt);
+    buckets.set(key, (buckets.get(key) ?? 0) + e.weightKg);
+  });
+  const shape =
+    period === 'monthly'
+      ? buildEmptyMonthlyTrend(12)
+      : period === 'weekly'
+      ? buildEmptyWeeklyTrend(12)
+      : buildEmptyDailyTrend(14);
+  return shape.map((b) => ({ date: b.date, weightKg: buckets.get(b.key) ?? 0 }));
+};
 
 export default function Dashboard() {
   const [topRiders, setTopRiders] = useState([]);
@@ -8,6 +71,8 @@ export default function Dashboard() {
   const [todaysPickups, setTodaysPickups] = useState([]);
   const [openIncidents, setOpenIncidents] = useState([]);
   const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [collectionEvents, setCollectionEvents] = useState([]);
+  const [trendPeriod, setTrendPeriod] = useState('weekly');
   const [metrics, setMetrics] = useState({
     totalRevenue: 0,
     activeRiders: 0,
@@ -86,7 +151,9 @@ export default function Dashboard() {
 
     const mapCollectionRow = (r) => ({ ...r, collectedAt: r.collected_at ? new Date(r.collected_at) : new Date() });
     const fetchCollectionTotals = async () => {
-      const { data, error } = await supabase.from('collection_events').select('weight_kg, carbon_offset');
+      const { data, error } = await supabase
+        .from('collection_events')
+        .select('weight_kg, carbon_offset, collected_at');
       if (mounted && !error) {
         const totalWeight = data.reduce((s, r) => s + (r.weight_kg ?? 0), 0);
         const totalCO2 = data.reduce((s, r) => s + (r.carbon_offset ?? 0), 0);
@@ -95,6 +162,11 @@ export default function Dashboard() {
           wasteCollectedKg: parseFloat(totalWeight.toFixed(1)),
           co2SavedKg: parseFloat(totalCO2.toFixed(1)),
         }));
+        setCollectionEvents(
+          data
+            .filter((r) => r.collected_at)
+            .map((r) => ({ weightKg: r.weight_kg ?? 0, collectedAt: new Date(r.collected_at) }))
+        );
       }
     };
     const fetchRecentCollections = async () => {
@@ -216,6 +288,11 @@ export default function Dashboard() {
       sortTime: r.createdAt,
     })),
   ].sort((a, b) => (a.sortTime?.getTime?.() ?? 0) - (b.sortTime?.getTime?.() ?? 0));
+
+  const trend = useMemo(
+    () => buildTrend(trendPeriod, collectionEvents),
+    [trendPeriod, collectionEvents]
+  );
 
   return (
     <div className="page-content">
@@ -345,34 +422,24 @@ export default function Dashboard() {
 
       {/* ── Splitted Visual Graphs & Leaderboard ── */}
       <div className="split-layout">
-        {/* Trend Graph (visual only - SVG) */}
+        {/* Trend Graph — live volume from collection_events, bucketed by the selected period */}
         <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '16px' }}>Growth & Volume Trends</h3>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn-outline" style={{ padding: '6px 12px', fontSize: '11px' }}>Daily</button>
-              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '11px' }}>Weekly</button>
-              <button className="btn-outline" style={{ padding: '6px 12px', fontSize: '11px' }}>Monthly</button>
+              {['daily', 'weekly', 'monthly'].map((period) => (
+                <button
+                  key={period}
+                  className={trendPeriod === period ? 'btn-primary' : 'btn-outline'}
+                  style={{ padding: '6px 12px', fontSize: '11px', textTransform: 'capitalize' }}
+                  onClick={() => setTrendPeriod(period)}
+                >
+                  {period}
+                </button>
+              ))}
             </div>
           </div>
-          <div style={{ position: 'relative', width: '100%', height: '240px', background: 'rgba(0,0,0,0.01)', borderRadius: '12px' }}>
-            <svg viewBox="0 0 500 200" width="100%" height="100%" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="gradient-area" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M 0 180 Q 80 120 150 140 T 300 70 T 450 40 T 500 30 L 500 200 L 0 200 Z" fill="url(#gradient-area)" />
-              <path d="M 0 180 Q 80 120 150 140 T 300 70 T 450 40 T 500 30" fill="none" stroke="var(--color-primary)" strokeWidth="3" />
-              <circle cx="150" cy="140" r="5" fill="var(--color-primary)" stroke="white" strokeWidth="2" />
-              <circle cx="300" cy="70" r="5" fill="var(--color-primary)" stroke="white" strokeWidth="2" />
-              <circle cx="450" cy="40" r="5" fill="var(--color-primary)" stroke="white" strokeWidth="2" />
-            </svg>
-            <div style={{ position: 'absolute', bottom: '10px', left: '20px', display: 'flex', justifyContent: 'space-between', right: '20px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-            </div>
-          </div>
+          <TrendChart points={trend} color="var(--color-primary)" height={240} />
         </div>
 
         {/* Top Performers - Live from Postgres */}
