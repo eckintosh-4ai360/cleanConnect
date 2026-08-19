@@ -169,6 +169,14 @@ class PickupRequestScreen extends HookConsumerWidget {
     }
 
     Future<void> chooseOnMap() async {
+      // Try a real GPS fix before falling back to the Accra placeholder, so
+      // the picker opens centered on the customer's actual position instead
+      // of always looking like it's ignoring GPS.
+      if (selectedLocation.value == null) {
+        await useCurrentLocation();
+        if (!context.mounted) return;
+      }
+
       final result = await Navigator.of(context).push<PickedLocation>(
         MaterialPageRoute(
           builder: (_) => LocationPickerScreen(
