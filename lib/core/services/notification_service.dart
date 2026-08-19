@@ -10,6 +10,7 @@ import 'package:vibration/vibration.dart';
 import '../../features/auth/domain/entities/user_entity.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/rider/presentation/providers/rider_providers.dart';
+import '../../firebase_options.dart';
 import '../config/router.dart';
 
 const String pickupRequestsChannelId = 'pickup_requests_channel';
@@ -24,9 +25,48 @@ final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
 /// arrives while the app is backgrounded or fully killed.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (message.data['type'] != 'new_pickup_request') return;
+  // This is a fresh isolate: the plugin instance here has never been
+  // initialized, and the channel may not exist yet, so `show` would be
+  // dropped without this.
+  await _ensureLocalNotifications();
   await _showIncomingPickupNotification(message.data);
+}
+
+/// Idempotent per-isolate setup of the local-notifications plugin and the
+/// high-importance pickup channel. [onTap] is only wired in the main isolate —
+/// taps on a notification posted from the background isolate are delivered to
+/// the main isolate at launch via `getNotificationAppLaunchDetails`.
+bool _localNotificationsReady = false;
+Future<void> _ensureLocalNotifications({
+  void Function(String? payload)? onTap,
+}) async {
+  if (_localNotificationsReady) return;
+
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosInit = DarwinInitializationSettings();
+  await _localNotificationsPlugin.initialize(
+    settings: const InitializationSettings(android: androidInit, iOS: iosInit),
+    onDidReceiveNotificationResponse: (response) => onTap?.call(response.payload),
+  );
+
+  final channel = AndroidNotificationChannel(
+    pickupRequestsChannelId,
+    pickupRequestsChannelName,
+    description: 'Alerts riders when a new pickup request comes in.',
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+    vibrationPattern: Int64List.fromList(_pickupVibrationPatternRaw),
+  );
+
+  await _localNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  _localNotificationsReady = true;
 }
 
 Future<void> _showIncomingPickupNotification(Map<String, dynamic> data) async {
@@ -89,7 +129,7 @@ class NotificationService {
       sound: true,
     );
 
-    await _initLocalNotifications();
+    await _ensureLocalNotifications(onTap: _navigateToRequestId);
 
     _onMessageSub =
         FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
@@ -122,32 +162,6 @@ class NotificationService {
     if (launchDetails?.didNotificationLaunchApp == true) {
       _navigateToRequestId(launchDetails?.notificationResponse?.payload);
     }
-  }
-
-  Future<void> _initLocalNotifications() async {
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
-    await _localNotificationsPlugin.initialize(
-      settings: const InitializationSettings(android: androidInit, iOS: iosInit),
-      onDidReceiveNotificationResponse: (response) {
-        _navigateToRequestId(response.payload);
-      },
-    );
-
-    final channel = AndroidNotificationChannel(
-      pickupRequestsChannelId,
-      pickupRequestsChannelName,
-      description: 'Alerts riders when a new pickup request comes in.',
-      importance: Importance.max,
-      playSound: true,
-      enableVibration: true,
-      vibrationPattern: Int64List.fromList(_pickupVibrationPatternRaw),
-    );
-
-    await _localNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
   }
 
   void _handleForegroundMessage(RemoteMessage message) {

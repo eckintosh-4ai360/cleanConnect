@@ -11,30 +11,22 @@ import 'core/config/theme.dart';
 import 'core/config/theme_provider.dart';
 import 'core/services/paystack_service.dart';
 import 'core/services/notification_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase
+  // Firebase — only used for push (FCM); auth/data live in Supabase.
+  var firebaseReady = false;
   try {
-    if (kIsWeb) {
-      await Firebase.initializeApp(
-        options: const FirebaseOptions(
-          apiKey: "AIzaSyCiXCzwhOVG97hb2zyE6Xw5-gHh7UUI0uU",
-          appId: "1:718487738924:web:f81cdc6ef768fcec590f89",
-          messagingSenderId: "718487738924",
-          projectId: "cleanconnect-5a323",
-          authDomain: "cleanconnect-5a323.firebaseapp.com",
-          storageBucket: "cleanconnect-5a323.firebasestorage.app",
-          measurementId: "G-HMD5MGE2N3",
-        ),
-      );
-    } else {
-      await Firebase.initializeApp();
-    }
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    firebaseReady = true;
   } catch (e) {
-    debugPrint('Firebase initialization warning: $e');
+    // Non-fatal: the app is fully usable without push, so don't block startup.
+    debugPrint('!! PUSH DISABLED — Firebase failed to initialize: $e');
   }
 
   // Initialize Supabase (auth, database, realtime, storage)
@@ -59,10 +51,12 @@ void main() async {
   // so NotificationService can read/navigate from outside the widget tree —
   // needed to react to FCM taps received while the app is backgrounded.
   final container = ProviderContainer();
-  try {
-    await NotificationService.instance.initialize(container);
-  } catch (e) {
-    debugPrint('Notification service initialization warning: $e');
+  if (firebaseReady) {
+    try {
+      await NotificationService.instance.initialize(container);
+    } catch (e) {
+      debugPrint('!! PUSH DISABLED — NotificationService failed to start: $e');
+    }
   }
 
   runApp(
