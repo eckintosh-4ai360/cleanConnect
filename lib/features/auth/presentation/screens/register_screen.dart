@@ -134,7 +134,8 @@ class RegisterScreen extends HookConsumerWidget {
               gpsLocation: gpsController.text.isEmpty
                   ? _formatMapCoordinates(5.6037, -0.1870)
                   : gpsController.text,
-              profilePicturePath: profileImagePath.value,
+              housePhotoBytes: profileImageBytes.value,
+              housePhotoFileName: profileImagePath.value,
             );
       }
     }
