@@ -94,6 +94,10 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
           locationLng: locationLng,
         );
   }
+
+  Future<void> cancelPickup(String requestId) async {
+    await ref.read(customerRepositoryProvider).cancelPickupRequest(requestId);
+  }
 }
 
 /// Live rider position for one specific request -- what the tracking screen

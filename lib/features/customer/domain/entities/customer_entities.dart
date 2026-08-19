@@ -57,7 +57,7 @@ class PickupRequestEntity {
   final String timeSlot; // '08:00 AM - 12:00 PM'
   final String location;
   final String? instructions;
-  final String status; // 'pending', 'scheduled', 'completed', 'cancelled', 'overdue_delayed'
+  final String status; // 'pending', 'accepted', 'assigned', 'confirmed', 'completed', 'rejected', 'cancelled'
   final double amountPaid;
   final double originalAmount;
   final double discountAppliedPercentage; // e.g. 10.0 for 10% discount
@@ -107,6 +107,11 @@ class PickupRequestEntity {
   bool get isOverdueBeyondGracePeriod {
     return isDelayed && daysDelayed > 3;
   }
+
+  /// True while the request can still be cancelled by the customer -- mirrors
+  /// the status guard on the cancel_pickup RPC.
+  bool get isCancellable =>
+      const {'pending', 'accepted', 'assigned', 'confirmed'}.contains(status);
 }
 
 class ServiceRecordEntity {
