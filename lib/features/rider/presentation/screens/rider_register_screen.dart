@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/services/location_service.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -62,6 +63,57 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
         _photoBytes = bytes;
         _photoUploaded = true;
       });
+    }
+  }
+
+  /// Returns "lat, lng" from a real GPS fix, or null (after showing an
+  /// explanatory snackbar) if it couldn't be obtained -- callers must not
+  /// register a rider with a fabricated location.
+  Future<String?> _detectGpsLocation() async {
+    final access = await LocationService.instance.ensurePermission();
+    if (!mounted) return null;
+
+    switch (access) {
+      case LocationAccess.granted:
+        final position = await LocationService.instance.currentPosition();
+        if (!mounted) return null;
+        if (position != null) {
+          return '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not get your current location. Try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return null;
+      case LocationAccess.serviceDisabled:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Turn on location services to register as a rider.'),
+            action: SnackBarAction(
+              label: 'Open settings',
+              onPressed: LocationService.instance.openLocationSettings,
+            ),
+          ),
+        );
+        return null;
+      case LocationAccess.deniedForever:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Location permission is blocked for CleanConnect.'),
+            action: SnackBarAction(
+              label: 'Open settings',
+              onPressed: LocationService.instance.openAppSettings,
+            ),
+          ),
+        );
+        return null;
+      case LocationAccess.denied:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission is required to register as a rider.')),
+        );
+        return null;
     }
   }
 
@@ -129,6 +181,13 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
     }
 
     setState(() => _isLoading = true);
+
+    final gpsLocation = await _detectGpsLocation();
+    if (gpsLocation == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
     try {
       await ref
           .read(authStateControllerProvider.notifier)
@@ -138,7 +197,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
             phoneNumber: _phoneCtrl.text.trim(),
             password: _passwordCtrl.text,
             address: _addressCtrl.text.trim(),
-            gpsLocation: '5.6037° N, 0.1870° W',
+            gpsLocation: gpsLocation,
             role: UserRole.rider,
           );
 

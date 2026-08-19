@@ -4,11 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/services/location_service.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/shared/widgets/eco_text_field.dart';
 import '../providers/customer_providers.dart';
@@ -37,33 +37,56 @@ class BinRegisterScreen extends HookConsumerWidget {
     final formKey = useMemoized(() => GlobalKey<FormState>());
 
     Future<void> detectLocation() async {
-      try {
-        final permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          final requested = await Geolocator.requestPermission();
-          if (requested == LocationPermission.denied ||
-              requested == LocationPermission.deniedForever) {
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location permission is denied.')),
+      gpsLocation.value = 'Fetching GPS coordinates...';
+      final access = await LocationService.instance.ensurePermission();
+
+      if (!context.mounted) return;
+
+      switch (access) {
+        case LocationAccess.granted:
+          final position = await LocationService.instance.currentPosition();
+          if (!context.mounted) return;
+          if (position != null) {
+            gpsLocation.value = _formatMapCoordinates(
+              position.latitude,
+              position.longitude,
             );
-            return;
+          } else {
+            gpsLocation.value = '';
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not get your current location. Try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
-        }
-        gpsLocation.value = 'Fetching GPS coordinates...';
-        final position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 8),
-          ),
-        );
-        gpsLocation.value = _formatMapCoordinates(
-          position.latitude,
-          position.longitude,
-        );
-      } catch (_) {
-        gpsLocation.value =
-            '${_formatMapCoordinates(5.6037, -0.1870)} (Fallback)';
+        case LocationAccess.serviceDisabled:
+          gpsLocation.value = '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Turn on location services to use this.'),
+              action: SnackBarAction(
+                label: 'Open settings',
+                onPressed: LocationService.instance.openLocationSettings,
+              ),
+            ),
+          );
+        case LocationAccess.deniedForever:
+          gpsLocation.value = '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Location permission is blocked for CleanConnect.'),
+              action: SnackBarAction(
+                label: 'Open settings',
+                onPressed: LocationService.instance.openAppSettings,
+              ),
+            ),
+          );
+        case LocationAccess.denied:
+          gpsLocation.value = '';
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission was not granted.')),
+          );
       }
     }
 
