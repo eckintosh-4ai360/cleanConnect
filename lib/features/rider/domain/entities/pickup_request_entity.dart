@@ -21,6 +21,12 @@ class PickupRequestEntity {
   final DateTime createdAt;
   final DateTime? acceptedAt;
 
+  /// Photo of the customer's house/building, captured at registration and
+  /// snapshotted onto this request. Lets a rider visually confirm the exact
+  /// address, since the map pin alone can be off by tens of metres. Null when
+  /// the customer never uploaded one.
+  final String? housePhotoUrl;
+
   const PickupRequestEntity({
     required this.id,
     required this.customerId,
@@ -37,6 +43,7 @@ class PickupRequestEntity {
     this.assignedRiderName,
     required this.createdAt,
     this.acceptedAt,
+    this.housePhotoUrl,
   });
 
   /// Plottable destination, or null when the request has no coordinates yet.

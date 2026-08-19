@@ -10,6 +10,7 @@ import '../../../../core/config/map_config.dart';
 import '../../../../core/services/directions_service.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/shared/widgets/app_map.dart';
+import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/pickup_request_entity.dart';
@@ -370,6 +371,7 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
             ),
             _BottomActionPanel(
               customerName: customerName,
+              housePhotoUrl: widget.pickup?.housePhotoUrl,
               subtitle: '$binTypes • $timeSlot',
               onOpenGoogleMaps: _launchGoogleMaps,
               onStartCollection: () =>
@@ -877,12 +879,14 @@ class _LocationBlockedNotice extends ConsumerWidget {
 class _BottomActionPanel extends StatelessWidget {
   final String customerName;
   final String subtitle;
+  final String? housePhotoUrl;
   final VoidCallback onOpenGoogleMaps;
   final VoidCallback onStartCollection;
 
   const _BottomActionPanel({
     required this.customerName,
     required this.subtitle,
+    this.housePhotoUrl,
     required this.onOpenGoogleMaps,
     required this.onStartCollection,
   });
@@ -926,6 +930,10 @@ class _BottomActionPanel extends StatelessWidget {
                   ],
                 ),
               ),
+              if (housePhotoUrl != null) ...[
+                const SizedBox(width: 12),
+                HousePhotoThumbnail(photoUrl: housePhotoUrl, size: 48),
+              ],
             ],
           ),
           const SizedBox(height: 14),

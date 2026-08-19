@@ -227,11 +227,13 @@ class RiderRepositoryImpl implements RiderRepository {
       );
 
   // ── Performance Stats ────────────────────────────────────────────────────
-  // NOTE: several fields here were already hardcoded/fake in the original
-  // Firestore implementation (earningsThisWeek, onTimeDeliveryRate,
-  // weeklyScores) rather than derived from real data — preserved as-is since
-  // building real weekly aggregation is a separate feature, not part of this
-  // migration.
+  // Weekly/monthly figures are derived client-side from collection_events and
+  // route_stops (RLS already scopes both to the signed-in rider) rather than
+  // stored precomputed, since there's no historical daily-snapshot table.
+  // earningsPerKg matches the rate the mark_stop_collected/complete_pickup
+  // RPCs use to increment riders.earnings_this_month.
+
+  static const double _earningsPerKg = 0.15;
 
   @override
   Stream<RiderPerformanceEntity> watchPerformanceStats() {
@@ -239,26 +241,103 @@ class RiderRepositoryImpl implements RiderRepository {
         .from('riders')
         .stream(primaryKey: ['id'])
         .eq('id', _uid)
-        .map((rows) => rows.isEmpty ? _performanceFromRow({}) : _performanceFromRow(rows.first));
+        .asyncMap((rows) => _computePerformanceStats(rows.isEmpty ? {} : rows.first));
   }
 
   @override
   Future<RiderPerformanceEntity> getPerformanceStats() async {
     final row = await _db.from('riders').select().eq('id', _uid).maybeSingle();
-    return _performanceFromRow(row ?? {});
+    return _computePerformanceStats(row ?? {});
   }
 
-  RiderPerformanceEntity _performanceFromRow(Map<String, dynamic> r) => RiderPerformanceEntity(
-        efficiencyScore: (r['efficiency_score'] as num?)?.toDouble() ?? 94.2,
-        averageRating: (r['rating'] as num?)?.toDouble() ?? 4.8,
-        collectionsThisWeek: (r['total_collections'] as num?)?.toInt() ?? 28,
-        weightThisWeek: (r['total_weight_kg'] as num?)?.toDouble() ?? 412.6,
-        earningsThisWeek: 287.50,
-        earningsThisMonth: (r['earnings_this_month'] as num?)?.toDouble() ?? 1248.50,
-        totalCollectionsAllTime: (r['total_collections'] as num?)?.toInt() ?? 312,
-        onTimeDeliveryRate: 0.982,
-        weeklyScores: const [88.0, 91.5, 92.0, 94.2, 93.8, 95.1, 94.2],
-      );
+  Future<RiderPerformanceEntity> _computePerformanceStats(Map<String, dynamic> r) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startOfWeek = today.subtract(Duration(days: now.weekday - 1));
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    final windowStart = today.subtract(const Duration(days: 34));
+
+    final eventRows = ((await _db
+            .from('collection_events')
+            .select('weight_kg, customer_id, address, collected_at')
+            .eq('rider_id', _uid)
+            .gte('collected_at', windowStart.toIso8601String())) as List)
+        .cast<Map<String, dynamic>>();
+
+    // route_stops RLS ("route_stops_select_own_rider") already scopes this
+    // to routes assigned to the current rider.
+    final stopRows = ((await _db
+            .from('route_stops')
+            .select('status, created_at')
+            .gte('created_at', windowStart.toIso8601String())) as List)
+        .cast<Map<String, dynamic>>();
+
+    bool onOrAfter(DateTime cutoff, dynamic raw) {
+      final ts = DateTime.tryParse(raw?.toString() ?? '');
+      return ts != null && !ts.isBefore(cutoff);
+    }
+
+    bool sameDay(DateTime a, dynamic raw) {
+      final ts = DateTime.tryParse(raw?.toString() ?? '');
+      return ts != null && ts.year == a.year && ts.month == a.month && ts.day == a.day;
+    }
+
+    double weightOf(Iterable<Map<String, dynamic>> rows) =>
+        rows.fold(0.0, (sum, e) => sum + ((e['weight_kg'] as num?)?.toDouble() ?? 0.0));
+
+    int countStatus(Iterable<Map<String, dynamic>> rows, String status) =>
+        rows.where((s) => s['status'] == status).length;
+
+    final weekEvents = eventRows.where((e) => onOrAfter(startOfWeek, e['collected_at'])).toList();
+    final monthEvents = eventRows.where((e) => onOrAfter(startOfMonth, e['collected_at'])).toList();
+
+    final weightThisWeek = weightOf(weekEvents);
+    final earningsThisWeek = weightThisWeek * _earningsPerKg;
+
+    final topLocationsThisMonth = monthEvents
+        .map((e) => (e['customer_id'] as String?) ?? (e['address'] as String? ?? ''))
+        .where((v) => v.isNotEmpty)
+        .toSet()
+        .length;
+
+    final weekStops = stopRows.where((s) => onOrAfter(startOfWeek, s['created_at'])).toList();
+    final monthStops = stopRows.where((s) => onOrAfter(startOfMonth, s['created_at'])).toList();
+    final monthCollected = countStatus(monthStops, 'collected');
+    final monthProblem = countStatus(monthStops, 'problem');
+    final monthResolved = monthCollected + monthProblem;
+    final onTimeDeliveryRate = monthResolved == 0 ? 1.0 : monthCollected / monthResolved;
+
+    final fallbackScore = (r['efficiency_score'] as num?)?.toDouble() ?? 100.0;
+    final weeklyScores = List<double>.generate(7, (i) {
+      final day = startOfWeek.add(Duration(days: i));
+      final dayStops = stopRows.where((s) => sameDay(day, s['created_at']));
+      final collected = countStatus(dayStops, 'collected');
+      final problem = countStatus(dayStops, 'problem');
+      final resolved = collected + problem;
+      return resolved == 0 ? fallbackScore : (collected / resolved) * 100;
+    });
+
+    final monthWeight = weightOf(monthEvents);
+    final avgEarningsPerCollection =
+        monthEvents.isEmpty ? 0.0 : (monthWeight * _earningsPerKg) / monthEvents.length;
+
+    return RiderPerformanceEntity(
+      efficiencyScore: fallbackScore,
+      averageRating: (r['rating'] as num?)?.toDouble() ?? 5.0,
+      collectionsThisWeek: weekEvents.length,
+      weightThisWeek: weightThisWeek,
+      earningsThisWeek: earningsThisWeek,
+      earningsThisMonth: (r['earnings_this_month'] as num?)?.toDouble() ?? 0.0,
+      totalCollectionsAllTime: (r['total_collections'] as num?)?.toInt() ?? 0,
+      onTimeDeliveryRate: onTimeDeliveryRate,
+      weeklyScores: weeklyScores,
+      missedStopsThisWeek: countStatus(weekStops, 'problem'),
+      missedStopsThisMonth: monthProblem,
+      topLocationsThisMonth: topLocationsThisMonth,
+      collectionsThisMonth: monthEvents.length,
+      avgEarningsPerCollection: avgEarningsPerCollection,
+    );
+  }
 
   // ── Notifications ─────────────────────────────────────────────────────────
 
@@ -374,6 +453,7 @@ class RiderRepositoryImpl implements RiderRepository {
         acceptedAt: r['accepted_at'] != null
             ? DateTime.tryParse(r['accepted_at'].toString())
             : null,
+        housePhotoUrl: r['house_photo_url'] as String?,
       );
 
   @override

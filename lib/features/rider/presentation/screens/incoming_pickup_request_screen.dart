@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/theme.dart';
 import '../../../../core/services/notification_service.dart';
+import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/swipe_to_accept_control.dart';
@@ -301,6 +302,10 @@ class _RequestContent extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (pickup.housePhotoUrl != null) ...[
+                      const SizedBox(width: 10),
+                      HousePhotoThumbnail(photoUrl: pickup.housePhotoUrl, size: 44),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 14),
