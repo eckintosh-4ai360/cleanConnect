@@ -343,8 +343,14 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                         value: '${perf.onTimeDeliveryRate * 100 ~/ 1}%',
                         isHeader: true,
                       ),
-                      _TableRow(label: 'Missed Stops', value: '4.8 kg'),
-                      _TableRow(label: 'Top Locations', value: '11'),
+                      _TableRow(
+                        label: 'Missed Stops',
+                        value: '${perf.missedStopsThisWeek}',
+                      ),
+                      _TableRow(
+                        label: 'Top Locations',
+                        value: '${perf.topLocationsThisMonth}',
+                      ),
                     ],
                   ),
                 ),
@@ -363,7 +369,7 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _ImpactCard(
                         label: 'Collections Done',
-                        value: '${perf.collectionsThisWeek * 4}',
+                        value: '${perf.collectionsThisMonth}',
                         sublabel: 'this month',
                         color: Colors.green,
                         isDark: isDark,
@@ -373,8 +379,8 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     Expanded(
                       child: _ImpactCard(
                         label: 'Missed',
-                        value: '0.4 kg',
-                        sublabel: 'avg. miss rate',
+                        value: '${perf.missedStopsThisMonth}',
+                        sublabel: 'stops this month',
                         color: Colors.orange,
                         isDark: isDark,
                       ),
@@ -382,9 +388,9 @@ class PerformanceAnalyticsScreen extends ConsumerWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _ImpactCard(
-                        label: 'Bonus Earned',
-                        value: 'GHS 285.64',
-                        sublabel: 'efficiency bonus',
+                        label: 'Avg / Collection',
+                        value: 'GHS ${perf.avgEarningsPerCollection.toStringAsFixed(2)}',
+                        sublabel: 'this month',
                         color: Colors.purple,
                         isDark: isDark,
                       ),
@@ -496,16 +502,21 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _BarChart extends StatelessWidget {
-  final List<double> scores;
+  final List<double?> scores; // null = no stops recorded that day
   const _BarChart({required this.scores});
 
   @override
   Widget build(BuildContext context) {
-    final maxScore = scores.reduce((a, b) => a > b ? a : b);
+    final knownScores = scores.whereType<double>();
+    final maxScore = knownScores.isEmpty
+        ? 1.0
+        : knownScores.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
-      children: scores.map((score) {
-        final isLast = score == scores.last;
+      children: scores.asMap().entries.map((entry) {
+        final score = entry.value;
+        final isLast = entry.key == scores.length - 1;
+        final hasData = score != null;
         return Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -513,11 +524,13 @@ class _BarChart extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Text(
-                  '${score.toInt()}',
+                  hasData ? '${score.toInt()}' : '–',
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: isLast
+                    color: !hasData
+                        ? Colors.grey.shade300
+                        : isLast
                         ? const Color(0xFFF0A500)
                         : Colors.grey.shade400,
                   ),
@@ -525,15 +538,18 @@ class _BarChart extends StatelessWidget {
                 const SizedBox(height: 4),
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
-                  height: (score / maxScore) * 80,
+                  height: hasData ? (score / maxScore) * 80 : 4,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: isLast
-                          ? [const Color(0xFFF0A500), const Color(0xFFFFC94D)]
-                          : [Colors.blue.shade200, Colors.blue.shade100],
-                    ),
+                    color: hasData ? null : Colors.grey.shade200,
+                    gradient: hasData
+                        ? LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: isLast
+                                ? [const Color(0xFFF0A500), const Color(0xFFFFC94D)]
+                                : [Colors.blue.shade200, Colors.blue.shade100],
+                          )
+                        : null,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),

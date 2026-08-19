@@ -66,3 +66,7 @@ admin_panel/.env.local
 # --dart-define-from-file payload: holds the Routes/Geocoding web-service key,
 # which is billable and must never be committed.
 env.json
+
+# Firebase service account keys — private credentials, never commit.
+*firebase-adminsdk*.json
+service-account*.json
