@@ -355,6 +355,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         lastPickupCompletedAt: r['last_pickup_completed_at'] != null
             ? DateTime.tryParse(r['last_pickup_completed_at'].toString())
             : null,
+        housePhotoUrl: r['house_photo_url'] as String?,
       );
 
   SubscriptionEntity _defaultSubscription() => const SubscriptionEntity(
@@ -401,6 +402,31 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'subscription_status': 'active',
     }).eq('id', _uid);
     return getSubscription();
+  }
+
+  @override
+  Future<void> updateHousePhoto({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final extension = fileName.contains('.') ? fileName.split('.').last : 'jpg';
+    // Fixed path per customer (not a new file per upload) so re-uploading
+    // overwrites the old photo instead of accumulating orphaned files, and so
+    // every pickup_requests snapshot that already points at this URL updates
+    // too -- see schedule_pickup, which copies the URL at request time.
+    final path = '$_uid/house.$extension';
+    await _db.storage.from('house-photos').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(upsert: true),
+        );
+    final publicUrl = _db.storage.from('house-photos').getPublicUrl(path);
+    // The path is fixed per customer, so a re-upload keeps the same URL --
+    // append a cache-busting query param or every viewer (rider app, this
+    // app's own Image.network cache) keeps showing the photo it fetched
+    // before this update.
+    final url = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+    await _db.from('customers').update({'house_photo_url': url}).eq('id', _uid);
   }
 
   @override

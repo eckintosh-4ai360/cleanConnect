@@ -72,6 +72,11 @@ abstract class CustomerRepository {
 
   Future<void> payOutstandingBalance();
 
+  Future<void> updateHousePhoto({
+    required Uint8List bytes,
+    required String fileName,
+  });
+
   Future<void> reportProblem({
     required String category,
     required String description,
