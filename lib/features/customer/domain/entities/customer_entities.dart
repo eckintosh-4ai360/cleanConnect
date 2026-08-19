@@ -153,6 +153,10 @@ class SubscriptionEntity {
   final bool delayBonusAvailable; // true if rider delayed past 3-day grace period
   final DateTime? lastPickupCompletedAt;
 
+  /// Photo of the customer's house/building, shown to riders on each pickup
+  /// they schedule. Null if never uploaded.
+  final String? housePhotoUrl;
+
   const SubscriptionEntity({
     required this.currentPlan,
     required this.fee,
@@ -164,6 +168,7 @@ class SubscriptionEntity {
     this.nextPickupBinTypes,
     this.delayBonusAvailable = false,
     this.lastPickupCompletedAt,
+    this.housePhotoUrl,
   });
 }
 

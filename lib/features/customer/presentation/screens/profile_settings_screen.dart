@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/profile_image_picker_service.dart';
+import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/shared/widgets/eco_text_field.dart';
@@ -57,6 +59,10 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     final currentPhotoUrlFromAuth = currentUser?.userMetadata?['avatar_url'] as String?;
     final photoUrlState = useState<String?>(currentPhotoUrlFromAuth);
     final isUploading = useState(false);
+
+    final subState = ref.watch(customerSubscriptionProvider);
+    final housePhotoUrl = subState.value?.housePhotoUrl;
+    final isUploadingHousePhoto = useState(false);
 
     final displayName =
         user?.fullName ?? currentUser?.userMetadata?['full_name'] as String? ?? 'Mark Aggrey';
@@ -140,6 +146,80 @@ class ProfileSettingsScreen extends HookConsumerWidget {
       );
     }
 
+    Future<void> pickAndUploadHousePhoto(ImageSource source) async {
+      final pickedFile = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (pickedFile == null) return;
+
+      isUploadingHousePhoto.value = true;
+      try {
+        final bytes = await pickedFile.readAsBytes();
+        await ref.read(customerSubscriptionProvider.notifier).updateHousePhoto(
+              bytes: bytes,
+              fileName: pickedFile.name,
+            );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('House photo updated!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        isUploadingHousePhoto.value = false;
+      }
+    }
+
+    void showHousePhotoPickerModal() {
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                housePhotoUrl == null || housePhotoUrl.isEmpty
+                    ? 'Add House Photo'
+                    : 'Update House Photo',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
+                title: const Text('Take a Photo'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  pickAndUploadHousePhoto(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
+                title: const Text('Choose from Gallery'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  pickAndUploadHousePhoto(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -347,6 +427,49 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                           newAddressDetailsController.clear();
                         }
                       },
+                    ),
+                  ],
+                ),
+              ),
+
+              _SettingsTile(
+                title: 'House Photo',
+                icon: Icons.home_outlined,
+                isExpanded: activeSection.value == 'house_photo',
+                onTap: () => activeSection.value =
+                    activeSection.value == 'house_photo' ? 'none' : 'house_photo',
+                expandedContent: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Text(
+                      'Riders use this photo to confirm your exact house or building, since a map pin alone can be off by a few metres.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: housePhotoUrl != null && housePhotoUrl.isNotEmpty
+                          ? HousePhotoThumbnail(photoUrl: housePhotoUrl, size: 120)
+                          : Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Icon(
+                                Icons.home_outlined,
+                                size: 36,
+                                color: Colors.grey.shade400,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 16),
+                    EcoButton(
+                      text: housePhotoUrl == null || housePhotoUrl.isEmpty
+                          ? 'Add House Photo'
+                          : 'Update House Photo',
+                      isLoading: isUploadingHousePhoto.value,
+                      onPressed: showHousePhotoPickerModal,
                     ),
                   ],
                 ),

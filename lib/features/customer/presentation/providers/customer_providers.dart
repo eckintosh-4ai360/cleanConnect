@@ -158,6 +158,15 @@ class CustomerSubscription extends _$CustomerSubscription {
   Future<void> payBalance() async {
     await ref.read(customerRepositoryProvider).payOutstandingBalance();
   }
+
+  Future<void> updateHousePhoto({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    await ref
+        .read(customerRepositoryProvider)
+        .updateHousePhoto(bytes: bytes, fileName: fileName);
+  }
 }
 
 @riverpod
