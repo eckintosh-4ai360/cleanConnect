@@ -508,6 +508,7 @@ export default function Customers() {
                 <label>Contract Type</label>
                 <select name="type">
                   <option value="Residential">Residential</option>
+                  <option value="Institution">Institution</option>
                   <option value="Commercial">Commercial</option>
                   <option value="Enterprise">Enterprise</option>
                 </select>
