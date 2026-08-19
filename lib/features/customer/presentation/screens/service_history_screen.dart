@@ -13,9 +13,10 @@ class ServiceHistoryScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(customerHistoryProvider);
+    final pickupsState = ref.watch(customerPickupRequestsProvider);
     final selectedTab = useState(
       'All',
-    ); // 'All', 'Collections', 'Payments', 'Support'
+    ); // 'All', 'Pickups', 'Collections', 'Payments', 'Support'
     final searchController = useTextEditingController();
     final searchQuery = useState('');
 
@@ -75,7 +76,7 @@ class ServiceHistoryScreen extends HookConsumerWidget {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: ['All', 'Collections', 'Payments', 'Support'].map((
+                  children: ['All', 'Pickups', 'Collections', 'Payments', 'Support'].map((
                     tab,
                   ) {
                     final isSelected = selectedTab.value == tab;
@@ -114,7 +115,12 @@ class ServiceHistoryScreen extends HookConsumerWidget {
             ),
             // History list
             Expanded(
-              child: historyState.when(
+              child: selectedTab.value == 'Pickups'
+                  ? _PickupHistoryList(
+                      pickupsState: pickupsState,
+                      searchQuery: searchQuery.value,
+                    )
+                  : historyState.when(
                 data: (records) {
                   // Filter by tab
                   var filtered = records;
@@ -383,6 +389,276 @@ class ServiceHistoryScreen extends HookConsumerWidget {
         );
       },
     );
+  }
+}
+
+/// Pickup-request history for the 'Pickups' tab. Separate from the
+/// service_history-backed list above -- pickup_requests is a structurally
+/// different table/entity, and mixing the two into one merged feed would
+/// need a common summary shape neither side actually has.
+class _PickupHistoryList extends StatelessWidget {
+  final AsyncValue<List<PickupRequestEntity>> pickupsState;
+  final String searchQuery;
+
+  const _PickupHistoryList({required this.pickupsState, required this.searchQuery});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return pickupsState.when(
+      data: (requests) {
+        var filtered = requests;
+        if (searchQuery.isNotEmpty) {
+          final q = searchQuery.toLowerCase();
+          filtered = filtered
+              .where(
+                (r) =>
+                    r.binTypes.join(' ').toLowerCase().contains(q) ||
+                    r.location.toLowerCase().contains(q),
+              )
+              .toList();
+        }
+
+        // Most recent first -- watchPickupRequests doesn't guarantee order.
+        filtered = [...filtered]..sort((a, b) => b.date.compareTo(a.date));
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.local_shipping_outlined,
+                  size: 64,
+                  color: Colors.grey,
+                ),
+                const SizedBox(height: 16),
+                Text('No pickups found', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text('Requests you schedule will show up here.'),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 8,
+            bottom: 100,
+          ),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) => _PickupCard(request: filtered[index]),
+        );
+      },
+      error: (_, _) => const Center(child: Text('Error loading pickups.')),
+      loading: () => const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _PickupCard extends HookConsumerWidget {
+  final PickupRequestEntity request;
+
+  const _PickupCard({required this.request});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isCancelling = useState(false);
+    final formattedDate = DateFormat('MMM dd, yyyy').format(request.date);
+    final statusColor = _statusColor(request.status);
+    final binsLabel = request.binTypes
+        .map((t) => t.isEmpty ? t : t[0].toUpperCase() + t.substring(1))
+        .join(', ');
+
+    Future<void> confirmCancel() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cancel this pickup?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${binsLabel.isEmpty ? 'This' : binsLabel} pickup on $formattedDate '
+                '(${request.timeSlot}) will be cancelled.',
+              ),
+              if (request.amountPaid > 0) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'GHS ${request.amountPaid.toStringAsFixed(2)} already paid for this '
+                  'request will not be automatically refunded.',
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep Pickup'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cancel Pickup'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      isCancelling.value = true;
+      try {
+        await ref.read(customerPickupRequestsProvider.notifier).cancelPickup(request.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pickup cancelled.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not cancel: ${e.toString().replaceAll('Exception: ', '')}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        isCancelling.value = false;
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: statusColor.withValues(alpha: 0.12),
+                  child: Icon(_statusIcon(request.status), color: statusColor),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        binsLabel.isEmpty ? 'Pickup' : '$binsLabel Pickup',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$formattedDate • ${request.timeSlot}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    request.status.toUpperCase(),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    request.location,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+              ],
+            ),
+            if (request.isCancellable) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isCancelling.value ? null : confirmCancel,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                  icon: isCancelling.value
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.cancel_outlined, size: 16),
+                  label: Text(isCancelling.value ? 'Cancelling...' : 'Cancel Pickup'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'completed':
+        return Colors.green;
+      case 'cancelled':
+      case 'rejected':
+        return Colors.grey;
+      case 'pending':
+        return Colors.orange;
+      default: // accepted, assigned, confirmed
+        return Colors.blue;
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'completed':
+        return Icons.check_circle_outline;
+      case 'cancelled':
+      case 'rejected':
+        return Icons.cancel_outlined;
+      case 'pending':
+        return Icons.hourglass_top_outlined;
+      default: // accepted, assigned, confirmed
+        return Icons.local_shipping_outlined;
+    }
   }
 }
 
