@@ -6,13 +6,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/config/map_config.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/utils/geo_utils.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
+import 'location_picker_screen.dart';
 
 class ReportIncidentScreen extends HookConsumerWidget {
   const ReportIncidentScreen({super.key});
@@ -65,6 +69,41 @@ class ReportIncidentScreen extends HookConsumerWidget {
         );
       } finally {
         isDetectingLocation.value = false;
+      }
+    }
+
+    Future<void> chooseOnMap() async {
+      LatLng initialPosition = MapConfig.fallbackCenter;
+      final parsed = GeoUtils.tryParseLatLng(locationController.text);
+      if (parsed != null) {
+        initialPosition = parsed;
+      } else {
+        try {
+          final position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+          initialPosition = LatLng(position.latitude, position.longitude);
+        } catch (_) {
+          // Fall back to the default map center.
+        }
+      }
+
+      if (!context.mounted) return;
+      final result = await Navigator.of(context).push<PickedLocation>(
+        MaterialPageRoute(
+          builder: (_) => LocationPickerScreen(initialPosition: initialPosition),
+        ),
+      );
+      if (result != null) {
+        locationController.text = result.label?.trim().isNotEmpty == true
+            ? result.label!.trim()
+            : GeoUtils.formatCoordinates(
+                result.position.latitude,
+                result.position.longitude,
+              );
       }
     }
 
@@ -243,6 +282,16 @@ class ReportIncidentScreen extends HookConsumerWidget {
                     tooltip: 'Auto-detect my location',
                   ),
                 ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: chooseOnMap,
+                    icon: const Icon(Icons.map_outlined, size: 18),
+                    label: const Text('Choose on Map'),
+                  ),
+                ),
+                const SizedBox(height: 12),
 
                 const Text(
                   'Photo or Video (optional)',
