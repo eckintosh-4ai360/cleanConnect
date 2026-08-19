@@ -111,6 +111,23 @@ export default function Routes() {
   const [selectedRider, setSelectedRider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showOptimizeModal, setShowOptimizeModal] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+
+  // Lock page scroll while the map covers the viewport, and let Escape close
+  // it — matches how the optimize modal below already behaves.
+  useEffect(() => {
+    if (!isMapExpanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsMapExpanded(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isMapExpanded]);
 
   // Fallback initial riders if Supabase returns nothing (e.g. dev DB with no
   // riders yet) so the page still demonstrates the layout.
@@ -312,9 +329,31 @@ export default function Routes() {
 
       {/* ── Live GPS Map & Fleet List Split Layout ── */}
       <div className="split-layout">
+        {isMapExpanded && (
+          <div
+            onClick={() => setIsMapExpanded(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 190 }}
+          />
+        )}
         {/* Left: Real Google Map */}
-        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          className="card-glass"
+          style={
+            isMapExpanded
+              ? {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  position: 'fixed',
+                  inset: '16px',
+                  zIndex: 200,
+                  margin: 0,
+                  overflow: 'auto',
+                }
+              : { display: 'flex', flexDirection: 'column', gap: '16px' }
+          }
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <h3 style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2.5">
                 <circle cx="12" cy="12" r="10" />
@@ -323,19 +362,39 @@ export default function Routes() {
               </svg>
               Live Movement Radar Map
             </h3>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              Accra & Eco City District
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Accra & Eco City District
+              </span>
+              <button
+                className="btn-outline"
+                style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => setIsMapExpanded((v) => !v)}
+                title={isMapExpanded ? 'Exit full view (Esc)' : 'Expand to full view'}
+              >
+                {isMapExpanded ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                  </svg>
+                )}
+                {isMapExpanded ? 'Exit Full View' : 'Full View'}
+              </button>
+            </div>
           </div>
 
           <div
             style={{
               position: 'relative',
               width: '100%',
-              height: '380px',
+              height: isMapExpanded ? 'calc(100vh - 130px)' : '380px',
               borderRadius: '16px',
               overflow: 'hidden',
               border: '1px solid var(--border-divider)',
+              transition: 'height 0.2s ease',
             }}
           >
             {!MAPS_API_KEY ? (
@@ -363,6 +422,7 @@ export default function Routes() {
                   style={{ width: '100%', height: '100%' }}
                 >
                   <FitBounds riders={riders} />
+                  <MapResizeSync expanded={isMapExpanded} />
 
                   {selectedRider && selectedTrip && (
                     <RouteOverlay
@@ -737,6 +797,31 @@ function FitBounds({ riders }) {
     riders.forEach((r) => bounds.extend({ lat: r.currentLat ?? FALLBACK_CENTER.lat, lng: r.currentLng ?? FALLBACK_CENTER.lng }));
     map.fitBounds(bounds, 64);
   }, [map, riders]);
+
+  return null;
+}
+
+/**
+ * Google Maps sizes itself off its container's box on mount but doesn't
+ * watch it afterwards, so toggling the card between its normal 380px height
+ * and the full-viewport height leaves the map canvas stuck at its old size
+ * until the browser window itself resizes. Nudges it back into sync and
+ * restores the center, which the resize event alone can shift.
+ */
+function MapResizeSync({ expanded }) {
+  const map = useMap();
+  const prevExpanded = useRef(expanded);
+
+  useEffect(() => {
+    if (!map || prevExpanded.current === expanded) return;
+    prevExpanded.current = expanded;
+    const center = map.getCenter();
+    const id = window.setTimeout(() => {
+      window.google.maps.event.trigger(map, 'resize');
+      if (center) map.setCenter(center);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [map, expanded]);
 
   return null;
 }
