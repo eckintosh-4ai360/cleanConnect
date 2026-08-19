@@ -179,6 +179,50 @@ export default function Settings() {
     setSmsSaving(false);
   };
 
+  // ── Rider workload cap: how many pickups a rider may hold accepted at once ──
+  const [maxPickupsForm, setMaxPickupsForm] = useState('3');
+  const [maxPickupsLoading, setMaxPickupsLoading] = useState(false);
+  const [maxPickupsSaving, setMaxPickupsSaving] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchMaxPickups = async () => {
+      setMaxPickupsLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('max_concurrent_pickups')
+        .eq('id', true)
+        .maybeSingle();
+      if (mounted && !error && data?.max_concurrent_pickups != null) {
+        setMaxPickupsForm(String(data.max_concurrent_pickups));
+      }
+      if (error) console.warn('app_settings (max pickups) fetch:', error);
+      if (mounted) setMaxPickupsLoading(false);
+    };
+    fetchMaxPickups();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSaveMaxPickups = async (e) => {
+    e.preventDefault();
+    const parsed = parseInt(maxPickupsForm, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      alert('Enter a whole number of 1 or more.');
+      return;
+    }
+    setMaxPickupsSaving(true);
+    const { error } = await supabase.from('app_settings').upsert({
+      id: true,
+      max_concurrent_pickups: parsed,
+    }, { onConflict: 'id' });
+    if (error) {
+      alert('Failed to save rider pickup limit: ' + error.message);
+    } else {
+      alert('Rider pickup limit saved.');
+    }
+    setMaxPickupsSaving(false);
+  };
+
   // ── Admin profile helpers ────────────────────────────────────────────────
   const handleAdminPhotoUpload = (e) => {
     const file = e.target.files?.[0];
@@ -396,6 +440,36 @@ export default function Settings() {
             <div>
               <button className="btn-primary" type="submit" disabled={smsSaving || smsLoading} style={{ padding: '8px 16px', fontSize: '12px' }}>
                 {smsSaving ? 'Saving…' : 'Save SMS Settings'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* ── Rider Workload Cap ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px' }}>Rider Pickup Limit</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Maximum number of pickups a rider can hold accepted at the same time. Once a rider hits
+              this limit, they must complete one before accepting another — prevents a single rider
+              from hoarding every pending request.
+            </p>
+          </div>
+          <form onSubmit={handleSaveMaxPickups} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group" style={{ maxWidth: '220px' }}>
+              <label>Max concurrent pickups per rider</label>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={maxPickupsForm}
+                onChange={(e) => setMaxPickupsForm(e.target.value)}
+                placeholder={maxPickupsLoading ? 'Loading…' : 'e.g. 3'}
+              />
+            </div>
+            <div>
+              <button className="btn-primary" type="submit" disabled={maxPickupsSaving || maxPickupsLoading} style={{ padding: '8px 16px', fontSize: '12px' }}>
+                {maxPickupsSaving ? 'Saving…' : 'Save Rider Pickup Limit'}
               </button>
             </div>
           </form>
