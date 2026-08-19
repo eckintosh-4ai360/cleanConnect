@@ -156,6 +156,11 @@ class CustomerRepositoryImpl implements CustomerRepository {
     return _requestFromRow(row as Map<String, dynamic>);
   }
 
+  @override
+  Future<void> cancelPickupRequest(String requestId) async {
+    await _db.rpc('cancel_pickup', params: {'p_request_id': requestId});
+  }
+
   // -- Live tracking --------------------------------------------------------
 
   @override

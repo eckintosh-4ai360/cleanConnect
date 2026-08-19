@@ -41,6 +41,10 @@ abstract class CustomerRepository {
     double? locationLng,
   });
 
+  /// Cancels a request that hasn't been completed yet. Throws if it is
+  /// already completed/cancelled, or does not belong to the caller.
+  Future<void> cancelPickupRequest(String requestId);
+
   /// Live position of the rider assigned to [requestId], updated over Realtime.
   Stream<PickupTrackingEntity?> watchPickupTracking(String requestId);
 
