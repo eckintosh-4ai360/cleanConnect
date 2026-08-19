@@ -185,6 +185,36 @@ class DirectionsService {
     }
   }
 
+  /// Resolves coordinates to a human-readable address, for labelling a pin the
+  /// customer just dropped on the map. Returns null (never throws) when the
+  /// key is absent or the point has no known address -- callers fall back to
+  /// showing the raw coordinates.
+  Future<String?> reverseGeocode(LatLng point) async {
+    if (!MapConfig.hasWebServiceKey) return null;
+
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        _geocodeEndpoint,
+        queryParameters: {
+          'latlng': '${point.latitude},${point.longitude}',
+          'key': MapConfig.webServiceApiKey,
+        },
+      );
+
+      final data = response.data;
+      if (data == null || data['status'] != 'OK') return null;
+
+      final results = data['results'] as List<dynamic>?;
+      if (results == null || results.isEmpty) return null;
+
+      return (results.first as Map<String, dynamic>)['formatted_address']
+          as String?;
+    } catch (e) {
+      debugPrint('DirectionsService: reverse geocode failed - $e');
+      return null;
+    }
+  }
+
   void clearCache() => _routeCache.clear();
 
   // -- Internals ------------------------------------------------------------
