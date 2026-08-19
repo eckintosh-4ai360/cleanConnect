@@ -185,7 +185,12 @@ class RiderPerformanceEntity {
   final double earningsThisMonth;
   final int totalCollectionsAllTime;
   final double onTimeDeliveryRate;
-  final List<double> weeklyScores; // last 7 days
+  final List<double?> weeklyScores; // last 7 days; null = no stops that day
+  final int missedStopsThisWeek;
+  final int missedStopsThisMonth;
+  final int topLocationsThisMonth;
+  final int collectionsThisMonth;
+  final double avgEarningsPerCollection;
 
   const RiderPerformanceEntity({
     required this.efficiencyScore,
@@ -197,6 +202,11 @@ class RiderPerformanceEntity {
     required this.totalCollectionsAllTime,
     required this.onTimeDeliveryRate,
     required this.weeklyScores,
+    required this.missedStopsThisWeek,
+    required this.missedStopsThisMonth,
+    required this.topLocationsThisMonth,
+    required this.collectionsThisMonth,
+    required this.avgEarningsPerCollection,
   });
 }
 

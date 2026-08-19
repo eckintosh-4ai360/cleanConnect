@@ -27,39 +27,53 @@ app take over rendering and vibration even when it is backgrounded or killed.
   `20260819120000_pickup_webhook_secret.sql`.
 - `supabase/functions/notify-riders-on-new-pickup/`.
 
-## Remaining console steps
+## Backend status — verified 2026-08-19
 
-### 1. Apply migrations and read the webhook secret
+All server-side setup is done and checked against the live project
+(`mfysompctaxldphbxvkv`):
+
+| Check | Result |
+| --- | --- |
+| `pg_net` extension | installed |
+| `trg_notify_riders_on_new_pickup` trigger | present |
+| Vault `pickup_webhook_secret` | present, SHA-256 matches `PICKUP_WEBHOOK_SECRET` |
+| `PICKUP_WEBHOOK_SECRET` (function env) | set |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | set |
+| Service account -> Google OAuth | mints an access token |
+| Service account -> FCM v1 `messages:send` | reachable; rejects only a fake device token |
+| Edge function deployed | ACTIVE, `verify_jwt=false`; returns 401 to a wrong secret |
+| `riders.fcm_token` populated | **0 of 1 riders** |
+
+The last row is the only outstanding item, and it can only be fixed from a
+real device — see below.
+
+Useful: `supabase db query` needs `--linked`, or it tries local Docker. The
+CLI is not on PATH here; use `npx supabase`.
+
+## Remaining step: register a device token
+
+No rider has ever registered an FCM token, because until the Gradle fix the
+app could not initialize Firebase at all. Push cannot be delivered to anyone
+until this is done.
+
+Requires a **physical Android device** (or an emulator with a Google Play
+system image — plain AVDs have no Play services and never receive a token):
 
 ```bash
-supabase db push
+flutter install          # build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Then, in the SQL editor (or `supabase db execute`):
-
-```sql
-select decrypted_secret from vault.decrypted_secrets
- where name = 'pickup_webhook_secret';
-```
-
-### 2. Firebase service account for FCM v1
-
-Firebase Console -> Project Settings -> Service Accounts -> **Generate new
-private key**. Save the JSON somewhere outside the repo.
-
-### 3. Set the Edge Function secrets and deploy
+Sign in as a rider, accept the notification permission prompt, then confirm:
 
 ```bash
-supabase secrets set PICKUP_WEBHOOK_SECRET="<value from step 1>"
-supabase secrets set FIREBASE_SERVICE_ACCOUNT_JSON="$(cat /path/to/service-account.json)"
-supabase functions deploy notify-riders-on-new-pickup
+npx supabase db query --linked   "select count(*) from riders where fcm_token is not null;"
 ```
 
-Both secrets are required: a missing `PICKUP_WEBHOOK_SECRET` makes every call
-401, and a missing service account makes the function 500 with
-"Push service is not configured."
+Once that returns 1 or more, create a pickup request from a customer account.
+Watch the Edge Function logs in the dashboard (this CLI version has no
+`functions logs`): `sent: 1` means delivered.
 
-### 4. iOS (only if you ship iOS)
+## iOS (only if you ship iOS)
 
 Currently unconfigured — `DefaultFirebaseOptions.currentPlatform` throws on
 iOS/macOS and `main()` logs `PUSH DISABLED` and carries on.
@@ -77,7 +91,7 @@ iOS/macOS and `main()` logs `PUSH DISABLED` and carries on.
 Note: iOS suppresses the Android-style full-screen-intent behaviour — a
 data-only message can only wake the app for a normal banner there.
 
-### 5. Web (optional)
+## Web (optional)
 
 `web/` has no `firebase-messaging-sw.js`, so web push does not work. It needs
 that service worker plus a VAPID key passed to `getToken(vapidKey: ...)`.

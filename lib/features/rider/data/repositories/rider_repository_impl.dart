@@ -308,13 +308,14 @@ class RiderRepositoryImpl implements RiderRepository {
     final onTimeDeliveryRate = monthResolved == 0 ? 1.0 : monthCollected / monthResolved;
 
     final fallbackScore = (r['efficiency_score'] as num?)?.toDouble() ?? 100.0;
-    final weeklyScores = List<double>.generate(7, (i) {
+    // null = no stops that day, rendered as "no data" rather than a fabricated score.
+    final weeklyScores = List<double?>.generate(7, (i) {
       final day = startOfWeek.add(Duration(days: i));
       final dayStops = stopRows.where((s) => sameDay(day, s['created_at']));
       final collected = countStatus(dayStops, 'collected');
       final problem = countStatus(dayStops, 'problem');
       final resolved = collected + problem;
-      return resolved == 0 ? fallbackScore : (collected / resolved) * 100;
+      return resolved == 0 ? null : (collected / resolved) * 100;
     });
 
     final monthWeight = weightOf(monthEvents);
