@@ -15,15 +15,9 @@ const statusOptions = ['active', 'maintenance', 'inactive', 'disabled'];
 
 function generateSerialNumber(type = 'bin') {
   const prefix = type === 'organic' ? 'ORG' : 'REC';
-  const now = new Date();
-  const datePart = [
-    now.getUTCFullYear(),
-    String(now.getUTCMonth() + 1).padStart(2, '0'),
-    String(now.getUTCDate()).padStart(2, '0'),
-  ].join('');
-  const timePart = now.getTime().toString(36).toUpperCase().slice(-5);
+  const timePart = Date.now().toString(36).toUpperCase().slice(-5);
   const randomPart = Math.floor(1000 + Math.random() * 9000);
-  return `CCB-${prefix}-${datePart}-${timePart}${randomPart}`;
+  return `CCB-${prefix}-${timePart}${randomPart}`;
 }
 
 function qrCodeUrl(serialNumber) {
@@ -236,6 +230,21 @@ export default function Bins() {
     setActionLoading(false);
   };
 
+  const handleDeleteBin = async (bin) => {
+    if (!window.confirm(`Delete bin ${bin.serial_number || bin.id}? This cannot be undone.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const { error } = await supabase.rpc('admin_delete_bin', { p_bin_id: bin.id });
+      if (error) throw error;
+      if (selectedBin?.id === bin.id) setSelectedBin(null);
+    } catch (err) {
+      alert(`Failed to delete bin: ${err.message}`);
+    }
+    setActionLoading(false);
+  };
+
   return (
     <div className="page-content">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
@@ -403,16 +412,29 @@ export default function Bins() {
                     </td>
                     <td>{formatDate(bin.registered_at)}</td>
                     <td>
-                      <button
-                        className="btn-outline"
-                        style={{ padding: '8px 12px', fontSize: '11px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(bin);
-                        }}
-                      >
-                        Manage
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="btn-outline"
+                          style={{ padding: '8px 12px', fontSize: '11px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(bin);
+                          }}
+                        >
+                          Manage
+                        </button>
+                        <button
+                          className="btn-outline"
+                          style={{ padding: '8px 12px', fontSize: '11px', color: 'var(--color-danger, #d33)' }}
+                          disabled={actionLoading}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBin(bin);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -27,6 +27,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
 
   // Rider Profile Picture
@@ -70,6 +71,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _passwordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     _addressCtrl.dispose();
     _licenseCtrl.dispose();
     _nationalIdCtrl.dispose();
@@ -105,10 +107,21 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
         _emailCtrl.text.trim().isEmpty ||
         _phoneCtrl.text.trim().isEmpty ||
         _passwordCtrl.text.isEmpty ||
+        _confirmPasswordCtrl.text.isEmpty ||
         _addressCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill out all fields in Step 1.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_passwordCtrl.text != _confirmPasswordCtrl.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Passwords do not match.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -237,6 +250,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
                   emailCtrl: _emailCtrl,
                   phoneCtrl: _phoneCtrl,
                   passwordCtrl: _passwordCtrl,
+                  confirmPasswordCtrl: _confirmPasswordCtrl,
                   addressCtrl: _addressCtrl,
                   photoFile: _photoFile,
                   photoBytes: _photoBytes,
@@ -315,6 +329,7 @@ class _Step1PersonalInfo extends StatelessWidget {
   final TextEditingController emailCtrl;
   final TextEditingController phoneCtrl;
   final TextEditingController passwordCtrl;
+  final TextEditingController confirmPasswordCtrl;
   final TextEditingController addressCtrl;
   final XFile? photoFile;
   final Uint8List? photoBytes;
@@ -325,6 +340,7 @@ class _Step1PersonalInfo extends StatelessWidget {
     required this.emailCtrl,
     required this.phoneCtrl,
     required this.passwordCtrl,
+    required this.confirmPasswordCtrl,
     required this.addressCtrl,
     this.photoFile,
     this.photoBytes,
@@ -436,6 +452,20 @@ class _Step1PersonalInfo extends StatelessWidget {
           const SizedBox(height: 6),
           TextField(
             controller: passwordCtrl,
+            obscureText: true,
+            decoration: InputDecoration(
+              hintText: '••••••••',
+              prefixIcon: const Icon(Icons.lock_outline),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _FormLabel('Confirm Password'),
+          const SizedBox(height: 6),
+          TextField(
+            controller: confirmPasswordCtrl,
             obscureText: true,
             decoration: InputDecoration(
               hintText: '••••••••',

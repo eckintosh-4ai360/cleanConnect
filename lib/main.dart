@@ -59,6 +59,10 @@ void main() async {
     }
   }
 
+  // runApp(
+  //   UncontrolledProviderScope(container: container, child: const EcoWasteApp()),
+  // );
+
   runApp(
     DevicePreview(
       enabled: !kReleaseMode,
@@ -82,8 +86,7 @@ class EcoWasteApp extends ConsumerWidget {
       title: 'CleanConnect',
       debugShowCheckedModeBanner: false,
       locale: DevicePreview.locale(context),
-      builder: (context, child) =>
-          DevicePreview.appBuilder(context, SafeArea(child: child!)),
+      builder: (context, child) => DevicePreview.appBuilder(context, child!),
       theme: EcoTheme.lightTheme,
       darkTheme: EcoTheme.darkTheme,
       themeMode: themeMode,

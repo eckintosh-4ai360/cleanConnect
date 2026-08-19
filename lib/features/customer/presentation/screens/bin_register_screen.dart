@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -24,7 +24,9 @@ class BinRegisterScreen extends HookConsumerWidget {
     final currentStep = useState(0);
 
     final selectedType = useState('recycling'); // 'recycling', 'organic'
-    final selectedSize = useState('240L'); // '120L', '240L', '360L'
+    final selectedSizes = useState<List<String>>([
+      '240L',
+    ]); // one or more of '120L', '240L', '360L'
     final gpsLocation = useState('');
     final photoPath = useState<String?>(null);
     final photoBytes = useState<Uint8List?>(null);
@@ -83,7 +85,7 @@ class BinRegisterScreen extends HookConsumerWidget {
       selectedMode.value = mode;
       currentStep.value = 0;
       selectedType.value = 'recycling';
-      selectedSize.value = '240L';
+      selectedSizes.value = ['240L'];
       gpsLocation.value = '';
       photoPath.value = null;
       photoBytes.value = null;
@@ -126,11 +128,13 @@ class BinRegisterScreen extends HookConsumerWidget {
     Future<void> handleConfirm() async {
       try {
         if (selectedMode.value == _BinRegistrationMode.requestCompanyBin) {
-          await ref.read(customerBinsProvider.notifier).requestCompanyBin(
-                type: selectedType.value,
-                size: selectedSize.value,
-                gpsLocation: gpsLocation.value,
-              );
+          for (final size in selectedSizes.value) {
+            await ref.read(customerBinsProvider.notifier).requestCompanyBin(
+                  type: selectedType.value,
+                  size: size,
+                  gpsLocation: gpsLocation.value,
+                );
+          }
 
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -140,20 +144,26 @@ class BinRegisterScreen extends HookConsumerWidget {
             ),
           );
         } else {
-          final bin = await ref.read(customerBinsProvider.notifier).registerNewBin(
-                type: selectedType.value,
-                size: selectedSize.value,
-                frequency: selectedFrequency.value,
-                pickupDays: preferredDays.value,
-                gpsLocation: gpsLocation.value,
-                photoPath: photoPath.value,
-              );
+          final serialNumbers = <String>[];
+          for (final size in selectedSizes.value) {
+            final bin = await ref.read(customerBinsProvider.notifier).registerNewBin(
+                  type: selectedType.value,
+                  size: size,
+                  frequency: selectedFrequency.value,
+                  pickupDays: preferredDays.value,
+                  gpsLocation: gpsLocation.value,
+                  photoPath: photoPath.value,
+                );
+            serialNumbers.add(bin.serialNumber);
+          }
 
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Personal bin registered. Serial number: ${bin.serialNumber}',
+                serialNumbers.length > 1
+                    ? 'Personal bins registered. Serial numbers: ${serialNumbers.join(", ")}'
+                    : 'Personal bin registered. Serial number: ${serialNumbers.first}',
               ),
               backgroundColor: Colors.green,
             ),
@@ -225,7 +235,7 @@ class BinRegisterScreen extends HookConsumerWidget {
                         currentStep: currentStep.value,
                         formKey: formKey,
                         selectedType: selectedType,
-                        selectedSize: selectedSize,
+                        selectedSizes: selectedSizes,
                         gpsLocation: gpsLocation,
                         photoPath: photoPath,
                         photoBytes: photoBytes,
@@ -251,7 +261,7 @@ class BinRegisterScreen extends HookConsumerWidget {
     required int currentStep,
     required GlobalKey<FormState> formKey,
     required ValueNotifier<String> selectedType,
-    required ValueNotifier<String> selectedSize,
+    required ValueNotifier<List<String>> selectedSizes,
     required ValueNotifier<String> gpsLocation,
     required ValueNotifier<String?> photoPath,
     required ValueNotifier<Uint8List?> photoBytes,
@@ -269,7 +279,7 @@ class BinRegisterScreen extends HookConsumerWidget {
         formKey: formKey,
         mode: mode,
         selectedType: selectedType,
-        selectedSize: selectedSize,
+        selectedSizes: selectedSizes,
         gpsLocation: gpsLocation,
         photoPath: photoPath,
         photoBytes: photoBytes,
@@ -283,7 +293,7 @@ class BinRegisterScreen extends HookConsumerWidget {
     if (mode == _BinRegistrationMode.requestCompanyBin) {
       return _RequestReviewStep(
         selectedType: selectedType,
-        selectedSize: selectedSize,
+        selectedSizes: selectedSizes,
         gpsLocation: gpsLocation,
         handleConfirm: handleConfirm,
       );
@@ -300,7 +310,7 @@ class BinRegisterScreen extends HookConsumerWidget {
 
     return _PersonalReviewStep(
       selectedType: selectedType,
-      selectedSize: selectedSize,
+      selectedSizes: selectedSizes,
       gpsLocation: gpsLocation,
       photoPath: photoPath,
       photoBytes: photoBytes,
@@ -359,7 +369,7 @@ class _BinDetailsStep extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final _BinRegistrationMode mode;
   final ValueNotifier<String> selectedType;
-  final ValueNotifier<String> selectedSize;
+  final ValueNotifier<List<String>> selectedSizes;
   final ValueNotifier<String> gpsLocation;
   final ValueNotifier<String?> photoPath;
   final ValueNotifier<Uint8List?> photoBytes;
@@ -372,7 +382,7 @@ class _BinDetailsStep extends StatelessWidget {
     required this.formKey,
     required this.mode,
     required this.selectedType,
-    required this.selectedSize,
+    required this.selectedSizes,
     required this.gpsLocation,
     required this.photoPath,
     required this.photoBytes,
@@ -418,21 +428,35 @@ class _BinDetailsStep extends StatelessWidget {
             'Bin Specifications',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
+          const SizedBox(height: 4),
+          const Text(
+            'Select one or more capacities.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: selectedSize.value,
-            decoration: const InputDecoration(labelText: 'Bin Capacity'),
-            items: const [
-              DropdownMenuItem(value: '120L', child: Text('120L Small')),
-              DropdownMenuItem(value: '240L', child: Text('240L Large')),
-              DropdownMenuItem(
-                value: '360L',
-                child: Text('360L Extra Large'),
-              ),
-            ],
-            onChanged: (val) {
-              if (val != null) selectedSize.value = val;
-            },
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: const [
+              ('120L', '120L Small'),
+              ('240L', '240L Large'),
+              ('360L', '360L Extra Large'),
+            ].map((option) {
+              final isSelected = selectedSizes.value.contains(option.$1);
+              return _CapacityChip(
+                label: option.$2,
+                isSelected: isSelected,
+                onTap: () {
+                  final current = List<String>.from(selectedSizes.value);
+                  if (isSelected) {
+                    if (current.length > 1) current.remove(option.$1);
+                  } else {
+                    current.add(option.$1);
+                  }
+                  selectedSizes.value = current;
+                },
+              );
+            }).toList(),
           ),
           const SizedBox(height: 16),
           EcoTextField(
@@ -632,13 +656,13 @@ class _ScheduleStep extends StatelessWidget {
 
 class _RequestReviewStep extends StatelessWidget {
   final ValueNotifier<String> selectedType;
-  final ValueNotifier<String> selectedSize;
+  final ValueNotifier<List<String>> selectedSizes;
   final ValueNotifier<String> gpsLocation;
   final Future<void> Function() handleConfirm;
 
   const _RequestReviewStep({
     required this.selectedType,
-    required this.selectedSize,
+    required this.selectedSizes,
     required this.gpsLocation,
     required this.handleConfirm,
   });
@@ -669,7 +693,7 @@ class _RequestReviewStep extends StatelessWidget {
               icon: Icons.inventory_2_outlined,
               label: 'Requested Bin',
               value:
-                  '${_formatWasteType(selectedType.value)} (${selectedSize.value})',
+                  '${_formatWasteType(selectedType.value)} (${selectedSizes.value.join(', ')})',
             ),
             const Divider(height: 24),
             _SummaryRow(
@@ -695,7 +719,7 @@ class _RequestReviewStep extends StatelessWidget {
 
 class _PersonalReviewStep extends StatelessWidget {
   final ValueNotifier<String> selectedType;
-  final ValueNotifier<String> selectedSize;
+  final ValueNotifier<List<String>> selectedSizes;
   final ValueNotifier<String> gpsLocation;
   final ValueNotifier<String?> photoPath;
   final ValueNotifier<Uint8List?> photoBytes;
@@ -707,7 +731,7 @@ class _PersonalReviewStep extends StatelessWidget {
 
   const _PersonalReviewStep({
     required this.selectedType,
-    required this.selectedSize,
+    required this.selectedSizes,
     required this.gpsLocation,
     required this.photoPath,
     required this.photoBytes,
@@ -741,7 +765,7 @@ class _PersonalReviewStep extends StatelessWidget {
               icon: Icons.delete,
               label: 'Bin Details',
               value:
-                  '${_formatWasteType(selectedType.value)} (${selectedSize.value})',
+                  '${_formatWasteType(selectedType.value)} (${selectedSizes.value.join(', ')})',
             ),
             const Divider(height: 24),
             const _SummaryRow(
@@ -892,6 +916,62 @@ class _RegistrationModeCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CapacityChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CapacityChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? theme.colorScheme.primaryContainer
+              : Colors.transparent,
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary
+                : Colors.grey.shade300,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? Icons.check_circle : Icons.circle_outlined,
+              size: 16,
+              color: isSelected ? theme.colorScheme.primary : Colors.grey,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : Colors.grey.shade600,
+              ),
+            ),
           ],
         ),
       ),

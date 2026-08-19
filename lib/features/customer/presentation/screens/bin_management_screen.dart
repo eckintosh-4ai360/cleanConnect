@@ -5,6 +5,16 @@ import '../../domain/entities/customer_entities.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
 
+const _kScheduleDays = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
 class BinManagementScreen extends ConsumerWidget {
   const BinManagementScreen({super.key});
 
@@ -158,6 +168,30 @@ class BinManagementScreen extends ConsumerWidget {
                                       _showQrDialog(context, bin);
                                     },
                                   ),
+                                  if (bin.isPersonal)
+                                    PopupMenuButton<String>(
+                                      icon: const Icon(
+                                        Icons.more_vert,
+                                        color: Colors.grey,
+                                      ),
+                                      onSelected: (value) {
+                                        if (value == 'edit') {
+                                          _showEditBinDialog(context, ref, bin);
+                                        } else if (value == 'delete') {
+                                          _showDeleteBinDialog(context, ref, bin);
+                                        }
+                                      },
+                                      itemBuilder: (context) => const [
+                                        PopupMenuItem(
+                                          value: 'edit',
+                                          child: Text('Edit Schedule'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: Text('Delete Bin'),
+                                        ),
+                                      ],
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 20),
@@ -377,6 +411,137 @@ class BinManagementScreen extends ConsumerWidget {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _showEditBinDialog(BuildContext context, WidgetRef ref, BinEntity bin) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        String frequency = bin.scheduleFrequency ?? 'Weekly';
+        String day = bin.pickupDays?.isNotEmpty == true
+            ? bin.pickupDays!.first
+            : 'Monday';
+        bool isSaving = false;
+
+        return StatefulBuilder(
+          builder: (dialogContext, setState) {
+            return AlertDialog(
+              title: const Text('Edit Collection Schedule'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Frequency', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: frequency,
+                    items: const ['Weekly', 'Bi-weekly', 'Monthly']
+                        .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                        .toList(),
+                    onChanged: isSaving
+                        ? null
+                        : (val) {
+                            if (val != null) setState(() => frequency = val);
+                          },
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Pickup Day', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: day,
+                    items: _kScheduleDays
+                        .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                        .toList(),
+                    onChanged: isSaving
+                        ? null
+                        : (val) {
+                            if (val != null) setState(() => day = val);
+                          },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          setState(() => isSaving = true);
+                          try {
+                            await ref.read(customerBinsProvider.notifier).updateBin(
+                                  binId: bin.id,
+                                  frequency: frequency,
+                                  pickupDays: [day],
+                                );
+                            if (dialogContext.mounted) Navigator.pop(dialogContext);
+                          } catch (e) {
+                            setState(() => isSaving = false);
+                            if (dialogContext.mounted) {
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to update bin: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteBinDialog(BuildContext context, WidgetRef ref, BinEntity bin) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Bin'),
+          content: Text(
+            'Are you sure you want to delete bin ${bin.serialNumber}? This cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                try {
+                  await ref.read(customerBinsProvider.notifier).deleteBin(bin.id);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to delete bin: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Delete'),
+            ),
+          ],
         );
       },
     );

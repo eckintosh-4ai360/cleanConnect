@@ -47,7 +47,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String gpsLocation,
     String? photoPath,
   }) async {
-    final serialNumber = _generatePersonalBinSerial();
+    final serialNumber = _generatePersonalBinSerial(type);
     final row = await _db.rpc('register_bin', params: {
       'p_serial_number': serialNumber,
       'p_type': type,
@@ -73,10 +73,18 @@ class CustomerRepositoryImpl implements CustomerRepository {
     });
   }
 
-  String _generatePersonalBinSerial() {
+  /// Matches the admin panel's bin serial format (see admin_panel/src/components/Bins.jsx
+  /// generateSerialNumber), e.g. "CCB-REC-9LDHV6775", so personal and
+  /// admin-assigned bins share one consistent scheme.
+  String _generatePersonalBinSerial(String type) {
+    final prefix = type == 'organic' ? 'ORG' : 'REC';
     final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
-    final suffix = 1000 + _random.nextInt(9000);
-    return 'PB-${timestamp.toRadixString(36).toUpperCase()}-$suffix';
+    final timePart = timestamp.toRadixString(36).toUpperCase();
+    final timeSuffix = timePart.length > 5
+        ? timePart.substring(timePart.length - 5)
+        : timePart;
+    final randomPart = 1000 + _random.nextInt(9000);
+    return 'CCB-$prefix-$timeSuffix$randomPart';
   }
 
   BinEntity _binFromRow(Map<String, dynamic> r) => BinEntity(
@@ -91,7 +99,27 @@ class CustomerRepositoryImpl implements CustomerRepository {
         verificationPhotoUrl: r['verification_photo_url'] as String?,
         registeredDate:
             DateTime.tryParse(r['registered_at']?.toString() ?? '') ?? DateTime.now(),
+        ownership: r['ownership'] as String? ?? 'personal',
       );
+
+  @override
+  Future<BinEntity> updateBin({
+    required String binId,
+    required String frequency,
+    required List<String> pickupDays,
+  }) async {
+    final row = await _db.rpc('customer_update_bin', params: {
+      'p_bin_id': binId,
+      'p_frequency': frequency,
+      'p_pickup_days': pickupDays,
+    });
+    return _binFromRow(row as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> deleteBin(String binId) async {
+    await _db.rpc('customer_delete_bin', params: {'p_bin_id': binId});
+  }
 
   // ── Pickup Requests ──────────────────────────────────────────────────────
 
