@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
+import '../widgets/bins_map_view.dart';
 
 const _kScheduleDays = [
   'Monday',
@@ -15,12 +17,15 @@ const _kScheduleDays = [
   'Sunday',
 ];
 
-class BinManagementScreen extends ConsumerWidget {
+enum _BinsViewMode { list, map }
+
+class BinManagementScreen extends HookConsumerWidget {
   const BinManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final binState = ref.watch(customerBinsProvider);
+    final viewMode = useState(_BinsViewMode.list);
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -36,10 +41,33 @@ class BinManagementScreen extends ConsumerWidget {
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            tooltip: viewMode.value == _BinsViewMode.list
+                ? 'Show on map'
+                : 'Show as list',
+            icon: Icon(
+              viewMode.value == _BinsViewMode.list
+                  ? Icons.map_outlined
+                  : Icons.view_list_outlined,
+            ),
+            onPressed: () {
+              viewMode.value = viewMode.value == _BinsViewMode.list
+                  ? _BinsViewMode.map
+                  : _BinsViewMode.list;
+            },
+          ),
+        ],
       ),
       bottomNavigationBar: const CustomerBottomNavBar(currentIndex: 1),
       body: SafeArea(
-        child: binState.when(
+        child: viewMode.value == _BinsViewMode.map
+            ? binState.when(
+                data: (bins) => BinsMapView(bins: bins),
+                error: (_, __) => const Center(child: Text('Error loading bins.')),
+                loading: () => const Center(child: CircularProgressIndicator()),
+              )
+            : binState.when(
           data: (bins) {
             if (bins.isEmpty) {
               return Center(
