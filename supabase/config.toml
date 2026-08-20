@@ -424,6 +424,12 @@ entrypoint = "./functions/initialize-paystack-transaction/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/initialize-paystack-transaction/*.html" ]
 
+[functions.verify-paystack-transaction]
+enabled = true
+verify_jwt = true
+import_map = "./functions/verify-paystack-transaction/deno.json"
+entrypoint = "./functions/verify-paystack-transaction/index.ts"
+
 [functions.notify-riders-on-new-pickup]
 enabled = true
 verify_jwt = false
