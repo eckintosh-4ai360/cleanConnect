@@ -96,19 +96,24 @@ class PaystackService {
         final accessCode = data['access_code'] as String?;
         final reference = data['reference'] as String?;
 
-        if (accessCode != null && accessCode.isNotEmpty) {
+        if (accessCode != null && accessCode.isNotEmpty && reference != null) {
           // Launch Paystack SDK UI
           try {
             await _paystack.launch(accessCode);
-            return PaymentResult(status: PaymentStatus.success, reference: reference);
           } catch (launchErr) {
             final msg = launchErr.toString();
             if (msg.contains('MissingPluginException') || msg.contains('No implementation found')) {
-              // Plugin missing on current platform/session — fallback to test success
-              debugPrint('[PaystackService] Native SDK UI unavailable. Completing in test mode.');
-              return PaymentResult(
-                status: PaymentStatus.success,
-                reference: reference ?? 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
+              if (kDebugMode) {
+                // Plugin missing on current platform/session — fallback to test success
+                debugPrint('[PaystackService] Native SDK UI unavailable. Completing in test mode.');
+                return PaymentResult(
+                  status: PaymentStatus.success,
+                  reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
+                );
+              }
+              return const PaymentResult(
+                status: PaymentStatus.failed,
+                errorMessage: 'Payment could not be started on this device. Please try again.',
               );
             }
             if (msg.toLowerCase().contains('cancel') ||
@@ -121,6 +126,15 @@ class PaystackService {
             }
             rethrow;
           }
+
+          // The SDK reported the checkout completed locally, but that alone
+          // isn't trustworthy — confirm the charge with Paystack's own
+          // record before treating this payment as real.
+          return _verifyTransaction(
+            reference: reference,
+            expectedAmount: amountInSmallest,
+            expectedCurrency: currency,
+          );
         }
       } on FunctionException catch (e) {
         final errorBody = e.details;
@@ -172,9 +186,67 @@ class PaystackService {
       );
     }
 
-    return PaymentResult(
-      status: PaymentStatus.success,
-      reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
+    return const PaymentResult(
+      status: PaymentStatus.failed,
+      errorMessage: 'Payment could not be started. Please try again.',
     );
+  }
+
+  /// Confirms a transaction reference with Paystack's own record via the
+  /// verify-paystack-transaction Edge Function. Only a confirmed, successful
+  /// charge for the expected amount/currency is treated as a real payment.
+  Future<PaymentResult> _verifyTransaction({
+    required String reference,
+    required int expectedAmount,
+    required String expectedCurrency,
+  }) async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'verify-paystack-transaction',
+        body: {
+          'reference': reference,
+          'expected_amount': expectedAmount,
+          'expected_currency': expectedCurrency,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['verified'] == true) {
+        return PaymentResult(status: PaymentStatus.success, reference: reference);
+      }
+      debugPrint('[PaystackService] Verification rejected: $data');
+      return PaymentResult(
+        status: PaymentStatus.failed,
+        reference: reference,
+        errorMessage:
+            'Payment could not be confirmed. If you were charged, contact support with reference $reference.',
+      );
+    } on FunctionException catch (e) {
+      final errorBody = e.details;
+      final errorMessage =
+          errorBody is Map ? errorBody['error']?.toString() : null;
+      debugPrint('[PaystackService] Verify Edge Function notice: ${e.status} — $errorMessage');
+      if (kDebugMode) {
+        debugPrint('[PaystackService] Debug mode: skipping verification, assuming success.');
+        return PaymentResult(status: PaymentStatus.success, reference: reference);
+      }
+      return PaymentResult(
+        status: PaymentStatus.failed,
+        reference: reference,
+        errorMessage:
+            'Could not verify your payment. If you were charged, contact support with reference $reference.',
+      );
+    } catch (e) {
+      debugPrint('[PaystackService] Verification error: $e');
+      if (kDebugMode) {
+        return PaymentResult(status: PaymentStatus.success, reference: reference);
+      }
+      return PaymentResult(
+        status: PaymentStatus.failed,
+        reference: reference,
+        errorMessage:
+            'Could not verify your payment. If you were charged, contact support with reference $reference.',
+      );
+    }
   }
 }
