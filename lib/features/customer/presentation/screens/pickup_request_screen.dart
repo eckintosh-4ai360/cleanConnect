@@ -284,6 +284,7 @@ class PickupRequestScreen extends HookConsumerWidget {
       try {
         String paymentMethodToSave = 'Covered by $currentPlan';
         double finalAmountPaid = 0.0;
+        String? paymentReference;
 
         // ── Step 1: Process Paystack payment if user is on Pay-As-You-Go ────
         if (isPayAsYouGo) {
@@ -353,6 +354,7 @@ class PickupRequestScreen extends HookConsumerWidget {
 
           paymentMethodToSave = 'Paystack (${selectedPaymentMethod.value})';
           finalAmountPaid = pickupTotal;
+          paymentReference = paymentResult.reference;
         }
 
         final destination = selectedLocation.value!;
@@ -376,6 +378,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               surchargeAppliedPercentage: surchargePercentage,
               locationLat: destination.latitude,
               locationLng: destination.longitude,
+              paymentReference: paymentReference,
             );
 
         if (!context.mounted) return;
