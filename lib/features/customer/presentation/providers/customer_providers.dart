@@ -90,6 +90,7 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
     double surchargeAppliedPercentage = 0.0,
     double? locationLat,
     double? locationLng,
+    String? paymentReference,
   }) async {
     await ref
         .read(customerRepositoryProvider)
@@ -106,6 +107,7 @@ class CustomerPickupRequests extends _$CustomerPickupRequests {
           surchargeAppliedPercentage: surchargeAppliedPercentage,
           locationLat: locationLat,
           locationLng: locationLng,
+          paymentReference: paymentReference,
         );
   }
 
@@ -163,6 +165,7 @@ class CustomerSubscription extends _$CustomerSubscription {
     required String newPlan,
     required double fee,
     required String paymentMethod,
+    String? paymentReference,
   }) async {
     await ref
         .read(customerRepositoryProvider)
@@ -170,6 +173,7 @@ class CustomerSubscription extends _$CustomerSubscription {
           newPlan: newPlan,
           fee: fee,
           paymentMethod: paymentMethod,
+          paymentReference: paymentReference,
         );
   }
 
