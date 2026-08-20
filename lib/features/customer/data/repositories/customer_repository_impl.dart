@@ -157,6 +157,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     double surchargeAppliedPercentage = 0.0,
     double? locationLat,
     double? locationLng,
+    String? paymentReference,
   }) async {
     final receiptNumber =
         'PU-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 100000}';
@@ -173,6 +174,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'p_discount_applied_percentage': discountAppliedPercentage,
       'p_surcharge_applied_percentage': surchargeAppliedPercentage,
       'p_receipt_number': receiptNumber,
+      'p_payment_reference': paymentReference,
       // Sent only when the device actually produced a fix. Omitting the keys
       // (rather than passing nulls) lets schedule_pickup fall back to parsing
       // coordinates out of the location text, which is where a saved bin's
@@ -427,12 +429,14 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String newPlan,
     required double fee,
     required String paymentMethod,
+    String? paymentReference,
   }) async {
     await _db.from('customers').update({
       'subscription_plan_name': newPlan,
       'subscription_fee': fee,
       'payment_method': paymentMethod,
       'subscription_status': 'active',
+      'last_payment_reference': ?paymentReference,
     }).eq('id', _uid);
     return getSubscription();
   }

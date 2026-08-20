@@ -47,6 +47,7 @@ abstract class CustomerRepository {
     double surchargeAppliedPercentage = 0.0,
     double? locationLat,
     double? locationLng,
+    String? paymentReference,
   });
 
   /// Cancels a request that hasn't been completed yet. Throws if it is
@@ -80,6 +81,7 @@ abstract class CustomerRepository {
     required String newPlan,
     required double fee,
     required String paymentMethod,
+    String? paymentReference,
   });
 
   Future<void> payOutstandingBalance();
