@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import { APIProvider, Map as GoogleMap, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { supabase } from '../supabase';
 
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -615,7 +615,7 @@ export default function Bins() {
                 <MissingMapKeyNotice />
               ) : (
                 <APIProvider apiKey={MAPS_API_KEY}>
-                  <Map
+                  <GoogleMap
                     mapId={MAP_ID}
                     defaultCenter={mappableBins.length > 0 ? mappableBins[0].position : FALLBACK_CENTER}
                     defaultZoom={12}
@@ -636,7 +636,7 @@ export default function Bins() {
                         <BinMapPin bin={bin} onClick={() => { setSelectedBin(bin); }} />
                       </AdvancedMarker>
                     ))}
-                  </Map>
+                  </GoogleMap>
                 </APIProvider>
               )}
 
