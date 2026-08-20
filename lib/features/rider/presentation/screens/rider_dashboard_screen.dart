@@ -207,53 +207,43 @@ class RiderDashboardScreen extends ConsumerWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.2,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: 0.95,
                   children: [
                     _QuickActionCard(
                       title: 'Scan Collection',
-                      subtitle: 'QR code scan',
-                      icon: Icons.qr_code_scanner,
-                      color: const Color(0xFFF3E5F5),
-                      iconColor: Colors.purple,
-                      isDark: isDark,
+                      tag: 'Scan',
+                      gradientColors: const [Color(0xFF7FE9DC), Color(0xFF23B39F)],
+                      accentColor: const Color(0xFF0E7A6C),
                       onTap: () => context.push('/rider/collection'),
                     ),
                     _QuickActionCard(
                       title: 'Pickups',
-                      subtitle: 'Customer requests',
-                      icon: Icons.local_shipping_outlined,
-                      color: const Color(0xFFE8F5E9),
-                      iconColor: Colors.green,
-                      isDark: isDark,
+                      tag: 'Routes',
+                      gradientColors: const [Color(0xFF8EE6B0), Color(0xFF35B073)],
+                      accentColor: const Color(0xFF1B7A43),
                       onTap: () => context.push('/rider/pickups'),
                     ),
                     _QuickActionCard(
                       title: 'Performance',
-                      subtitle: 'My stats',
-                      icon: Icons.bar_chart,
-                      color: const Color(0xFFE3F2FD),
-                      iconColor: Colors.blue,
-                      isDark: isDark,
+                      tag: 'Stats',
+                      gradientColors: const [Color(0xFFFFD98A), Color(0xFFF3AE1D)],
+                      accentColor: const Color(0xFFC78200),
                       onTap: () => context.push('/rider/performance'),
                     ),
                     _QuickActionCard(
                       title: 'Notifications',
-                      subtitle: 'Messages & alerts',
-                      icon: Icons.notifications_outlined,
-                      color: const Color(0xFFFFF8E1),
-                      iconColor: Colors.amber.shade800,
-                      isDark: isDark,
+                      tag: 'Alerts',
+                      gradientColors: const [Color(0xFFE3CDB3), Color(0xFFB79A7A)],
+                      accentColor: const Color(0xFF6E5636),
                       onTap: () => context.push('/rider/notifications'),
                     ),
                     _QuickActionCard(
                       title: 'Assigned Reports',
-                      subtitle: 'Waste & gutter issues',
-                      icon: Icons.report_problem_outlined,
-                      color: const Color(0xFFFFEBEE),
-                      iconColor: Colors.red.shade700,
-                      isDark: isDark,
+                      tag: 'Reports',
+                      gradientColors: const [Color(0xFFFFAB91), Color(0xFFEF6C4D)],
+                      accentColor: const Color(0xFFC1401F),
                       onTap: () => context.push('/rider/incident-reports'),
                     ),
                   ],
@@ -732,68 +722,126 @@ class _StatCard extends StatelessWidget {
 
 class _QuickActionCard extends StatelessWidget {
   final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final Color iconColor;
-  final bool isDark;
+  final String tag;
+  final List<Color> gradientColors;
+  final Color accentColor;
   final VoidCallback onTap;
 
   const _QuickActionCard({
     required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.iconColor,
-    required this.isDark,
+    required this.tag,
+    required this.gradientColors,
+    required this.accentColor,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(28),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: isDark ? theme.cardTheme.color : color,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey.shade800 : Colors.white,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.28),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -30,
+              left: -30,
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -44,
+              right: -24,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.north_east_rounded,
+                        size: 16,
+                        color: accentColor,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-              ],
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.32),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF20241F),
+                          height: 1.15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
