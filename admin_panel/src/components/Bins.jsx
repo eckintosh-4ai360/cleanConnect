@@ -597,7 +597,10 @@ export default function Bins() {
 
       {showMapModal && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '920px', width: '100%' }}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '96vw', width: '100%', height: '92vh', maxHeight: '92vh' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ fontSize: '18px' }}>Bin Locations</h3>
@@ -610,7 +613,7 @@ export default function Bins() {
               </button>
             </div>
 
-            <div style={{ position: 'relative', height: '520px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-divider)', marginTop: '16px' }}>
+            <div style={{ position: 'relative', flex: 1, minHeight: 0, borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-divider)', marginTop: '16px' }}>
               {!MAPS_API_KEY ? (
                 <MissingMapKeyNotice />
               ) : (
