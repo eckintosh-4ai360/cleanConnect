@@ -426,43 +426,43 @@ class CustomerDashboardScreen extends ConsumerWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.2,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: 0.95,
                   children: [
                     _ActionCard(
                       title: 'Request Bin',
-                      icon: Icons.delete_outline,
-                      color: const Color(0xFFE3F2FD),
-                      iconColor: Colors.blue,
+                      tag: 'Waste',
+                      gradientColors: const [Color(0xFF8EE6B0), Color(0xFF35B073)],
+                      accentColor: const Color(0xFF1B7A43),
                       onTap: () => context.push('/customer/register-bin'),
                     ),
                     _ActionCard(
                       title: 'Subscriptions',
-                      icon: Icons.payment_outlined,
-                      color: const Color(0xFFFFF8E1),
-                      iconColor: Colors.amber.shade800,
+                      tag: 'Billing',
+                      gradientColors: const [Color(0xFFFFD98A), Color(0xFFF3AE1D)],
+                      accentColor: const Color(0xFFC78200),
                       onTap: () => context.push('/customer/subscription'),
                     ),
                     _ActionCard(
                       title: 'Request Pickup',
-                      icon: Icons.add_alarm_outlined,
-                      color: const Color(0xFFE8F5E9),
-                      iconColor: Colors.green,
+                      tag: 'Pickup',
+                      gradientColors: const [Color(0xFF7FE9DC), Color(0xFF23B39F)],
+                      accentColor: const Color(0xFF0E7A6C),
                       onTap: () => context.push('/customer/request-pickup'),
                     ),
                     _ActionCard(
                       title: 'Customer Support',
-                      icon: Icons.headset_mic_outlined,
-                      color: const Color(0xFFF3E5F5),
-                      iconColor: Colors.purple,
+                      tag: 'Support',
+                      gradientColors: const [Color(0xFFE3CDB3), Color(0xFFB79A7A)],
+                      accentColor: const Color(0xFF6E5636),
                       onTap: () => context.push('/customer/support'),
                     ),
                     _ActionCard(
                       title: 'Report an Issue',
-                      icon: Icons.report_problem_outlined,
-                      color: const Color(0xFFFFEBEE),
-                      iconColor: Colors.red.shade700,
+                      tag: 'Safety',
+                      gradientColors: const [Color(0xFFFFAB91), Color(0xFFEF6C4D)],
+                      accentColor: const Color(0xFFC1401F),
                       onTap: () => context.push('/customer/report-incident'),
                     ),
                   ],
@@ -578,60 +578,125 @@ class CustomerDashboardScreen extends ConsumerWidget {
 
 class _ActionCard extends StatelessWidget {
   final String title;
-  final IconData icon;
-  final Color color;
-  final Color iconColor;
+  final String tag;
+  final List<Color> gradientColors;
+  final Color accentColor;
   final VoidCallback onTap;
 
   const _ActionCard({
     required this.title,
-    required this.icon,
-    required this.color,
-    required this.iconColor,
+    required this.tag,
+    required this.gradientColors,
+    required this.accentColor,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(28),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: isDark ? theme.cardTheme.color : color,
-          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.01),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: accentColor.withValues(alpha: 0.28),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Stack(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.grey.shade800 : Colors.white,
-                shape: BoxShape.circle,
+            Positioned(
+              top: -30,
+              left: -30,
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
               ),
-              child: Icon(icon, color: iconColor, size: 24),
             ),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: isDark ? Colors.white : const Color(0xFF1A1A1A),
+            Positioned(
+              bottom: -44,
+              right: -24,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.north_east_rounded,
+                        size: 16,
+                        color: accentColor,
+                      ),
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.32),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF20241F),
+                          height: 1.15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
