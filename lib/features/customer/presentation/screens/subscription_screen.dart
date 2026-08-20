@@ -71,6 +71,7 @@ class SubscriptionScreen extends HookConsumerWidget {
 
       final isPAYG = selectedPlan.value == 'Pay-As-You-Go';
       final fee = isPAYG ? 0.0 : selectedFee.value;
+      String? paymentReference;
 
       // Pay-As-You-Go plans have no upfront fee — skip payment
       if (!isPAYG && fee > 0) {
@@ -127,6 +128,8 @@ class SubscriptionScreen extends HookConsumerWidget {
           );
           return;
         }
+
+        paymentReference = result.reference;
       }
 
       // Payment succeeded (or PAYG) — update the subscription in Firestore
@@ -135,6 +138,7 @@ class SubscriptionScreen extends HookConsumerWidget {
               newPlan: selectedPlan.value,
               fee: fee,
               paymentMethod: selectedPaymentMethod.value,
+              paymentReference: paymentReference,
             );
         if (!context.mounted) return;
         _showSuccessDialog(context, selectedPlan.value);
