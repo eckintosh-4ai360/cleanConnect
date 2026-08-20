@@ -1,5 +1,28 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { supabase } from '../supabase';
+
+const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
+
+// Accra. Only the opening camera position before bins are fitted into view.
+const FALLBACK_CENTER = { lat: 5.6037, lng: -0.187 };
+
+// Matches the "5.603700, -0.187000" shape bins.gps_location is stored as
+// (see GeoUtils.formatCoordinates on the Flutter side). Tolerates a trailing
+// "(Fallback)" suffix or similar surrounding text.
+const COORD_PATTERN = /(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/;
+
+function parseGpsLocation(raw) {
+  if (!raw) return null;
+  const match = COORD_PATTERN.exec(raw);
+  if (!match) return null;
+  const lat = parseFloat(match[1]);
+  const lng = parseFloat(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
 
 const initialBinForm = {
   customerId: '',
@@ -45,6 +68,7 @@ export default function Bins() {
   const [selectedBin, setSelectedBin] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [binForm, setBinForm] = useState(initialBinForm);
   const [editForm, setEditForm] = useState({
@@ -118,6 +142,14 @@ export default function Bins() {
   const pendingRequests = requests.filter((request) => request.status !== 'assigned');
   const activeBins = bins.filter((bin) => (bin.status || 'active') === 'active');
   const companyBins = bins.filter((bin) => (bin.ownership || 'company') === 'company');
+
+  const mappableBins = useMemo(
+    () =>
+      bins
+        .map((bin) => ({ bin, position: parseGpsLocation(bin.gps_location) }))
+        .filter((entry) => entry.position !== null),
+    [bins]
+  );
 
   const customerName = (customerId, fallback) => {
     const customer = customerMap.get(customerId);
@@ -356,7 +388,12 @@ export default function Bins() {
       </div>
 
       <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-        <h3 style={{ fontSize: '16px' }}>Registered Bin Registry</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <h3 style={{ fontSize: '16px' }}>Registered Bin Registry</h3>
+          <button className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }} onClick={() => setShowMapModal(true)}>
+            🗺️ View on Map ({mappableBins.length})
+          </button>
+        </div>
         <div className="table-container">
           <table className="custom-table">
             <thead>
@@ -557,6 +594,161 @@ export default function Bins() {
           </div>
         </div>
       )}
+
+      {showMapModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '920px', width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ fontSize: '18px' }}>Bin Locations</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Where registered bins are scattered — green for company-owned (CCB), blue for personal (PB).
+                </p>
+              </div>
+              <button className="btn-outline" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={() => setShowMapModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div style={{ position: 'relative', height: '520px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-divider)', marginTop: '16px' }}>
+              {!MAPS_API_KEY ? (
+                <MissingMapKeyNotice />
+              ) : (
+                <APIProvider apiKey={MAPS_API_KEY}>
+                  <Map
+                    mapId={MAP_ID}
+                    defaultCenter={mappableBins.length > 0 ? mappableBins[0].position : FALLBACK_CENTER}
+                    defaultZoom={12}
+                    gestureHandling="greedy"
+                    disableDefaultUI={false}
+                    mapTypeControl={false}
+                    streetViewControl={false}
+                    fullscreenControl={false}
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    <FitBinBounds entries={mappableBins} />
+                    {mappableBins.map(({ bin, position }) => (
+                      <AdvancedMarker
+                        key={bin.id}
+                        position={position}
+                        title={`${bin.serial_number || 'No serial'} — ${customerName(bin.customer_id)}`}
+                      >
+                        <BinMapPin bin={bin} onClick={() => { setSelectedBin(bin); }} />
+                      </AdvancedMarker>
+                    ))}
+                  </Map>
+                </APIProvider>
+              )}
+
+              {MAPS_API_KEY && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '12px',
+                    left: '12px',
+                    display: 'flex',
+                    gap: '14px',
+                    padding: '8px 14px',
+                    borderRadius: '10px',
+                    background: 'var(--bg-card-hover)',
+                    backdropFilter: 'var(--glass-blur)',
+                    border: '1px solid var(--border-divider)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--color-success)' }} />
+                    Company (CCB)
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--color-info)' }} />
+                    Personal (PB)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {bins.length - mappableBins.length > 0 && (
+              <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '10px' }}>
+                {bins.length - mappableBins.length} bin{bins.length - mappableBins.length === 1 ? '' : 's'} without a saved location not shown.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Frames every plotted bin once the map is ready, then leaves the camera
+ * alone so an admin panning around isn't yanked back on every data refresh.
+ */
+function FitBinBounds({ entries }) {
+  const map = useMap();
+  const hasFitted = useRef(false);
+
+  useEffect(() => {
+    if (!map || entries.length === 0 || hasFitted.current) return;
+    hasFitted.current = true;
+
+    if (entries.length === 1) {
+      map.setCenter(entries[0].position);
+      map.setZoom(14);
+      return;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    entries.forEach((entry) => bounds.extend(entry.position));
+    map.fitBounds(bounds, 64);
+  }, [map, entries]);
+
+  return null;
+}
+
+function BinMapPin({ bin, onClick }) {
+  const isPersonal = (bin.ownership || 'company') === 'personal';
+  const color = isPersonal ? 'var(--color-info)' : 'var(--color-success)';
+
+  return (
+    <div onClick={onClick} style={{ cursor: 'pointer' }}>
+      <div
+        style={{
+          width: '30px',
+          height: '30px',
+          borderRadius: '50%',
+          background: color,
+          border: '3px solid #fff',
+          boxShadow: '0 3px 10px rgba(0,0,0,0.28)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontSize: '12px',
+          fontWeight: 800,
+        }}
+      >
+        {isPersonal ? 'P' : 'C'}
+      </div>
+    </div>
+  );
+}
+
+function MissingMapKeyNotice() {
+  return (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', background: 'var(--bg-app)' }}>
+      <div style={{ maxWidth: '420px', textAlign: 'center' }}>
+        <h4 style={{ fontSize: '15px', marginBottom: '8px' }}>Google Maps key not configured</h4>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '12.5px', lineHeight: 1.6 }}>
+          Create <code>admin_panel/.env.local</code> with a browser key that has the{' '}
+          <strong>Maps JavaScript API</strong> enabled, then restart the dev server:
+        </p>
+        <pre style={{ background: 'var(--bg-app)', border: '1px solid var(--border-divider)', borderRadius: '8px', padding: '10px 14px', fontSize: '11.5px', margin: '10px 0', textAlign: 'left', overflowX: 'auto' }}>
+          VITE_GOOGLE_MAPS_API_KEY=AIza...
+        </pre>
+      </div>
     </div>
   );
 }
