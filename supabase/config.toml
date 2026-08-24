@@ -452,6 +452,12 @@ entrypoint = "./functions/notify-bin-assignment-sms/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/notify-bin-assignment-sms/*.html" ]
 
+[functions.notify-pickup-status-sms]
+enabled = true
+verify_jwt = false
+import_map = "./functions/notify-pickup-status-sms/deno.json"
+entrypoint = "./functions/notify-pickup-status-sms/index.ts"
+
 [functions.admin-create-user]
 enabled = true
 verify_jwt = true
