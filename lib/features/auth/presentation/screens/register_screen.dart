@@ -289,7 +289,7 @@ class RegisterScreen extends HookConsumerWidget {
                         ),
                         EcoTextField(
                           labelText: 'Phone Number',
-                          hintText: '+1 (555) 000-0000',
+                          hintText: '024 881 4260',
                           controller: phoneController,
                           keyboardType: TextInputType.phone,
                           prefixIcon: const Icon(
@@ -299,6 +299,16 @@ class RegisterScreen extends HookConsumerWidget {
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your phone number';
+                            }
+                            // Matches the normalization notify-bin-assignment-sms
+                            // applies before dispatch: 0XXXXXXXXX or 233XXXXXXXXX
+                            // (optionally with a leading '+'). Anything else is a
+                            // number the SMS provider can't actually deliver to.
+                            final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+                            final isValid = RegExp(r'^0\d{9}$').hasMatch(digits) ||
+                                RegExp(r'^233\d{9}$').hasMatch(digits);
+                            if (!isValid) {
+                              return 'Enter a valid Ghana phone number';
                             }
                             return null;
                           },
