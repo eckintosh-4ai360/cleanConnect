@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/rider_nav_bar.dart';
 import '../../domain/entities/pickup_request_entity.dart';
+import '../../domain/entities/bin_verification_result.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 
 class RiderCollectionScreen extends ConsumerStatefulWidget {
@@ -29,10 +31,79 @@ class _RiderCollectionScreenState
   /// nothing to complete against.
   PickupRequestEntity? _activePickup;
 
+  final MobileScannerController _scannerController = MobileScannerController(
+    formats: const [BarcodeFormat.qrCode],
+  );
+
+  /// True while a scanned code is being checked against verify_pickup_bin.
+  /// Guards onDetect against firing again for every frame the code stays in
+  /// view while a request is already in flight.
+  bool _verifying = false;
+
+  /// The last code that failed verification, so a still-in-frame QR doesn't
+  /// spam the RPC and stack up error SnackBars every frame.
+  String? _lastFailedCode;
+
+  /// Bin details from a successful verify_pickup_bin call, shown on the
+  /// confirmation card instead of the pickup's general bin_types.
+  BinVerificationResult? _verification;
+
   @override
   void initState() {
     super.initState();
     _activePickup = widget.pickup;
+  }
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleDetect(BarcodeCapture capture) async {
+    if (_verifying || capture.barcodes.isEmpty) return;
+    final code = capture.barcodes.first.rawValue;
+    if (code == null || code.isEmpty || code == _lastFailedCode) return;
+
+    final pickup = _activePickup;
+    if (pickup == null) return;
+
+    setState(() => _verifying = true);
+    try {
+      final result = await ref
+          .read(availablePickupsProvider.notifier)
+          .verifyBin(requestId: pickup.id, serialNumber: code);
+      if (!mounted) return;
+      if (result.verified) {
+        setState(() {
+          _scanned = true;
+          _scannedCode = code;
+          _verification = result;
+          _verifying = false;
+          _lastFailedCode = null;
+        });
+      } else {
+        setState(() {
+          _verifying = false;
+          _lastFailedCode = code;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _lastFailedCode = code;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not verify bin: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -82,62 +153,79 @@ class _RiderCollectionScreenState
       child: Column(
         children: [
           if (!_scanned) ...[
-            // QR Scanner Placeholder
-            Container(
-              height: 280,
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Corner guides
-                  ..._buildCornerGuides(),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: theme.colorScheme.primary, width: 2),
-                          borderRadius: BorderRadius.circular(12),
+            // Real camera QR scanner -- matched server-side against the
+            // scanned pickup's customer in verify_pickup_bin.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: SizedBox(
+                height: 280,
+                child: Stack(
+                  alignment: Alignment.center,
+                  fit: StackFit.expand,
+                  children: [
+                    MobileScanner(
+                      controller: _scannerController,
+                      onDetect: _handleDetect,
+                      errorBuilder: (context, error) => Container(
+                        color: Colors.black87,
+                        padding: const EdgeInsets.all(24),
+                        child: Center(
+                          child: Text(
+                            error.errorCode == MobileScannerErrorCode.permissionDenied
+                                ? 'Camera permission is required to scan a bin. '
+                                    'Enable it in your device settings and try again.'
+                                : error.errorCode.message,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70),
+                          ),
                         ),
-                        child: const Icon(Icons.qr_code,
-                            size: 80, color: Colors.white38),
                       ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Point camera at bin QR code',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                    IgnorePointer(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          ..._buildCornerGuides(),
+                          Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color: theme.colorScheme.primary, width: 2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          Positioned(child: _ScanLine()),
+                          Positioned(
+                            bottom: 16,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                _verifying
+                                    ? 'Checking bin…'
+                                    : "Point camera at the customer's bin QR code",
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  // Simulated scan line
-                  Positioned(
-                    child: _ScanLine(),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text('Or tap below to simulate a scan',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _scanned = true;
-                  _scannedCode = 'BIN-GEN-0042';
-                });
-              },
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Scan QR Code'),
-              style: ElevatedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                    ),
+                    if (_verifying)
+                      Container(
+                        color: Colors.black45,
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ] else ...[
@@ -145,10 +233,12 @@ class _RiderCollectionScreenState
             _ScanResultCard(
               code: _scannedCode!,
               pickup: _activePickup!,
+              verification: _verification,
               onConfirm: (weight, notes) async {
                 final pickup = _activePickup;
-                if (pickup == null) {
-                  throw StateError('No pickup selected to complete.');
+                final code = _scannedCode;
+                if (pickup == null || code == null) {
+                  throw StateError('No verified bin scan to complete.');
                 }
                 // Persist the collection and clear the customer's "next
                 // pickup" banner -- this is the only call in the app that
@@ -156,13 +246,16 @@ class _RiderCollectionScreenState
                 // skipping it (as the old code silently did when opened
                 // without a specific pickup) left the customer's "on the
                 // way" banner stuck forever even though the rider saw a
-                // success message here.
+                // success message here. complete_pickup re-checks the QR
+                // code server-side too, so this can't be bypassed by a
+                // modified client skipping the scan.
                 await ref
                     .read(availablePickupsProvider.notifier)
                     .complete(
                       requestId: pickup.id,
                       customerId: pickup.customerId,
                       weightKg: weight,
+                      qrCodeData: code,
                       notes: notes,
                     );
                 if (!context.mounted) return;
@@ -176,6 +269,8 @@ class _RiderCollectionScreenState
                 setState(() {
                   _scanned = false;
                   _scannedCode = null;
+                  _verification = null;
+                  _lastFailedCode = null;
                   _scanMode = false;
                   // Back to null (unless this screen was opened for one
                   // specific job) so the next scan asks again instead of
@@ -186,6 +281,8 @@ class _RiderCollectionScreenState
               onRetry: () => setState(() {
                 _scanned = false;
                 _scannedCode = null;
+                _verification = null;
+                _lastFailedCode = null;
               }),
             ),
           ],
@@ -467,11 +564,13 @@ class _CornerPainter extends CustomPainter {
 class _ScanResultCard extends StatefulWidget {
   final String code;
   final PickupRequestEntity pickup;
+  final BinVerificationResult? verification;
   final Future<void> Function(double weight, String? notes) onConfirm;
   final VoidCallback onRetry;
   const _ScanResultCard({
     required this.code,
     required this.pickup,
+    this.verification,
     required this.onConfirm,
     required this.onRetry,
   });
@@ -521,13 +620,16 @@ class _ScanResultCardState extends State<_ScanResultCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _InfoRow(label: 'Bin ID', value: widget.code),
+              _InfoRow(label: 'Bin Serial', value: widget.code),
               _InfoRow(
                 label: 'Type',
-                value: widget.pickup.binTypes.isEmpty
-                    ? 'General Waste'
-                    : widget.pickup.binTypes.join(', '),
+                value: widget.verification?.binType ??
+                    (widget.pickup.binTypes.isEmpty
+                        ? 'General Waste'
+                        : widget.pickup.binTypes.join(', ')),
               ),
+              if (widget.verification?.binSize != null)
+                _InfoRow(label: 'Size', value: widget.verification!.binSize!),
               _InfoRow(label: 'Customer', value: widget.pickup.customerName),
               _InfoRow(label: 'Address', value: widget.pickup.location),
               const Divider(height: 24),

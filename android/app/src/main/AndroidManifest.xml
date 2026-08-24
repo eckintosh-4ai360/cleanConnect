@@ -17,6 +17,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
 
+    <!-- Real QR-code scanning of a customer's bin at pickup completion,
+         via mobile_scanner (rider_collection_screen.dart). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+
     <application
         android:label="clean_connect"
         android:name="${applicationName}"

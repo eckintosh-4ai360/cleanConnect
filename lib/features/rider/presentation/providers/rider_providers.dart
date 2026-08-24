@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../domain/entities/incident_report_entity.dart';
+import '../../domain/entities/bin_verification_result.dart';
 import '../../domain/repositories/rider_repository.dart';
 import '../../data/repositories/rider_repository_impl.dart';
 
@@ -144,13 +145,27 @@ class AvailablePickups extends _$AvailablePickups {
     required String requestId,
     required String customerId,
     required double weightKg,
+    required String qrCodeData,
     String? notes,
   }) async {
     await ref.read(riderRepositoryProvider).completePickup(
           requestId: requestId,
           customerId: customerId,
           weightKg: weightKg,
+          qrCodeData: qrCodeData,
           notes: notes,
+        );
+  }
+
+  /// Checks a scanned bin QR against [requestId] before the rider commits
+  /// to entering a weight -- see [RiderRepository.verifyPickupBin].
+  Future<BinVerificationResult> verifyBin({
+    required String requestId,
+    required String serialNumber,
+  }) {
+    return ref.read(riderRepositoryProvider).verifyPickupBin(
+          requestId: requestId,
+          serialNumber: serialNumber,
         );
   }
 }

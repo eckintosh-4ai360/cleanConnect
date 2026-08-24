@@ -79,6 +79,8 @@
 	     map tiles simply fail to load. -->
 	<key>GMSApiKey</key>
 	<string>AIzaSyBn_SljQOBGum8OrbXy7aepKidA8LdRw2E</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CleanConnect uses your camera to scan a customer's bin QR code so a pickup can only be marked complete once you're actually at their bin.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>CleanConnect uses your location to show you on the map, guide you to pickups, and let customers track their collection in real time.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

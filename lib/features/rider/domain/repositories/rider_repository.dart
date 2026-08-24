@@ -1,6 +1,7 @@
 import '../entities/rider_entities.dart';
 import '../entities/pickup_request_entity.dart';
 import '../entities/incident_report_entity.dart';
+import '../entities/bin_verification_result.dart';
 
 abstract class RiderRepository {
   Stream<RiderEntity?> watchRiderProfile();
@@ -64,14 +65,27 @@ abstract class RiderRepository {
     required String customerId,
   });
 
+  /// Checks a scanned bin QR (its serial number) against one specific
+  /// pickup, confirming the bin belongs to that pickup's customer. Purely a
+  /// fast pre-check for the UI -- [completePickup] independently re-verifies
+  /// the same match server-side, since a client can't be trusted to have
+  /// actually called this first.
+  Future<BinVerificationResult> verifyPickupBin({
+    required String requestId,
+    required String serialNumber,
+  });
+
   /// Mark an accepted pickup request as completed: records the collected
   /// weight, logs it to this rider's collection history, and — if this was
   /// the customer's currently-displayed "next pickup" — clears it so the
-  /// dashboard banner reflects reality again.
+  /// dashboard banner reflects reality again. [qrCodeData] must be the
+  /// serial number of a bin belonging to this pickup's customer or the
+  /// backend rejects the completion.
   Future<void> completePickup({
     required String requestId,
     required String customerId,
     required double weightKg,
+    required String qrCodeData,
     String? notes,
   });
 

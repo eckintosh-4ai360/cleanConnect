@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../domain/entities/incident_report_entity.dart';
+import '../../domain/entities/bin_verification_result.dart';
 import '../../domain/repositories/rider_repository.dart';
 
 /// Supabase (Postgres)-backed implementation of [RiderRepository].
@@ -440,15 +441,36 @@ class RiderRepositoryImpl implements RiderRepository {
   }
 
   @override
+  Future<BinVerificationResult> verifyPickupBin({
+    required String requestId,
+    required String serialNumber,
+  }) async {
+    final result = await _db.rpc('verify_pickup_bin', params: {
+      'p_request_id': requestId,
+      'p_serial_number': serialNumber,
+    });
+    final map = result as Map<String, dynamic>;
+    return BinVerificationResult(
+      verified: map['verified'] as bool? ?? false,
+      reason: map['reason'] as String?,
+      binId: map['bin_id'] as String?,
+      binType: map['bin_type'] as String?,
+      binSize: map['bin_size'] as String?,
+    );
+  }
+
+  @override
   Future<void> completePickup({
     required String requestId,
     required String customerId,
     required double weightKg,
+    required String qrCodeData,
     String? notes,
   }) async {
     await _db.rpc('complete_pickup', params: {
       'p_request_id': requestId,
       'p_weight_kg': weightKg,
+      'p_qr_code_data': qrCodeData,
       'p_notes': notes,
     });
   }
