@@ -212,6 +212,16 @@ class NotificationService {
     } catch (_) {}
   }
 
+  /// Dismisses the incoming-request tray notification. Posted with
+  /// `ongoing: true, autoCancel: false` so a stray tap can't lose the
+  /// request before the rider decides — must be cancelled explicitly once
+  /// accept/decline resolves it, or it lingers in the shade.
+  Future<void> cancelIncomingPickupNotification(String requestId) async {
+    try {
+      await _localNotificationsPlugin.cancel(id: requestId.hashCode);
+    } catch (_) {}
+  }
+
   Future<void> _refreshAndSyncToken() async {
     final token = await FirebaseMessaging.instance.getToken();
     if (token != null) await _syncToken(token);

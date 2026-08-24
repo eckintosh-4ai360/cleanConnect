@@ -61,6 +61,7 @@ class _IncomingPickupRequestScreenState
           .accept(pickup.id, pickup.customerId);
       _resolved = true;
       NotificationService.instance.stopVibration();
+      NotificationService.instance.cancelIncomingPickupNotification(pickup.id);
       if (mounted) {
         context.go('/rider/navigation', extra: pickup);
       }
@@ -84,6 +85,7 @@ class _IncomingPickupRequestScreenState
     setState(() => _processing = true);
     _countdownTimer?.cancel();
     NotificationService.instance.stopVibration();
+    NotificationService.instance.cancelIncomingPickupNotification(widget.requestId);
     try {
       if (pickup != null) {
         await ref
