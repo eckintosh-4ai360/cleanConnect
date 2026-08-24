@@ -343,9 +343,11 @@ class SubscriptionScreen extends HookConsumerWidget {
           children: [
             const Icon(Icons.check_circle, color: Colors.green, size: 28),
             const SizedBox(width: 8),
-            Text(
-              isPAYG ? 'Plan Activated!' : 'Payment Successful!',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+            Expanded(
+              child: Text(
+                isPAYG ? 'Plan Activated!' : 'Payment Successful!',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
