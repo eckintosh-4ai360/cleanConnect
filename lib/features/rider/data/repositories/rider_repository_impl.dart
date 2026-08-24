@@ -393,6 +393,23 @@ class RiderRepositoryImpl implements RiderRepository {
   }
 
   @override
+  Stream<List<PickupRequestEntity>> watchMyAcceptedPickups() {
+    // .stream() only supports one .eq(), so (like watchActivePickupTracking
+    // on the customer side) the status check happens client-side.
+    return _db
+        .from('pickup_requests')
+        .stream(primaryKey: ['id'])
+        .eq('assigned_rider_id', _uid)
+        .order('accepted_at', ascending: false)
+        .map(
+          (rows) => rows
+              .where((r) => r['status'] == 'accepted')
+              .map(_pickupFromRow)
+              .toList(),
+        );
+  }
+
+  @override
   Future<void> acceptPickup({
     required String requestId,
     required String customerId,

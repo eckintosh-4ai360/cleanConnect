@@ -155,6 +155,17 @@ class AvailablePickups extends _$AvailablePickups {
   }
 }
 
+/// This rider's own accepted-but-not-yet-completed pickups — lets the
+/// Collection screen ask "which job is this scan for?" when it was opened
+/// without a specific request already in hand.
+@riverpod
+class RiderAcceptedPickups extends _$RiderAcceptedPickups {
+  @override
+  Stream<List<PickupRequestEntity>> build() {
+    return ref.watch(riderRepositoryProvider).watchMyAcceptedPickups();
+  }
+}
+
 @riverpod
 Stream<PickupRequestEntity?> pickupById(Ref ref, String requestId) {
   return ref.watch(riderRepositoryProvider).watchPickupById(requestId);

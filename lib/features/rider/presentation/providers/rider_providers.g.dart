@@ -360,6 +360,78 @@ abstract class _$AvailablePickups
   }
 }
 
+/// This rider's own accepted-but-not-yet-completed pickups — lets the
+/// Collection screen ask "which job is this scan for?" when it was opened
+/// without a specific request already in hand.
+
+@ProviderFor(RiderAcceptedPickups)
+final riderAcceptedPickupsProvider = RiderAcceptedPickupsProvider._();
+
+/// This rider's own accepted-but-not-yet-completed pickups — lets the
+/// Collection screen ask "which job is this scan for?" when it was opened
+/// without a specific request already in hand.
+final class RiderAcceptedPickupsProvider
+    extends
+        $StreamNotifierProvider<
+          RiderAcceptedPickups,
+          List<PickupRequestEntity>
+        > {
+  /// This rider's own accepted-but-not-yet-completed pickups — lets the
+  /// Collection screen ask "which job is this scan for?" when it was opened
+  /// without a specific request already in hand.
+  RiderAcceptedPickupsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'riderAcceptedPickupsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$riderAcceptedPickupsHash();
+
+  @$internal
+  @override
+  RiderAcceptedPickups create() => RiderAcceptedPickups();
+}
+
+String _$riderAcceptedPickupsHash() =>
+    r'4af9e77395e0a624bc5c1ed43ceb131f89d915da';
+
+/// This rider's own accepted-but-not-yet-completed pickups — lets the
+/// Collection screen ask "which job is this scan for?" when it was opened
+/// without a specific request already in hand.
+
+abstract class _$RiderAcceptedPickups
+    extends $StreamNotifier<List<PickupRequestEntity>> {
+  Stream<List<PickupRequestEntity>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<List<PickupRequestEntity>>,
+              List<PickupRequestEntity>
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<List<PickupRequestEntity>>,
+                List<PickupRequestEntity>
+              >,
+              AsyncValue<List<PickupRequestEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(pickupById)
 final pickupByIdProvider = PickupByIdFamily._();
 

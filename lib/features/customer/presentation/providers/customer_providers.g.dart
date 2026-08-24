@@ -81,7 +81,7 @@ final class CustomerBinsProvider
   CustomerBins create() => CustomerBins();
 }
 
-String _$customerBinsHash() => r'2951eafc887443115a4f6908fe11fde9804026cf';
+String _$customerBinsHash() => r'b92d0983d999fb7b7b8f61883302087722019f6c';
 
 abstract class _$CustomerBins extends $StreamNotifier<List<BinEntity>> {
   Stream<List<BinEntity>> build();
@@ -130,7 +130,7 @@ final class CustomerPickupRequestsProvider
 }
 
 String _$customerPickupRequestsHash() =>
-    r'de24ae9070912e00681064904670b9b9f9cae9f7';
+    r'b80c305e3119c08d743b0a74375a25c14e5adaea';
 
 abstract class _$CustomerPickupRequests
     extends $StreamNotifier<List<PickupRequestEntity>> {
@@ -411,7 +411,7 @@ final class CustomerSubscriptionProvider
 }
 
 String _$customerSubscriptionHash() =>
-    r'f6a8650f0c053673027c898e39af4c95d03baeb9';
+    r'234717dafaeb8b6f2ff1f945308f58addb0154f1';
 
 abstract class _$CustomerSubscription
     extends $StreamNotifier<SubscriptionEntity> {

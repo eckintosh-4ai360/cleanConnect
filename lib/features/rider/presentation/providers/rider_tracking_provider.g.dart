@@ -59,7 +59,7 @@ final class RiderTrackingProvider
   }
 }
 
-String _$riderTrackingHash() => r'8ff45bb2a25f1497034cfe75737d43a3bf218aac';
+String _$riderTrackingHash() => r'017fb508421f47632c7444828414b5145b4d79f5';
 
 /// Owns the rider's GPS stream and mirrors each fix to Supabase.
 ///

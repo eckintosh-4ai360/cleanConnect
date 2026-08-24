@@ -22,6 +22,19 @@ class _RiderCollectionScreenState
   bool _scanned = false;
   String? _scannedCode;
 
+  /// The pickup this scan will complete. Seeded from [widget.pickup] when
+  /// opened from the navigation flow; left null when opened generically
+  /// (dashboard "Scan Collection" quick action, bottom-nav Collections tab)
+  /// so the rider is asked to pick one instead of the scan silently having
+  /// nothing to complete against.
+  PickupRequestEntity? _activePickup;
+
+  @override
+  void initState() {
+    super.initState();
+    _activePickup = widget.pickup;
+  }
+
   @override
   Widget build(BuildContext context) {
     final historyAsync = ref.watch(riderCollectionHistoryProvider);
@@ -61,6 +74,9 @@ class _RiderCollectionScreenState
 
   Widget _buildScanView(BuildContext context) {
     final theme = Theme.of(context);
+    if (_activePickup == null) {
+      return _buildPickupPicker(context);
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -128,20 +144,27 @@ class _RiderCollectionScreenState
             // Scan Result
             _ScanResultCard(
               code: _scannedCode!,
+              pickup: _activePickup!,
               onConfirm: (weight, notes) async {
-                final pickup = widget.pickup;
-                if (pickup != null) {
-                  // Real job: persist the collection and clear the
-                  // customer's "next pickup" banner if this was it.
-                  await ref
-                      .read(availablePickupsProvider.notifier)
-                      .complete(
-                        requestId: pickup.id,
-                        customerId: pickup.customerId,
-                        weightKg: weight,
-                        notes: notes,
-                      );
+                final pickup = _activePickup;
+                if (pickup == null) {
+                  throw StateError('No pickup selected to complete.');
                 }
+                // Persist the collection and clear the customer's "next
+                // pickup" banner -- this is the only call in the app that
+                // actually marks a pickup_requests row completed, so
+                // skipping it (as the old code silently did when opened
+                // without a specific pickup) left the customer's "on the
+                // way" banner stuck forever even though the rider saw a
+                // success message here.
+                await ref
+                    .read(availablePickupsProvider.notifier)
+                    .complete(
+                      requestId: pickup.id,
+                      customerId: pickup.customerId,
+                      weightKg: weight,
+                      notes: notes,
+                    );
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -154,6 +177,10 @@ class _RiderCollectionScreenState
                   _scanned = false;
                   _scannedCode = null;
                   _scanMode = false;
+                  // Back to null (unless this screen was opened for one
+                  // specific job) so the next scan asks again instead of
+                  // re-completing the same now-finished pickup.
+                  _activePickup = widget.pickup;
                 });
               },
               onRetry: () => setState(() {
@@ -163,6 +190,82 @@ class _RiderCollectionScreenState
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Shown instead of the scanner when this screen was opened without a
+  /// specific job (dashboard quick action / bottom nav) -- lets the rider
+  /// choose which of their accepted pickups the scan is for, rather than
+  /// the scan having nothing to actually complete.
+  Widget _buildPickupPicker(BuildContext context) {
+    final acceptedAsync = ref.watch(riderAcceptedPickupsProvider);
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: acceptedAsync.when(
+        data: (pickups) {
+          if (pickups.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 60),
+              child: Column(
+                children: [
+                  Icon(Icons.inbox_outlined,
+                      size: 48, color: Colors.grey.shade400),
+                  const SizedBox(height: 12),
+                  Text(
+                    'You have no accepted pickups to collect right now.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Which pickup are you collecting?',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Select the job this scan is for.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              ...pickups.map(
+                (p) => Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.local_shipping_outlined),
+                    ),
+                    title: Text(
+                      p.customerName,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      '${p.binTypes.join(', ')} • ${p.location}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => setState(() => _activePickup = p),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () => const Padding(
+          padding: EdgeInsets.only(top: 60),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+        error: (_, _) => const Padding(
+          padding: EdgeInsets.only(top: 60),
+          child: Center(child: Text('Failed to load your accepted pickups.')),
+        ),
       ),
     );
   }
@@ -363,10 +466,15 @@ class _CornerPainter extends CustomPainter {
 
 class _ScanResultCard extends StatefulWidget {
   final String code;
+  final PickupRequestEntity pickup;
   final Future<void> Function(double weight, String? notes) onConfirm;
   final VoidCallback onRetry;
-  const _ScanResultCard(
-      {required this.code, required this.onConfirm, required this.onRetry});
+  const _ScanResultCard({
+    required this.code,
+    required this.pickup,
+    required this.onConfirm,
+    required this.onRetry,
+  });
 
   @override
   State<_ScanResultCard> createState() => _ScanResultCardState();
@@ -414,9 +522,14 @@ class _ScanResultCardState extends State<_ScanResultCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _InfoRow(label: 'Bin ID', value: widget.code),
-              _InfoRow(label: 'Type', value: 'General Waste'),
-              _InfoRow(label: 'Customer', value: 'Fatima Al-Hassan'),
-              _InfoRow(label: 'Address', value: '67 Mango Boulevard'),
+              _InfoRow(
+                label: 'Type',
+                value: widget.pickup.binTypes.isEmpty
+                    ? 'General Waste'
+                    : widget.pickup.binTypes.join(', '),
+              ),
+              _InfoRow(label: 'Customer', value: widget.pickup.customerName),
+              _InfoRow(label: 'Address', value: widget.pickup.location),
               const Divider(height: 24),
               const Text('Actual Weight (kg)',
                   style: TextStyle(

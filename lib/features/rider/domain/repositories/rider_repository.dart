@@ -38,6 +38,12 @@ abstract class RiderRepository {
   /// Streams all pickup requests with status 'pending' (not yet accepted).
   Stream<List<PickupRequestEntity>> watchAvailablePickups();
 
+  /// Streams this rider's own accepted-but-not-yet-completed pickups. Used
+  /// to let the rider pick which job a scan is for when the Collection
+  /// screen is opened generically (bottom nav / dashboard quick action)
+  /// rather than handed a specific request from the navigation flow.
+  Stream<List<PickupRequestEntity>> watchMyAcceptedPickups();
+
   /// Streams a single pickup request by id (used by the incoming-request
   /// notification screen, which only receives a requestId from the push).
   Stream<PickupRequestEntity?> watchPickupById(String requestId);
