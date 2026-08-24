@@ -17,6 +17,11 @@
 
 import { createClient } from "@supabase/supabase-js";
 
+// Sentinel redirect target the Flutter WebView watches for to detect that
+// checkout finished. Must stay in sync with kPaystackCallbackUrl in
+// lib/core/services/paystack_service.dart.
+const PAYMENT_CALLBACK_URL = "https://cleanconnect.app/payment-complete";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -111,6 +116,11 @@ Deno.serve(async (req: Request) => {
           currency,
           metadata: { ...metadata, user_uid: user.id },
           ...(subaccountCode ? { subaccount: subaccountCode } : {}),
+          // The app renders checkout in a WebView and watches for a redirect to
+          // this URL to know the charge finished. Nothing is ever served from
+          // it — the client intercepts the navigation and verifies the
+          // reference server-side instead of trusting the redirect.
+          callback_url: PAYMENT_CALLBACK_URL,
         }),
         signal: AbortSignal.timeout(15000),
       },

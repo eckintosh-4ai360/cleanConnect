@@ -1,9 +1,13 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:paystack_flutter_sdk/paystack_flutter_sdk.dart';
 
-const String _kPaystackPublicKey =
-    'pk_live_87977e3c5dfa23a80d45cb51424c9df83c9a8e03';
+import 'paystack_checkout_screen.dart';
+
+/// Sentinel URL Paystack redirects to once checkout finishes. Nothing is served
+/// from it — the WebView intercepts the navigation. Must stay in sync with
+/// PAYMENT_CALLBACK_URL in
+/// supabase/functions/initialize-paystack-transaction/index.ts.
+const String kPaystackCallbackUrl = 'https://cleanconnect.app/payment-complete';
 
 /// The result returned after a Paystack payment attempt.
 enum PaymentStatus { success, cancelled, failed }
@@ -22,182 +26,148 @@ class PaymentResult {
   bool get isSuccess => status == PaymentStatus.success;
 }
 
-/// Service that wraps the Paystack Flutter SDK and handles the full
-/// payment initialization → launch → result flow.
+/// Drives the full Paystack payment flow:
+///
+///   1. `initialize-paystack-transaction` creates the transaction server-side
+///      (using the live secret key and the cleanConnect subaccount) and returns
+///      an `authorization_url` + `reference`.
+///   2. [PaystackCheckoutScreen] renders that hosted checkout page.
+///   3. `verify-paystack-transaction` confirms the charge against Paystack's
+///      own record before it is ever treated as paid.
+///
+/// Checkout is rendered as Paystack's hosted page rather than through the
+/// native `paystack_flutter_sdk`, which is an abandoned alpha (two releases,
+/// last pinned to Compose BOM 2023.01.00) that crashes on modern Compose and
+/// has no web implementation.
 class PaystackService {
   PaystackService._();
   static final PaystackService instance = PaystackService._();
 
-  final Paystack _paystack = Paystack();
-  bool _initialized = false;
-
-  /// Call once at app startup (e.g. in main.dart after Firebase.initializeApp).
-  Future<void> initialize() async {
-    if (_initialized) return;
-    try {
-      final result = await _paystack.initialize(
-        _kPaystackPublicKey,
-        kDebugMode,
-      );
-      if (result) {
-        _initialized = true;
-        debugPrint('[PaystackService] SDK initialized successfully.');
-      } else {
-        debugPrint('[PaystackService] SDK initialization returned false.');
-      }
-    } catch (e) {
-      final errorStr = e.toString();
-      if (errorStr.contains('MissingPluginException') ||
-          errorStr.contains('No implementation found')) {
-        debugPrint(
-          '[PaystackService] Native plugin channel unavailable on this platform/session. Test mode will be used if needed.',
-        );
-      } else {
-        debugPrint('[PaystackService] Initialization notice: $e');
-      }
-    }
-  }
-
+  /// Starts a payment and returns only once it has been verified server-side.
+  ///
+  /// [email]             Customer's email address (required by Paystack).
+  /// [amountInSmallest]  Amount in the smallest currency unit (pesewas for GHS,
+  ///                     kobo for NGN). e.g. GHS 50.00 → 5000.
+  /// [currency]          ISO 4217 currency code. Defaults to 'GHS'.
+  /// [metadata]          Optional key-value pairs stored on the transaction.
   Future<PaymentResult> initiatePayment({
+    required BuildContext context,
     required String email,
     required int amountInSmallest,
     String currency = 'GHS',
     Map<String, dynamic>? metadata,
   }) async {
-    if (!_initialized) {
-      await initialize();
-    }
+    final String authorizationUrl;
+    final String reference;
 
+    // ── 1. Create the transaction server-side ───────────────────────────────
     try {
-      // ── 1. Attempt Edge Function access_code generation ────────────────
-      try {
-        final response = await Supabase.instance.client.functions.invoke(
-          'initialize-paystack-transaction',
-          body: {
-            'email': email,
-            'amount': amountInSmallest,
-            'currency': currency,
-            'metadata': metadata ?? {},
-          },
-        );
+      final response = await Supabase.instance.client.functions.invoke(
+        'initialize-paystack-transaction',
+        body: {
+          'email': email,
+          'amount': amountInSmallest,
+          'currency': currency,
+          'metadata': metadata ?? {},
+        },
+      );
 
-        final data = response.data as Map<String, dynamic>;
-        final accessCode = data['access_code'] as String?;
-        final reference = data['reference'] as String?;
+      final data = response.data as Map<String, dynamic>?;
+      final url = data?['authorization_url'] as String?;
+      final ref = data?['reference'] as String?;
 
-        if (accessCode != null && accessCode.isNotEmpty && reference != null) {
-          // Launch Paystack SDK UI
-          try {
-            await _paystack.launch(accessCode);
-          } catch (launchErr) {
-            final msg = launchErr.toString();
-            if (msg.contains('MissingPluginException') ||
-                msg.contains('No implementation found')) {
-              if (kDebugMode) {
-                // Plugin missing on current platform/session — fallback to test success
-                debugPrint(
-                  '[PaystackService] Native SDK UI unavailable. Completing in test mode.',
-                );
-                return PaymentResult(
-                  status: PaymentStatus.success,
-                  reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
-                );
-              }
-              return const PaymentResult(
-                status: PaymentStatus.failed,
-                errorMessage:
-                    'Payment could not be started on this device. Please try again.',
-              );
-            }
-            if (msg.toLowerCase().contains('cancel') ||
-                msg.toLowerCase().contains('dismiss') ||
-                msg.toLowerCase().contains('close')) {
-              return const PaymentResult(
-                status: PaymentStatus.cancelled,
-                errorMessage: 'Payment was cancelled.',
-              );
-            }
-            rethrow;
-          }
-          return _verifyTransaction(
-            reference: reference,
-            expectedAmount: amountInSmallest,
-            expectedCurrency: currency,
-          );
-        }
-      } on FunctionException catch (e) {
-        final errorBody = e.details;
-        final errorMessage = errorBody is Map
-            ? errorBody['error']?.toString()
-            : null;
-        debugPrint(
-          '[PaystackService] Edge Function notice: ${e.status} — $errorMessage',
-        );
-        // If in debug/test environment and function is not yet deployed or secret not set, fallback to test payment
-        if (kDebugMode) {
-          debugPrint(
-            '[PaystackService] Debug mode: Simulated Paystack payment approval.',
-          );
-          return PaymentResult(
-            status: PaymentStatus.success,
-            reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
-          );
-        }
-        return PaymentResult(
-          status: PaymentStatus.failed,
-          errorMessage:
-              errorMessage ?? 'Payment server error. Please try again.',
-        );
-      }
-    } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('MissingPluginException') ||
-          msg.contains('No implementation found')) {
-        if (kDebugMode) {
-          debugPrint(
-            '[PaystackService] Native plugin unavailable. Completing in test mode.',
-          );
-          return PaymentResult(
-            status: PaymentStatus.success,
-            reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
-          );
-        }
-      }
-      if (msg.toLowerCase().contains('cancel') ||
-          msg.toLowerCase().contains('dismiss') ||
-          msg.toLowerCase().contains('close')) {
+      if (url == null || url.isEmpty || ref == null || ref.isEmpty) {
+        debugPrint('[PaystackService] Initialize returned no checkout URL.');
         return const PaymentResult(
-          status: PaymentStatus.cancelled,
-          errorMessage: 'Payment was cancelled.',
+          status: PaymentStatus.failed,
+          errorMessage: 'Could not start payment. Please try again.',
         );
       }
-      debugPrint('[PaystackService] Payment error: $e');
-      if (kDebugMode) {
-        return PaymentResult(
-          status: PaymentStatus.success,
-          reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
-        );
-      }
+      authorizationUrl = url;
+      reference = ref;
+    } on FunctionException catch (e) {
+      final details = e.details;
+      final message = details is Map ? details['error']?.toString() : null;
+      debugPrint('[PaystackService] Initialize failed: ${e.status} — $message');
+      return PaymentResult(
+        status: PaymentStatus.failed,
+        errorMessage: message ?? 'Payment server error. Please try again.',
+      );
+    } catch (e) {
+      debugPrint('[PaystackService] Initialize error: $e');
       return const PaymentResult(
         status: PaymentStatus.failed,
-        errorMessage: 'Payment failed. Please try again.',
+        errorMessage: 'Could not reach the payment service. Please try again.',
       );
     }
 
-    return const PaymentResult(
-      status: PaymentStatus.failed,
-      errorMessage: 'Payment could not be started. Please try again.',
+    // ── 2. Show Paystack's hosted checkout ──────────────────────────────────
+    if (!context.mounted) {
+      return const PaymentResult(
+        status: PaymentStatus.cancelled,
+        errorMessage: 'Payment was cancelled.',
+      );
+    }
+
+    final outcome = await Navigator.of(context).push<CheckoutOutcome>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PaystackCheckoutScreen(
+          authorizationUrl: authorizationUrl,
+          callbackUrl: kPaystackCallbackUrl,
+        ),
+      ),
+    );
+
+    if (outcome == CheckoutOutcome.loadFailed) {
+      return PaymentResult(
+        status: PaymentStatus.failed,
+        reference: reference,
+        errorMessage: 'The payment page could not be loaded. Please try again.',
+      );
+    }
+
+    // A dismissed sheet may still have been charged (the customer could close
+    // it during the redirect), so verify instead of assuming a cancellation.
+    if (outcome != CheckoutOutcome.completed) {
+      final verified = await _verifyTransaction(
+        reference: reference,
+        expectedAmount: amountInSmallest,
+        expectedCurrency: currency,
+        quiet: true,
+      );
+      if (verified.isSuccess) return verified;
+      return const PaymentResult(
+        status: PaymentStatus.cancelled,
+        errorMessage: 'Payment was cancelled.',
+      );
+    }
+
+    // ── 3. Confirm the charge with Paystack before trusting it ──────────────
+    return _verifyTransaction(
+      reference: reference,
+      expectedAmount: amountInSmallest,
+      expectedCurrency: currency,
     );
   }
 
-  /// Confirms a transaction reference with Paystack's own record via the
+  /// Confirms a transaction reference against Paystack's own record via the
   /// verify-paystack-transaction Edge Function. Only a confirmed, successful
-  /// charge for the expected amount/currency is treated as a real payment.
+  /// charge for the expected amount and currency counts as a real payment.
+  ///
+  /// [quiet] suppresses the "contact support" copy for the speculative check
+  /// after a dismissed sheet, where a failure just means "not paid".
   Future<PaymentResult> _verifyTransaction({
     required String reference,
     required int expectedAmount,
     required String expectedCurrency,
+    bool quiet = false,
   }) async {
+    String failureMessage() => quiet
+        ? 'Payment was not completed.'
+        : 'Payment could not be confirmed. If you were charged, contact support '
+              'with reference $reference.';
+
     try {
       final response = await Supabase.instance.client.functions.invoke(
         'verify-paystack-transaction',
@@ -208,56 +178,36 @@ class PaystackService {
         },
       );
 
-      final data = response.data as Map<String, dynamic>;
-      if (data['verified'] == true) {
+      final data = response.data as Map<String, dynamic>?;
+      if (data?['verified'] == true) {
         return PaymentResult(
           status: PaymentStatus.success,
           reference: reference,
         );
       }
-      debugPrint('[PaystackService] Verification rejected: $data');
+      if (!quiet) {
+        debugPrint('[PaystackService] Verification rejected: $data');
+      }
       return PaymentResult(
         status: PaymentStatus.failed,
         reference: reference,
-        errorMessage:
-            'Payment could not be confirmed. If you were charged, contact support with reference $reference.',
+        errorMessage: failureMessage(),
       );
     } on FunctionException catch (e) {
-      final errorBody = e.details;
-      final errorMessage = errorBody is Map
-          ? errorBody['error']?.toString()
-          : null;
-      debugPrint(
-        '[PaystackService] Verify Edge Function notice: ${e.status} — $errorMessage',
-      );
-      if (kDebugMode) {
-        debugPrint(
-          '[PaystackService] Debug mode: skipping verification, assuming success.',
-        );
-        return PaymentResult(
-          status: PaymentStatus.success,
-          reference: reference,
-        );
-      }
+      final details = e.details;
+      final message = details is Map ? details['error']?.toString() : null;
+      debugPrint('[PaystackService] Verify failed: ${e.status} — $message');
       return PaymentResult(
         status: PaymentStatus.failed,
         reference: reference,
-        errorMessage:
-            'Could not verify your payment. If you were charged, contact support with reference $reference.',
+        errorMessage: failureMessage(),
       );
     } catch (e) {
       debugPrint('[PaystackService] Verification error: $e');
-      if (kDebugMode) {
-        return PaymentResult(
-          status: PaymentStatus.success,
-          reference: reference,
-        );
-      }
       return PaymentResult(
         status: PaymentStatus.failed,
         reference: reference,
-        errorMessage:
-            'Could not verify your payment. If you were charged, contact support with reference $reference.',
+        errorMessage: failureMessage(),
       );
     }
   }

@@ -9,7 +9,6 @@ import 'package:device_preview/device_preview.dart';
 import 'core/config/router.dart';
 import 'core/config/theme.dart';
 import 'core/config/theme_provider.dart';
-import 'core/services/paystack_service.dart';
 import 'core/services/notification_service.dart';
 import 'firebase_options.dart';
 
@@ -38,9 +37,6 @@ void main() async {
   } catch (e) {
     debugPrint('Supabase initialization warning: $e');
   }
-
-  // Initialize Paystack SDK
-  await PaystackService.instance.initialize();
 
   // Initialize Local Cache (Hive)
   await Hive.initFlutter();

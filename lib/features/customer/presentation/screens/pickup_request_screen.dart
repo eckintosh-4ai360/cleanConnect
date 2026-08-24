@@ -307,6 +307,7 @@ class PickupRequestScreen extends HookConsumerWidget {
           final amountInPesewas = (pickupTotal * 100).round();
 
           final paymentResult = await PaystackService.instance.initiatePayment(
+            context: context,
             email: email,
             amountInSmallest: amountInPesewas,
             currency: 'GHS',

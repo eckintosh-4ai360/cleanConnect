@@ -95,6 +95,7 @@ class SubscriptionScreen extends HookConsumerWidget {
         final amountInPesewas = (fee * 100).round();
 
         final result = await PaystackService.instance.initiatePayment(
+          context: context,
           email: email,
           amountInSmallest: amountInPesewas,
           currency: 'GHS',
