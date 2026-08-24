@@ -32,6 +32,10 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   flutter_secure_storage: ^10.3.1
+  # Only for the handful of flags the FCM background isolate has to read --
+  # Hive locks a box to one isolate, so it can't serve that. Everything else
+  # local still lives in Hive.
+  shared_preferences: ^2.5.5
 
   # Location & Maps
   geolocator: ^14.0.3

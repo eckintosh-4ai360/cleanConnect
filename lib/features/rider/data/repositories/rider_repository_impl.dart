@@ -1,4 +1,6 @@
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../domain/entities/incident_report_entity.dart';
@@ -84,29 +86,128 @@ class RiderRepositoryImpl implements RiderRepository {
 
   // ── Active Route & Stops ─────────────────────────────────────────────────
 
+  // A rider's day is driven by the pickups they accept: nothing in the app or
+  // the admin panel ever writes a `routes` / `route_stops` row, so watching
+  // that table alone left the Route screen permanently empty. The dispatcher
+  // table still wins when a row is actually there -- the accepted pickups are
+  // the fallback, which today is the only case that fires.
   @override
   Stream<ActiveRouteEntity?> watchActiveRoute() {
     return _db
-        .from('routes')
+        .from('pickup_requests')
         .stream(primaryKey: ['id'])
         .eq('assigned_rider_id', _uid)
         .asyncMap((rows) async {
-      final active = rows.where((r) => r['status'] == 'active').toList();
-      if (active.isEmpty) return null;
-      return _buildActiveRoute(active.first);
+      final dispatched = await _activeRouteRow();
+      if (dispatched != null) return _buildActiveRoute(dispatched);
+      return _routeFromPickups(rows.map(_pickupFromRow).toList());
     });
   }
 
   @override
   Future<ActiveRouteEntity?> getActiveRoute() async {
+    final dispatched = await _activeRouteRow();
+    if (dispatched != null) return _buildActiveRoute(dispatched);
+
+    final rows = await _db
+        .from('pickup_requests')
+        .select()
+        .eq('assigned_rider_id', _uid);
+    return _routeFromPickups(
+      (rows as List).map((r) => _pickupFromRow(r as Map<String, dynamic>)).toList(),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _activeRouteRow() async {
     final rows = await _db
         .from('routes')
         .select()
         .eq('assigned_rider_id', _uid)
         .eq('status', 'active')
         .limit(1);
-    if (rows.isEmpty) return null;
-    return _buildActiveRoute(rows.first);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Folds the rider's pickups into the shape the Route screen already draws:
+  /// still-accepted requests become pending stops, and requests completed
+  /// today become collected ones so the progress strip reflects the real day
+  /// rather than sitting at zero. Returns null when there is nothing to work.
+  ActiveRouteEntity? _routeFromPickups(List<PickupRequestEntity> pickups) {
+    final today = DateTime.now();
+    bool completedToday(PickupRequestEntity p) {
+      final at = p.acceptedAt;
+      return p.status == 'completed' &&
+          at != null &&
+          at.year == today.year &&
+          at.month == today.month &&
+          at.day == today.day;
+    }
+
+    final relevant = pickups
+        .where((p) => p.status == 'accepted' || completedToday(p))
+        .toList()
+      ..sort((a, b) =>
+          (a.acceptedAt ?? a.createdAt).compareTo(b.acceptedAt ?? b.createdAt));
+    if (relevant.isEmpty) return null;
+
+    final stops = <RouteStopEntity>[];
+    for (var i = 0; i < relevant.length; i++) {
+      final p = relevant[i];
+      stops.add(RouteStopEntity(
+        id: p.id,
+        customerName: p.customerName,
+        address: p.location,
+        binType: p.binTypes.isEmpty ? 'general' : p.binTypes.first,
+        status: p.status == 'completed' ? 'collected' : 'pending',
+        // Weight is only known once the bin is on the scale, so the tile shows
+        // nothing rather than a made-up estimate.
+        estimatedWeightKg: null,
+        // 0,0 for a request with no coordinates: the map reads that as "not
+        // plottable" instead of dropping a pin somewhere the rider isn't.
+        latitude: p.destinationLat ?? 0,
+        longitude: p.destinationLng ?? 0,
+        stopOrder: i + 1,
+        pickupRequest: p,
+      ));
+    }
+
+    final pending = stops.where((s) => s.status == 'pending').length;
+    final distanceKm = _chainDistanceKm(stops);
+    return ActiveRouteEntity(
+      id: 'accepted-pickups',
+      routeName: "Today's Pickups",
+      zone: '$pending stop${pending == 1 ? '' : 's'} remaining',
+      totalDistanceKm: distanceKm,
+      completedDistanceKm: 0,
+      totalStops: stops.length,
+      completedStops: stops.length - pending,
+      startTime: relevant.first.acceptedAt ?? relevant.first.createdAt,
+      // Rough finish: driving the remaining chain plus ten minutes on site per
+      // stop. Nothing here is a promise to the customer, it fills the "Est.
+      // End" chip on the dashboard.
+      estimatedEndTime: pending == 0
+          ? null
+          : DateTime.now()
+              .add(GeoUtils.estimateDuration(distanceKm * 1000))
+              .add(Duration(minutes: 10 * pending)),
+      status: 'active',
+      stops: stops,
+    );
+  }
+
+  /// Straight-line distance along the stops in order, skipping any without
+  /// coordinates. An under-estimate of the driven distance, but derived from
+  /// the actual stops rather than the schema's 12 km placeholder.
+  double _chainDistanceKm(List<RouteStopEntity> stops) {
+    final points = stops
+        .where((s) => s.latitude != 0 || s.longitude != 0)
+        .map((s) => LatLng(s.latitude, s.longitude))
+        .toList();
+    var metres = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      metres += GeoUtils.distanceMeters(points[i - 1], points[i]);
+    }
+    return metres / 1000;
   }
 
   Future<ActiveRouteEntity> _buildActiveRoute(Map<String, dynamic> r) async {
@@ -430,6 +531,19 @@ class RiderRepositoryImpl implements RiderRepository {
   @override
   Future<void> updateFcmToken(String token) async {
     await _db.from('riders').update({'fcm_token': token}).eq('id', _uid);
+  }
+
+  @override
+  Future<void> clearFcmToken() async {
+    await _db.from('riders').update({'fcm_token': null}).eq('id', _uid);
+  }
+
+  @override
+  Future<void> releaseDeviceFcmToken(String token) async {
+    // RPC rather than a direct update: nulling *another* rider's row is
+    // deliberately outside what the riders RLS policies allow, and the caller
+    // here is usually a customer. See release_device_fcm_token's migration.
+    await _db.rpc('release_device_fcm_token', params: {'p_token': token});
   }
 
   @override

@@ -1,3 +1,5 @@
+import 'pickup_request_entity.dart';
+
 class RiderEntity {
   final String id;
   final String fullName;
@@ -79,6 +81,13 @@ class RouteStopEntity {
   final double longitude;
   final int stopOrder;
 
+  /// The pickup request this stop was derived from, when the route was built
+  /// from the rider's accepted pickups rather than from `route_stops` rows.
+  /// Null for real route stops, which are worked through mark_stop_collected;
+  /// a pickup stop is completed through the QR-verified collection flow
+  /// instead, so the UI needs the request itself to hand on.
+  final PickupRequestEntity? pickupRequest;
+
   const RouteStopEntity({
     required this.id,
     required this.customerName,
@@ -91,6 +100,7 @@ class RouteStopEntity {
     required this.latitude,
     required this.longitude,
     required this.stopOrder,
+    this.pickupRequest,
   });
 
   RouteStopEntity copyWith({
@@ -105,6 +115,7 @@ class RouteStopEntity {
     double? latitude,
     double? longitude,
     int? stopOrder,
+    PickupRequestEntity? pickupRequest,
   }) {
     return RouteStopEntity(
       id: id ?? this.id,
@@ -118,6 +129,7 @@ class RouteStopEntity {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       stopOrder: stopOrder ?? this.stopOrder,
+      pickupRequest: pickupRequest ?? this.pickupRequest,
     );
   }
 }

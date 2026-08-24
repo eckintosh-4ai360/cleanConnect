@@ -94,8 +94,15 @@ class _RouteOptimizationScreenState
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Your route will appear here once assigned.',
+                    'Accept a pickup request and it becomes a stop here.',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: () => context.push('/rider/pickups'),
+                    icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                    label: const Text('Browse available pickups'),
                   ),
                 ],
               ),
@@ -125,8 +132,9 @@ class _StopListTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final progress = route.completedStops / route.totalStops;
+    final progress = route.totalStops == 0
+        ? 0.0
+        : route.completedStops / route.totalStops;
 
     return Column(
       children: [
@@ -210,11 +218,22 @@ class _StopListTab extends ConsumerWidget {
             itemCount: route.stops.length,
             itemBuilder: (context, index) {
               final stop = route.stops[index];
+              // A stop standing in for an accepted pickup is completed through
+              // the QR-verified collection flow, not mark_stop_collected --
+              // and "problem" has no equivalent there, so that action is only
+              // offered on dispatcher route stops.
+              final pickup = stop.pickupRequest;
               return _StopTile(
                 stop: stop,
                 isDark: isDark,
-                onCollect: () => _showCollectSheet(context, ref, stop),
-                onProblem: () => _showProblemSheet(context, ref, stop),
+                onNavigate: () =>
+                    context.push('/rider/navigation', extra: pickup),
+                onCollect: pickup != null
+                    ? () => context.push('/rider/collection', extra: pickup)
+                    : () => _showCollectSheet(context, ref, stop),
+                onProblem: pickup != null
+                    ? null
+                    : () => _showProblemSheet(context, ref, stop),
               );
             },
           ),
@@ -380,14 +399,19 @@ class _StopListTab extends ConsumerWidget {
 class _StopTile extends StatelessWidget {
   final RouteStopEntity stop;
   final bool isDark;
+  final VoidCallback onNavigate;
   final VoidCallback onCollect;
-  final VoidCallback onProblem;
+
+  /// Null when the stop has no reportable-problem action -- see the note where
+  /// the tile is built.
+  final VoidCallback? onProblem;
 
   const _StopTile({
     required this.stop,
     required this.isDark,
+    required this.onNavigate,
     required this.onCollect,
-    required this.onProblem,
+    this.onProblem,
   });
 
   Color get _statusColor {
@@ -555,31 +579,31 @@ class _StopTile extends StatelessWidget {
                             side: BorderSide(color: Theme.of(context).colorScheme.primary),
                             foregroundColor: Theme.of(context).colorScheme.primary,
                           ),
-                          onPressed: () {
-                            context.push('/rider/navigation');
-                          },
+                          onPressed: onNavigate,
                           icon: const Icon(Icons.navigation_outlined, size: 18),
-                          tooltip: 'Navigate with Google Maps',
+                          tooltip: 'Navigate to this stop',
                         ),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.red),
-                              foregroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
+                        if (onProblem != null) ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.red),
+                                foregroundColor: Colors.red,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: onProblem,
+                              child: const Text(
+                                'Problem',
+                                style: TextStyle(fontSize: 12),
                               ),
                             ),
-                            onPressed: onProblem,
-                            child: const Text(
-                              'Problem',
-                              style: TextStyle(fontSize: 12),
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
+                          const SizedBox(width: 6),
+                        ],
                         Expanded(
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(

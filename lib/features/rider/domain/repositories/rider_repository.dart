@@ -53,6 +53,18 @@ abstract class RiderRepository {
   /// them with new-pickup-request notifications.
   Future<void> updateFcmToken(String token);
 
+  /// Drops this rider's stored push token. Called on sign-out: the pickup
+  /// fan-out targets every token on the riders table, so one left behind keeps
+  /// alerting a device this rider no longer holds.
+  Future<void> clearFcmToken();
+
+  /// Detaches [token] from any *other* rider still holding it. A push token
+  /// belongs to the device, not the account that registered it, so a rider who
+  /// signed out without clearing theirs leaves the next person on that device
+  /// receiving rider alerts. Callable by any signed-in user, since the person
+  /// who has to repair this is whoever signs in next.
+  Future<void> releaseDeviceFcmToken(String token);
+
   /// Accept a pickup request — assigns this rider and sets status to 'accepted'.
   Future<void> acceptPickup({
     required String requestId,

@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 
 import '../../features/auth/domain/entities/user_entity.dart';
@@ -17,8 +18,46 @@ const String pickupRequestsChannelId = 'pickup_requests_channel';
 const String pickupRequestsChannelName = 'New Pickup Requests';
 const List<int> _pickupVibrationPatternRaw = [0, 1000, 500, 1000, 500, 1000];
 
+const String _riderPushEnabledKey = 'rider_push_alerts_enabled';
+
+/// Deliberately not Hive, which the rest of the app uses for local state: a
+/// Hive box takes an exclusive lock, so the background isolate could not open
+/// `settings_box` while the main isolate holds it — exactly the moment this
+/// flag has to be readable. SharedPreferences is backed by platform storage
+/// that both isolates can read.
+final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
+
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
+
+/// Whether this device is currently signed in as a rider, as last recorded by
+/// the main isolate in [_setRiderPushEnabled].
+///
+/// An FCM token belongs to the *device*, not to the account that registered
+/// it, and `notify-riders-on-new-pickup` fans out to every token stored on the
+/// `riders` table. So a device where a rider once signed in keeps receiving
+/// pickup alerts after somebody else signs in — and the background isolate has
+/// no auth state of its own to check, hence this flag.
+///
+/// Defaults to `true`: a rider who has not opened the app since this flag was
+/// introduced must keep getting alerts. It only suppresses once the main
+/// isolate has positively seen a non-rider session.
+Future<bool> _riderPushEnabled() async {
+  try {
+    return await _prefs.getBool(_riderPushEnabledKey) ?? true;
+  } catch (_) {
+    return true;
+  }
+}
+
+Future<void> _setRiderPushEnabled(bool enabled) async {
+  try {
+    await _prefs.setBool(_riderPushEnabledKey, enabled);
+  } catch (_) {
+    // Losing the flag only costs us the background-isolate guard; the
+    // foreground role check in NotificationService still holds.
+  }
+}
 
 /// Must be a top-level function (and annotated `vm:entry-point`) so the
 /// Android FCM background isolate can find and invoke it when a data message
@@ -27,6 +66,10 @@ final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (message.data['type'] != 'new_pickup_request') return;
+  // Not a rider on this device any more — showing the alert would post an
+  // ongoing, full-screen, vibrating notification to somebody who cannot act on
+  // it and cannot swipe it away either.
+  if (!await _riderPushEnabled()) return;
   // This is a fresh isolate: the plugin instance here has never been
   // initialized, and the channel may not exist yet, so `show` would be
   // dropped without this.
@@ -112,6 +155,13 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
+  /// Hard ceiling on the alert vibration. The incoming-request screen stops it
+  /// on dispose, but that screen does not always get to mount — a router role
+  /// redirect, a push that lands on the wrong account, a request that is
+  /// already gone — and `repeat: 0` runs until something cancels it. So it
+  /// cancels itself too, and can never outlive the alert it belongs to.
+  static const Duration _maxVibrationDuration = Duration(seconds: 30);
+
   ProviderContainer? _container;
   StreamSubscription<RemoteMessage>? _onMessageSub;
   StreamSubscription<RemoteMessage>? _onMessageOpenedSub;
@@ -119,6 +169,8 @@ class NotificationService {
   ProviderSubscription<AuthState>? _authSub;
   String? _lastNavigatedRequestId;
   DateTime? _lastNavigatedAt;
+  String? _pendingRequestId;
+  Timer? _vibrationTimeout;
 
   Future<void> initialize(ProviderContainer container) async {
     _container = container;
@@ -140,11 +192,7 @@ class NotificationService {
 
     _authSub = container.listen<AuthState>(
       authStateControllerProvider,
-      (previous, next) {
-        if (next is AuthAuthenticated && next.user.role == UserRole.rider) {
-          unawaited(_refreshAndSyncToken());
-        }
-      },
+      (previous, next) => unawaited(_handleAuthStateChange(next)),
       fireImmediately: true,
     );
 
@@ -164,8 +212,45 @@ class NotificationService {
     }
   }
 
+  /// Keeps this device's push registration in step with who is actually signed
+  /// in on it. Riders get their token (re)published; everybody else gets the
+  /// device detached from the fan-out and any in-flight rider alert killed.
+  Future<void> _handleAuthStateChange(AuthState state) async {
+    // Startup: the Supabase session has not been read back yet, so we cannot
+    // tell a rider from a customer. Decide nothing until it resolves.
+    if (state is AuthLoading) return;
+
+    final isRider =
+        state is AuthAuthenticated && state.user.role == UserRole.rider;
+    await _setRiderPushEnabled(isRider);
+
+    if (isRider) {
+      await _refreshAndSyncToken();
+      final pending = _pendingRequestId;
+      _pendingRequestId = null;
+      if (pending != null) _navigateToRequestId(pending);
+      return;
+    }
+
+    // A non-rider session on a device that may still be registered as some
+    // rider's: silence whatever is already running and drop the registration
+    // so the next pickup does not reach us at all.
+    _pendingRequestId = null;
+    await stopVibration();
+    await _cancelAllPickupNotifications();
+    if (state is AuthAuthenticated) {
+      await _releaseStaleDeviceToken();
+    }
+  }
+
   void _handleForegroundMessage(RemoteMessage message) {
     if (message.data['type'] != 'new_pickup_request') return;
+    if (!_isSignedInAsRider) {
+      // A rider token this device never gave up. Do not vibrate, do not
+      // navigate — just make sure it stops arriving.
+      unawaited(_releaseStaleDeviceToken());
+      return;
+    }
     unawaited(startVibrationLoop());
     _navigateToRequestId(message.data['requestId'] as String?);
   }
@@ -175,8 +260,25 @@ class NotificationService {
     _navigateToRequestId(message.data['requestId'] as String?);
   }
 
+  bool get _isSignedInAsRider =>
+      _container?.read(currentUserRoleProvider) == UserRole.rider;
+
   void _navigateToRequestId(String? requestId) {
     if (requestId == null || requestId.isEmpty || _container == null) return;
+
+    final role = _container!.read(currentUserRoleProvider);
+    if (role == null) {
+      // Cold start: auth is still resolving (or nobody is signed in). Hold the
+      // request — _handleAuthStateChange dispatches or drops it once we know
+      // who this is. Navigating now would only bounce off the router's
+      // rider-route guard and strand the alert.
+      _pendingRequestId = requestId;
+      return;
+    }
+    // The incoming-request screen lives under /rider/, which the router
+    // redirects away from for anybody else — so the screen that stops the
+    // vibration and clears the notification would never mount.
+    if (role != UserRole.rider) return;
 
     // The same request can legitimately trigger onMessage + a notification
     // tap in quick succession — avoid pushing the same screen twice.
@@ -200,6 +302,11 @@ class NotificationService {
           pattern: _pickupVibrationPatternRaw,
           repeat: 0,
         );
+        _vibrationTimeout?.cancel();
+        _vibrationTimeout = Timer(
+          _maxVibrationDuration,
+          () => unawaited(stopVibration()),
+        );
       }
     } catch (_) {
       // Vibration is a nice-to-have; devices without it shouldn't crash.
@@ -207,6 +314,8 @@ class NotificationService {
   }
 
   Future<void> stopVibration() async {
+    _vibrationTimeout?.cancel();
+    _vibrationTimeout = null;
     try {
       await Vibration.cancel();
     } catch (_) {}
@@ -219,6 +328,46 @@ class NotificationService {
   Future<void> cancelIncomingPickupNotification(String requestId) async {
     try {
       await _localNotificationsPlugin.cancel(id: requestId.hashCode);
+    } catch (_) {}
+  }
+
+  /// Clears every pickup alert in the shade. Used when we cannot enumerate the
+  /// request ids (they were posted from the background isolate) but know none
+  /// of them are actionable — pickup alerts are the only notifications this
+  /// app posts.
+  Future<void> _cancelAllPickupNotifications() async {
+    try {
+      await _localNotificationsPlugin.cancelAll();
+    } catch (_) {}
+  }
+
+  /// Called just before sign-out, while the session is still valid enough for
+  /// RLS to allow the write. A token left behind here is exactly what makes
+  /// the *next* person on this device get rider alerts they cannot dismiss.
+  Future<void> handleLogout() async {
+    _pendingRequestId = null;
+    await stopVibration();
+    await _cancelAllPickupNotifications();
+    await _setRiderPushEnabled(false);
+    if (_isSignedInAsRider) {
+      try {
+        await _container!.read(riderRepositoryProvider).clearFcmToken();
+      } catch (_) {
+        // Best effort — _releaseStaleDeviceToken covers what this misses.
+      }
+    }
+  }
+
+  /// Detaches this device's token from whichever rider is still holding it —
+  /// the repair path for a session that ended without [handleLogout] running
+  /// (app killed mid-logout, or a token registered before this fix shipped).
+  Future<void> _releaseStaleDeviceToken() async {
+    final container = _container;
+    if (container == null) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) return;
+      await container.read(riderRepositoryProvider).releaseDeviceFcmToken(token);
     } catch (_) {}
   }
 
@@ -235,6 +384,7 @@ class NotificationService {
   }
 
   void dispose() {
+    _vibrationTimeout?.cancel();
     _onMessageSub?.cancel();
     _onMessageOpenedSub?.cancel();
     _onTokenRefreshSub?.cancel();

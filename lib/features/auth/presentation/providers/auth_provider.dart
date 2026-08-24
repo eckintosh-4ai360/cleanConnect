@@ -6,6 +6,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../data/repositories/auth_repository_impl.dart';
+import '../../../../core/services/notification_service.dart';
 
 part 'auth_provider.g.dart';
 
@@ -157,6 +158,11 @@ class AuthStateController extends _$AuthStateController {
   }
 
   Future<void> logout() async {
+    // Before the session goes away, while RLS still allows the write: hand
+    // back this device's push registration. The new-pickup fan-out targets
+    // every token stored on the riders table, so one left behind here keeps
+    // alerting (and vibrating) whoever signs in on this device next.
+    await NotificationService.instance.handleLogout();
     state = const AuthLoading();
     try {
       await ref.read(authRepositoryProvider).signOut();
