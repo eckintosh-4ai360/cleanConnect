@@ -1,9 +1,11 @@
 // Supabase Edge Function: notify-bin-assignment-sms
 //
 // Fired by a Postgres trigger (trg_notify_customer_on_bin_assignment, see
-// supabase/migrations/20260819180000_bin_assignment_sms_trigger.sql) whenever
-// admin assigns/creates a company-owned bin for a customer. Sends the
-// customer an SMS with their new bin's serial number via mNotify.
+// supabase/migrations/20260819180000_bin_assignment_sms_trigger.sql and
+// 20260824140000_bin_registration_sms_for_personal_bins.sql) whenever a bin
+// row is inserted for a customer -- whether admin assigned a company-owned
+// bin or the customer self-registered a personal one. Sends the customer an
+// SMS with their bin's serial number via mNotify.
 //
 // Not user-facing (verify_jwt = false in config.toml) -- authenticated by a
 // shared secret the trigger sends in x-webhook-secret, generated once and
@@ -26,6 +28,7 @@ interface BinAssignmentPayload {
   serialNumber: string;
   type?: string;
   size?: string;
+  ownership?: string;
 }
 
 const MNOTIFY_SENDER_ID_FALLBACK = "CleanConnect";
@@ -97,9 +100,10 @@ Deno.serve(async (req: Request) => {
     settings?.mnotify_sender_id || Deno.env.get("MNOTIFY_SENDER_ID") || MNOTIFY_SENDER_ID_FALLBACK;
   const recipient = normalizePhoneNumber(payload.phoneNumber);
   const greeting = payload.customerName ? `Hi ${payload.customerName}, ` : "Hi, ";
+  const verb = payload.ownership === "personal" ? "has been registered" : "has been assigned";
   const message =
     `${greeting}your CleanConnect bin (${payload.type ?? "waste"} ${payload.size ?? ""}) ` +
-    `has been assigned. Serial number: ${payload.serialNumber}.`.replace(/\s+/g, " ").trim();
+    `${verb}. Serial number: ${payload.serialNumber}.`.replace(/\s+/g, " ").trim();
 
   try {
     const response = await fetch(
