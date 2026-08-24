@@ -127,28 +127,30 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 20, color: Colors.grey),
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
+        Icon(icon, size: 20, color: Colors.grey),
+        const SizedBox(width: 10),
         Text(
-          value,
+          label,
           style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
-            fontSize: 14,
+            color: Colors.grey,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Values like a full address or a long window can outrun the row, so
+        // give the value the leftover space and let it ellipsize.
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A1A),
+              fontSize: 14,
+            ),
           ),
         ),
       ],
