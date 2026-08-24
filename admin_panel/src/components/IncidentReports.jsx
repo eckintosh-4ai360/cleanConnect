@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 
 export default function IncidentReports() {
   const [reports, setReports] = useState([]);
-  const [riders, setRiders] = useState([]);
+  const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
   const [selectedReport, setSelectedReport] = useState(null);
@@ -36,22 +36,24 @@ export default function IncidentReports() {
     };
   }, []);
 
+  // Reports go to waste workers (the ground crew managed under Waste Workers),
+  // never to riders — riders run the pickup fleet.
   useEffect(() => {
     let mounted = true;
 
-    const fetchRiders = async () => {
+    const fetchWorkers = async () => {
       const { data, error } = await supabase
-        .from('riders')
-        .select('id, status, profiles(full_name)');
-      if (mounted && !error) {
-        setRiders(data.map((r) => ({ id: r.id, fullName: r.profiles?.full_name || 'Rider', status: r.status || 'active' })));
-      }
+        .from('waste_workers')
+        .select('id, full_name, phone, zone, specialty, status')
+        .order('full_name');
+      if (mounted && !error) setWorkers(data);
+      if (error) console.warn('Waste workers fetch:', error);
     };
-    fetchRiders();
+    fetchWorkers();
 
     const channel = supabase
-      .channel('incident_reports_riders_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'riders' }, fetchRiders)
+      .channel('incident_reports_workers_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'waste_workers' }, fetchWorkers)
       .subscribe();
 
     return () => {
@@ -113,12 +115,12 @@ export default function IncidentReports() {
     return `https://www.google.com/maps?q=${lat},${lng}`;
   };
 
-  const handleAssign = async (report, riderId) => {
-    if (!riderId) return;
+  const handleAssign = async (report, workerId) => {
+    if (!workerId) return;
     setActionLoading(true);
-    const { data, error } = await supabase.rpc('assign_incident_to_rider', {
+    const { data, error } = await supabase.rpc('assign_incident_to_worker', {
       p_report_id: report.id,
-      p_rider_id: riderId,
+      p_worker_id: workerId,
     });
     if (error) {
       alert('Failed to assign worker: ' + error.message);
@@ -139,7 +141,8 @@ export default function IncidentReports() {
     setActionLoading(false);
   };
 
-  const activeRiders = riders.filter((r) => r.status === 'active');
+  const activeWorkers = workers.filter((w) => w.status === 'active');
+  const assignedWorker = workers.find((w) => w.id === selectedReport?.assigned_worker_id) || null;
 
   return (
     <div className="page-content">
@@ -275,8 +278,13 @@ export default function IncidentReports() {
                   link: mapsUrl(selectedReport.location),
                 },
                 { label: 'Submitted', value: formatDateTime(selectedReport.createdAt) },
-                ...(selectedReport.assigned_rider_name
-                  ? [{ label: 'Assigned Worker', value: selectedReport.assigned_rider_name }]
+                ...(selectedReport.assigned_worker_name
+                  ? [{
+                      label: 'Assigned Worker',
+                      value: assignedWorker?.phone
+                        ? `${selectedReport.assigned_worker_name} — ${assignedWorker.phone}`
+                        : selectedReport.assigned_worker_name,
+                    }]
                   : []),
               ].map(({ label, value, link }) => (
                 <div key={label}>
@@ -300,17 +308,32 @@ export default function IncidentReports() {
                     {selectedReport.status === 'pending' ? 'Assign Worker' : 'Reassign Worker'}
                   </span>
                   <select
+                    key={selectedReport.id + selectedReport.status}
                     defaultValue=""
-                    disabled={actionLoading}
+                    disabled={actionLoading || activeWorkers.length === 0}
                     onChange={(e) => handleAssign(selectedReport, e.target.value)}
                     style={{ width: '100%', marginTop: '6px', padding: '10px', borderRadius: '8px' }}
                   >
-                    <option value="" disabled>Select a worker...</option>
-                    {activeRiders.map((r) => (
-                      <option key={r.id} value={r.id}>{r.fullName}</option>
+                    <option value="" disabled>
+                      {activeWorkers.length === 0 ? 'No active workers' : 'Select a worker...'}
+                    </option>
+                    {activeWorkers.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.full_name}{w.zone ? ` — ${w.zone}` : ''}
+                      </option>
                     ))}
                   </select>
+                  {activeWorkers.length === 0 && (
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                      Add someone under <strong>Waste Workers</strong> first.
+                    </p>
+                  )}
                 </div>
+              )}
+              {selectedReport.status === 'assigned' && (
+                <button className="btn-outline" style={{ justifyContent: 'center' }} disabled={actionLoading} onClick={() => handleUpdateStatus(selectedReport, 'in_progress')}>
+                  {actionLoading ? 'Updating...' : 'Mark as In Progress'}
+                </button>
               )}
               {selectedReport.status === 'in_progress' && (
                 <button className="btn-primary" style={{ justifyContent: 'center' }} disabled={actionLoading} onClick={() => handleUpdateStatus(selectedReport, 'resolved')}>

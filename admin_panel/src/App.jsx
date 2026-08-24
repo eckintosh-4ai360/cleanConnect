@@ -11,6 +11,7 @@ import Sites from './components/Sites';
 import Collections from './components/Collections';
 import PickupRequests from './components/PickupRequests';
 import IncidentReports from './components/IncidentReports';
+import WasteWorkers from './components/WasteWorkers';
 import Routes from './components/Routes';
 import Payments from './components/Payments';
 import Maintenance from './components/Maintenance';
@@ -231,6 +232,14 @@ function AdminShell({ profile }) {
       )
     },
     {
+      name: 'Waste Workers',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 20 8.5 8.5" /><path d="m2.5 5.5 3-3 4 4-3 3z" /><path d="M17 17.5 22 14l-2.5-4-5 3" />
+        </svg>
+      )
+    },
+    {
       name: 'Routes',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -293,6 +302,8 @@ function AdminShell({ profile }) {
         return <PickupRequests />;
       case 'Waste Reports':
         return <IncidentReports />;
+      case 'Waste Workers':
+        return <WasteWorkers />;
       case 'Routes':
         return <Routes />;
       case 'Payments':
