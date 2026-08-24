@@ -2,12 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:paystack_flutter_sdk/paystack_flutter_sdk.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Replace with your real Paystack public key.
-// Use pk_test_... for development; pk_live_... for production.
-// ─────────────────────────────────────────────────────────────────────────────
 const String _kPaystackPublicKey =
-    'pk_test_96c65f269342874ea312d01fe4780598cec5de33';
+    'pk_live_87977e3c5dfa23a80d45cb51424c9df83c9a8e03';
 
 /// The result returned after a Paystack payment attempt.
 enum PaymentStatus { success, cancelled, failed }
@@ -62,13 +58,6 @@ class PaystackService {
     }
   }
 
-  /// Initiates a Paystack payment.
-  ///
-  /// [email]             Customer's email address (required by Paystack).
-  /// [amountInSmallest]  Amount in the smallest currency unit (pesewas for GHS,
-  ///                     kobo for NGN). e.g. GHS 50.00 → 5000.
-  /// [currency]          ISO 4217 currency code. Defaults to 'GHS'.
-  /// [metadata]          Optional key-value pairs stored on the transaction.
   Future<PaymentResult> initiatePayment({
     required String email,
     required int amountInSmallest,
@@ -102,10 +91,13 @@ class PaystackService {
             await _paystack.launch(accessCode);
           } catch (launchErr) {
             final msg = launchErr.toString();
-            if (msg.contains('MissingPluginException') || msg.contains('No implementation found')) {
+            if (msg.contains('MissingPluginException') ||
+                msg.contains('No implementation found')) {
               if (kDebugMode) {
                 // Plugin missing on current platform/session — fallback to test success
-                debugPrint('[PaystackService] Native SDK UI unavailable. Completing in test mode.');
+                debugPrint(
+                  '[PaystackService] Native SDK UI unavailable. Completing in test mode.',
+                );
                 return PaymentResult(
                   status: PaymentStatus.success,
                   reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
@@ -113,7 +105,8 @@ class PaystackService {
               }
               return const PaymentResult(
                 status: PaymentStatus.failed,
-                errorMessage: 'Payment could not be started on this device. Please try again.',
+                errorMessage:
+                    'Payment could not be started on this device. Please try again.',
               );
             }
             if (msg.toLowerCase().contains('cancel') ||
@@ -126,10 +119,6 @@ class PaystackService {
             }
             rethrow;
           }
-
-          // The SDK reported the checkout completed locally, but that alone
-          // isn't trustworthy — confirm the charge with Paystack's own
-          // record before treating this payment as real.
           return _verifyTransaction(
             reference: reference,
             expectedAmount: amountInSmallest,
@@ -138,12 +127,17 @@ class PaystackService {
         }
       } on FunctionException catch (e) {
         final errorBody = e.details;
-        final errorMessage =
-            errorBody is Map ? errorBody['error']?.toString() : null;
-        debugPrint('[PaystackService] Edge Function notice: ${e.status} — $errorMessage');
+        final errorMessage = errorBody is Map
+            ? errorBody['error']?.toString()
+            : null;
+        debugPrint(
+          '[PaystackService] Edge Function notice: ${e.status} — $errorMessage',
+        );
         // If in debug/test environment and function is not yet deployed or secret not set, fallback to test payment
         if (kDebugMode) {
-          debugPrint('[PaystackService] Debug mode: Simulated Paystack payment approval.');
+          debugPrint(
+            '[PaystackService] Debug mode: Simulated Paystack payment approval.',
+          );
           return PaymentResult(
             status: PaymentStatus.success,
             reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
@@ -151,14 +145,18 @@ class PaystackService {
         }
         return PaymentResult(
           status: PaymentStatus.failed,
-          errorMessage: errorMessage ?? 'Payment server error. Please try again.',
+          errorMessage:
+              errorMessage ?? 'Payment server error. Please try again.',
         );
       }
     } catch (e) {
       final msg = e.toString();
-      if (msg.contains('MissingPluginException') || msg.contains('No implementation found')) {
+      if (msg.contains('MissingPluginException') ||
+          msg.contains('No implementation found')) {
         if (kDebugMode) {
-          debugPrint('[PaystackService] Native plugin unavailable. Completing in test mode.');
+          debugPrint(
+            '[PaystackService] Native plugin unavailable. Completing in test mode.',
+          );
           return PaymentResult(
             status: PaymentStatus.success,
             reference: 'PST-DEV-${DateTime.now().millisecondsSinceEpoch}',
@@ -212,7 +210,10 @@ class PaystackService {
 
       final data = response.data as Map<String, dynamic>;
       if (data['verified'] == true) {
-        return PaymentResult(status: PaymentStatus.success, reference: reference);
+        return PaymentResult(
+          status: PaymentStatus.success,
+          reference: reference,
+        );
       }
       debugPrint('[PaystackService] Verification rejected: $data');
       return PaymentResult(
@@ -223,12 +224,20 @@ class PaystackService {
       );
     } on FunctionException catch (e) {
       final errorBody = e.details;
-      final errorMessage =
-          errorBody is Map ? errorBody['error']?.toString() : null;
-      debugPrint('[PaystackService] Verify Edge Function notice: ${e.status} — $errorMessage');
+      final errorMessage = errorBody is Map
+          ? errorBody['error']?.toString()
+          : null;
+      debugPrint(
+        '[PaystackService] Verify Edge Function notice: ${e.status} — $errorMessage',
+      );
       if (kDebugMode) {
-        debugPrint('[PaystackService] Debug mode: skipping verification, assuming success.');
-        return PaymentResult(status: PaymentStatus.success, reference: reference);
+        debugPrint(
+          '[PaystackService] Debug mode: skipping verification, assuming success.',
+        );
+        return PaymentResult(
+          status: PaymentStatus.success,
+          reference: reference,
+        );
       }
       return PaymentResult(
         status: PaymentStatus.failed,
@@ -239,7 +248,10 @@ class PaystackService {
     } catch (e) {
       debugPrint('[PaystackService] Verification error: $e');
       if (kDebugMode) {
-        return PaymentResult(status: PaymentStatus.success, reference: reference);
+        return PaymentResult(
+          status: PaymentStatus.success,
+          reference: reference,
+        );
       }
       return PaymentResult(
         status: PaymentStatus.failed,

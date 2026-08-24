@@ -5,8 +5,10 @@
 // Paystack payment UI. Ports functions/index.js's initializePaystackTransaction
 // Cloud Function 1:1 — see the plan at .claude/plans (Phase 2).
 //
-// SETUP: store the Paystack secret key via the Supabase CLI:
-//   supabase secrets set PAYSTACK_SECRET_KEY=sk_test_...
+// SETUP: store the Paystack secret key and cleanConnect subaccount via the
+// Supabase CLI:
+//   supabase secrets set PAYSTACK_SECRET_KEY=sk_live_...
+//   supabase secrets set PAYSTACK_SUBACCOUNT_CODE=ACCT_...
 //
 // Expected request body:
 //   { email: string, amount: number (smallest unit), currency?: string, metadata?: object }
@@ -91,6 +93,7 @@ Deno.serve(async (req: Request) => {
     console.error("[Paystack] PAYSTACK_SECRET_KEY secret is not set.");
     return jsonResponse({ error: "Payment service is not configured." }, 500);
   }
+  const subaccountCode = Deno.env.get("PAYSTACK_SUBACCOUNT_CODE");
 
   // ── Call Paystack Initialize Transaction API ─────────────────────────────
   try {
@@ -107,6 +110,7 @@ Deno.serve(async (req: Request) => {
           amount,
           currency,
           metadata: { ...metadata, user_uid: user.id },
+          ...(subaccountCode ? { subaccount: subaccountCode } : {}),
         }),
         signal: AbortSignal.timeout(15000),
       },
