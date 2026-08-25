@@ -459,6 +459,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String category,
     required String description,
   }) async {
+    // Write the support ticket to service_history (customer-facing record)
     await _db.from('service_history').insert({
       'customer_id': _uid,
       'title': 'Support Ticket: $category',
@@ -466,6 +467,18 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'status': 'pending',
       'amount_paid': 0.0,
       'description': description,
+    });
+
+    // Fire an admin_notifications row so the admin panel gets a real-time alert
+    final user = _auth.currentUser;
+    final displayName = user?.userMetadata?['full_name'] as String? ??
+        user?.email ??
+        'A customer';
+    await _db.from('admin_notifications').insert({
+      'title': 'Support Ticket: $category',
+      'message': '$displayName reported: $description',
+      'type': 'support_ticket',
+      'is_read': false,
     });
   }
 

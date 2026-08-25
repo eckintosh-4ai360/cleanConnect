@@ -144,6 +144,8 @@ function AdminShell({ profile }) {
       setActiveTab('Collections');
     } else if (n.type === 'incident_reported') {
       setActiveTab('Waste Reports');
+    } else if (n.type === 'support_ticket') {
+      setActiveTab('Settings');
     }
     setShowNotifDrawer(false);
   };

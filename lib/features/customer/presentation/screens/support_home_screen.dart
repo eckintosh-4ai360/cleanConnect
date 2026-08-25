@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/customer_providers.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
+
+/// Fallback contact details used if app_settings hasn't been seeded yet.
+const _kDefaultPhone = '+233 24 881 4260';
+const _kDefaultEmail = 'support@cleanconnect.com';
 
 class SupportHomeScreen extends HookConsumerWidget {
   const SupportHomeScreen({super.key});
@@ -12,6 +17,27 @@ class SupportHomeScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final searchController = useTextEditingController();
     final searchQuery = useState('');
+
+    // ── Fetch support contact details from Supabase app_settings ──────────
+    final contactPhone = useState<String>(_kDefaultPhone);
+    final contactEmail = useState<String>(_kDefaultEmail);
+
+    useEffect(() {
+      Supabase.instance.client
+          .from('app_settings')
+          .select('support_phone, support_email')
+          .eq('id', true)
+          .maybeSingle()
+          .then((data) {
+        if (data != null) {
+          final phone = data['support_phone'] as String?;
+          final email = data['support_email'] as String?;
+          if (phone != null && phone.isNotEmpty) contactPhone.value = phone;
+          if (email != null && email.isNotEmpty) contactEmail.value = email;
+        }
+      });
+      return null;
+    }, []);
 
     useEffect(() {
       void listener() {
@@ -127,9 +153,11 @@ class SupportHomeScreen extends HookConsumerWidget {
       );
     }
 
-    // Call Us action
+    // Call Us action — uses the value fetched from app_settings
     Future<void> makePhoneCall() async {
-      final Uri uri = Uri(scheme: 'tel', path: '+18001234567');
+      // Strip spaces and dashes for the tel: URI
+      final digits = contactPhone.value.replaceAll(RegExp(r'[^+\d]'), '');
+      final Uri uri = Uri(scheme: 'tel', path: digits);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
@@ -139,12 +167,12 @@ class SupportHomeScreen extends HookConsumerWidget {
       }
     }
 
-    // Email Support action
+    // Email Support action — uses the value fetched from app_settings
     Future<void> sendEmail() async {
       final Uri uri = Uri(
         scheme: 'mailto',
-        path: 'support@ecowaste.com',
-        queryParameters: {'subject': 'CleanConnectCustomer Support Request'},
+        path: contactEmail.value,
+        queryParameters: {'subject': 'CleanConnect Customer Support Request'},
       );
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
@@ -272,7 +300,7 @@ class SupportHomeScreen extends HookConsumerWidget {
               _ContactCard(
                 title: 'Call Us',
                 subtitle: 'Available Mon-Fri, 8am - 6pm',
-                detail: '+1 (800) 123-4567',
+                detail: contactPhone.value,
                 icon: Icons.phone_outlined,
                 onTap: makePhoneCall,
               ),
@@ -280,7 +308,7 @@ class SupportHomeScreen extends HookConsumerWidget {
               _ContactCard(
                 title: 'Email Support',
                 subtitle: 'We respond within 24 hours',
-                detail: 'support@ecowaste.com',
+                detail: contactEmail.value,
                 icon: Icons.mail_outline,
                 onTap: sendEmail,
               ),

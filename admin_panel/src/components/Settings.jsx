@@ -25,6 +25,99 @@ export default function Settings() {
 
   const [showZoneModal, setShowZoneModal] = useState(false);
 
+  // ── Support Tickets (from customer "Report a Problem") ───────────────────
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
+  const [ticketFilter, setTicketFilter] = useState('All');
+
+  useEffect(() => {
+    let mounted = true;
+    const mapTicket = (r) => ({ ...r, createdAt: r.created_at ? new Date(r.created_at) : new Date() });
+
+    const fetchTickets = async () => {
+      setTicketsLoading(true);
+      const { data, error } = await supabase
+        .from('service_history')
+        .select('id, customer_id, title, description, status, created_at')
+        .eq('type', 'support')
+        .order('created_at', { ascending: false });
+      if (mounted && !error) setSupportTickets((data || []).map(mapTicket));
+      if (error) console.warn('support tickets fetch:', error);
+      if (mounted) setTicketsLoading(false);
+    };
+    fetchTickets();
+
+    const channel = supabase
+      .channel('settings_support_tickets_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_history' }, fetchTickets)
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleUpdateTicketStatus = async (ticketId, newStatus) => {
+    const { error } = await supabase
+      .from('service_history')
+      .update({ status: newStatus })
+      .eq('id', ticketId);
+    if (error) alert('Failed to update ticket: ' + error.message);
+  };
+
+  // ── Help & Support contact settings ──────────────────────────────
+  const [contactForm, setContactForm] = useState({
+    phone: '+233 24 881 4260',
+    email: 'support@cleanconnect.com',
+  });
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactSaving, setContactSaving] = useState(false);
+  const [contactSaved, setContactSaved] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchContact = async () => {
+      setContactLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('support_phone, support_email')
+        .eq('id', true)
+        .maybeSingle();
+      if (mounted && !error && data) {
+        setContactForm({
+          phone: data.support_phone || '+233 24 881 4260',
+          email: data.support_email || 'support@cleanconnect.com',
+        });
+      }
+      if (error) console.warn('app_settings (contact) fetch:', error);
+      if (mounted) setContactLoading(false);
+    };
+    fetchContact();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSaveContact = async (e) => {
+    e.preventDefault();
+    if (!contactForm.phone.trim() || !contactForm.email.trim()) {
+      alert('Both phone and email are required.');
+      return;
+    }
+    setContactSaving(true);
+    const { error } = await supabase.from('app_settings').upsert({
+      id: true,
+      support_phone: contactForm.phone.trim(),
+      support_email: contactForm.email.trim(),
+    }, { onConflict: 'id' });
+    if (error) {
+      alert('Failed to save contact settings: ' + error.message);
+    } else {
+      setContactSaved(true);
+      setTimeout(() => setContactSaved(false), 3000);
+    }
+    setContactSaving(false);
+  };
+
   // Admin profile — backed by the real profiles row now
   const adminName = profile?.full_name || 'Admin';
   const adminEmail = session?.user?.email || profile?.email || '—';
@@ -519,6 +612,201 @@ export default function Settings() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* ── Help & Support ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px' }}>Help &amp; Support</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Official CleanConnect support contact channels. These are the details shown to customers in the mobile app.
+              Editing and saving here updates what customers see immediately.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveContact} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              {/* Phone */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.77 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  Support Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={contactForm.phone}
+                  onChange={(e) => setContactForm((p) => ({ ...p, phone: e.target.value }))}
+                  placeholder={contactLoading ? 'Loading…' : '+233 24 881 4260'}
+                  disabled={contactLoading}
+                  style={{ fontWeight: '700', fontSize: '15px' }}
+                />
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Shown on the "Call Us" card in the mobile app.</p>
+              </div>
+
+              {/* Email */}
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
+                  </svg>
+                  Support Email Address
+                </label>
+                <input
+                  type="email"
+                  value={contactForm.email}
+                  onChange={(e) => setContactForm((p) => ({ ...p, email: e.target.value }))}
+                  placeholder={contactLoading ? 'Loading…' : 'support@cleanconnect.com'}
+                  disabled={contactLoading}
+                  style={{ fontWeight: '700', fontSize: '15px' }}
+                />
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Shown on the "Email Support" card in the mobile app.</p>
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-app)', borderRadius: '12px', padding: '12px 16px', border: '1px solid var(--border-glass)', opacity: contactLoading ? 0.5 : 1 }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(34,197,94,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.77 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile Preview • Call Us</div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: 'var(--text-primary)', marginTop: '3px' }}>{contactForm.phone || '—'}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-app)', borderRadius: '12px', padding: '12px 16px', border: '1px solid var(--border-glass)', opacity: contactLoading ? 0.5 : 1 }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(2,132,199,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" />
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile Preview • Email Support</div>
+                  <div style={{ fontSize: '14px', fontWeight: '900', color: 'var(--text-primary)', marginTop: '3px' }}>{contactForm.email || '—'}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button
+                className="btn-primary"
+                type="submit"
+                disabled={contactSaving || contactLoading}
+                style={{ padding: '8px 20px', fontSize: '12px' }}
+              >
+                {contactSaving ? 'Saving…' : 'Save Contact Settings'}
+              </button>
+              {contactSaved && (
+                <span style={{ fontSize: '12px', color: 'var(--color-success)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                  Saved — mobile app will reflect this shortly
+                </span>
+              )}
+            </div>
+          </form>
+        </div>
+
+        {/* ── Support Tickets (Customer Problem Reports) ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ fontSize: '16px' }}>Customer Support Tickets</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                Reports submitted by customers via the mobile app — Missed Collection, Damaged Bin, Extra Pickup requests.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {['All', 'pending', 'resolved'].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setTicketFilter(f)}
+                  style={{
+                    padding: '5px 12px', fontSize: '11px', borderRadius: '20px', fontWeight: '700', cursor: 'pointer',
+                    background: ticketFilter === f ? 'var(--color-primary)' : 'transparent',
+                    color: ticketFilter === f ? 'white' : 'var(--text-secondary)',
+                    border: ticketFilter === f ? 'none' : '1px solid var(--border-divider)',
+                  }}
+                >
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {ticketsLoading ? (
+            <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '13px' }}>Loading tickets…</div>
+          ) : (() => {
+            const filtered = ticketFilter === 'All' ? supportTickets : supportTickets.filter(t => t.status === ticketFilter);
+            if (filtered.length === 0) {
+              return (
+                <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {ticketFilter === 'All' ? 'No support tickets submitted yet.' : `No ${ticketFilter} tickets.`}
+                </div>
+              );
+            }
+            return (
+              <div className="table-container">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Description</th>
+                      <th>Submitted</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((ticket) => (
+                      <tr key={ticket.id}>
+                        <td>
+                          <div style={{ fontWeight: '800', fontSize: '13px' }}>
+                            {ticket.title?.replace('Support Ticket: ', '') || '—'}
+                          </div>
+                        </td>
+                        <td style={{ maxWidth: '260px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ticket.description || '—'}
+                          </div>
+                        </td>
+                        <td style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {ticket.createdAt ? ticket.createdAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                        <td>
+                          <span className={`badge ${ticket.status === 'resolved' ? 'badge-active' : ticket.status === 'pending' ? 'badge-pending' : 'badge-defaulter'}`}>
+                            {ticket.status || 'pending'}
+                          </span>
+                        </td>
+                        <td>
+                          {ticket.status !== 'resolved' ? (
+                            <button
+                              className="btn-outline"
+                              style={{ padding: '4px 10px', fontSize: '11px', color: 'var(--color-success)', borderColor: 'var(--color-success)' }}
+                              onClick={() => handleUpdateTicketStatus(ticket.id, 'resolved')}
+                            >
+                              Mark Resolved
+                            </button>
+                          ) : (
+                            <button
+                              className="btn-outline"
+                              style={{ padding: '4px 10px', fontSize: '11px' }}
+                              onClick={() => handleUpdateTicketStatus(ticket.id, 'pending')}
+                            >
+                              Reopen
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
