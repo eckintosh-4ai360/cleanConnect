@@ -66,8 +66,7 @@ GoRouter router(Ref ref) {
       final authState = ref.read(authStateControllerProvider);
       final loc = state.uri.path;
 
-      // If we are currently loading the auth state (e.g. at startup),
-      // do not redirect to login yet to allow Splash Screen to run.
+      // Wait for auth to resolve before redirecting from splash
       if (authState is AuthLoading) {
         return null;
       }
@@ -87,31 +86,28 @@ GoRouter router(Ref ref) {
         if (!completedOnboarding) {
           return loc == '/onboarding' || loc == '/' ? null : '/onboarding';
         }
-        // If not logged in, only allow auth routes or splash route
         return isAuthRoute ? null : '/login';
       }
 
-      // If logged in and attempting to visit an auth/splash/onboarding route, redirect to their home
+      // Redirect authenticated users away from auth pages
       if (isAuthRoute) {
         return _getDashboardRoute(user.role);
       }
 
-      // Protect Customer routes
+      // Role-based route guards
       if (loc.startsWith('/customer/') && user.role != UserRole.customer) {
         return _getDashboardRoute(user.role);
       }
 
-      // Protect Rider routes
       if (loc.startsWith('/rider/') && user.role != UserRole.rider) {
         return _getDashboardRoute(user.role);
       }
 
-      // Protect Admin routes
       if (loc.startsWith('/admin/') && user.role != UserRole.admin) {
         return _getDashboardRoute(user.role);
       }
 
-      return null; // Proceed on current route
+      return null;
     },
     routes: [
       GoRoute(
@@ -194,9 +190,7 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const ReportIncidentScreen(),
       ),
       GoRoute(
-        // With no id the screen follows whichever request is currently live,
-        // which is what the dashboard banner links to. Passing a request id as
-        // `extra` pins it to that one booking.
+        // Optional requestId in state.extra tracks a specific booking
         path: '/customer/track',
         builder: (context, state) =>
             TrackPickupScreen(requestId: state.extra as String?),

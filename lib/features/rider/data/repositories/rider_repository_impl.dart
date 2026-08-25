@@ -39,10 +39,7 @@ class RiderRepositoryImpl implements RiderRepository {
     return getRiderProfile();
   }
 
-  // Identity fields (name/email/photo) come from Supabase Auth rather than a
-  // profiles join, since this repo only ever looks at the current rider's own
-  // profile and Realtime streams can't embed joined tables — matches the
-  // same source Phase 3's UI screens already use.
+  // Read identity fields from auth metadata for current rider
   RiderEntity _riderFromRow(Map<String, dynamic> r) {
     final authUser = _auth.currentUser;
     return RiderEntity(
@@ -86,11 +83,6 @@ class RiderRepositoryImpl implements RiderRepository {
 
   // ── Active Route & Stops ─────────────────────────────────────────────────
 
-  // A rider's day is driven by the pickups they accept: nothing in the app or
-  // the admin panel ever writes a `routes` / `route_stops` row, so watching
-  // that table alone left the Route screen permanently empty. The dispatcher
-  // table still wins when a row is actually there -- the accepted pickups are
-  // the fallback, which today is the only case that fires.
   @override
   Stream<ActiveRouteEntity?> watchActiveRoute() {
     return _db
@@ -128,10 +120,7 @@ class RiderRepositoryImpl implements RiderRepository {
     return rows.isEmpty ? null : rows.first;
   }
 
-  /// Folds the rider's pickups into the shape the Route screen already draws:
-  /// still-accepted requests become pending stops, and requests completed
-  /// today become collected ones so the progress strip reflects the real day
-  /// rather than sitting at zero. Returns null when there is nothing to work.
+  // Converts accepted/completed pickup requests into route stops
   ActiveRouteEntity? _routeFromPickups(List<PickupRequestEntity> pickups) {
     final today = DateTime.now();
     bool completedToday(PickupRequestEntity p) {
@@ -159,11 +148,7 @@ class RiderRepositoryImpl implements RiderRepository {
         address: p.location,
         binType: p.binTypes.isEmpty ? 'general' : p.binTypes.first,
         status: p.status == 'completed' ? 'collected' : 'pending',
-        // Weight is only known once the bin is on the scale, so the tile shows
-        // nothing rather than a made-up estimate.
         estimatedWeightKg: null,
-        // 0,0 for a request with no coordinates: the map reads that as "not
-        // plottable" instead of dropping a pin somewhere the rider isn't.
         latitude: p.destinationLat ?? 0,
         longitude: p.destinationLng ?? 0,
         stopOrder: i + 1,
@@ -182,9 +167,6 @@ class RiderRepositoryImpl implements RiderRepository {
       totalStops: stops.length,
       completedStops: stops.length - pending,
       startTime: relevant.first.acceptedAt ?? relevant.first.createdAt,
-      // Rough finish: driving the remaining chain plus ten minutes on site per
-      // stop. Nothing here is a promise to the customer, it fills the "Est.
-      // End" chip on the dashboard.
       estimatedEndTime: pending == 0
           ? null
           : DateTime.now()
@@ -195,9 +177,7 @@ class RiderRepositoryImpl implements RiderRepository {
     );
   }
 
-  /// Straight-line distance along the stops in order, skipping any without
-  /// coordinates. An under-estimate of the driven distance, but derived from
-  /// the actual stops rather than the schema's 12 km placeholder.
+  // Straight-line distance estimate along sequential stops
   double _chainDistanceKm(List<RouteStopEntity> stops) {
     final points = stops
         .where((s) => s.latitude != 0 || s.longitude != 0)
@@ -366,8 +346,6 @@ class RiderRepositoryImpl implements RiderRepository {
             .gte('collected_at', windowStart.toIso8601String())) as List)
         .cast<Map<String, dynamic>>();
 
-    // route_stops RLS ("route_stops_select_own_rider") already scopes this
-    // to routes assigned to the current rider.
     final stopRows = ((await _db
             .from('route_stops')
             .select('status, created_at')
@@ -410,7 +388,7 @@ class RiderRepositoryImpl implements RiderRepository {
     final onTimeDeliveryRate = monthResolved == 0 ? 1.0 : monthCollected / monthResolved;
 
     final fallbackScore = (r['efficiency_score'] as num?)?.toDouble() ?? 100.0;
-    // null = no stops that day, rendered as "no data" rather than a fabricated score.
+    // Weekly efficiency scores (null if no stops on that day)
     final weeklyScores = List<double?>.generate(7, (i) {
       final day = startOfWeek.add(Duration(days: i));
       final dayStops = stopRows.where((s) => sameDay(day, s['created_at']));
@@ -496,8 +474,6 @@ class RiderRepositoryImpl implements RiderRepository {
 
   @override
   Stream<List<PickupRequestEntity>> watchMyAcceptedPickups() {
-    // .stream() only supports one .eq(), so (like watchActivePickupTracking
-    // on the customer side) the status check happens client-side.
     return _db
         .from('pickup_requests')
         .stream(primaryKey: ['id'])
@@ -540,9 +516,7 @@ class RiderRepositoryImpl implements RiderRepository {
 
   @override
   Future<void> releaseDeviceFcmToken(String token) async {
-    // RPC rather than a direct update: nulling *another* rider's row is
-    // deliberately outside what the riders RLS policies allow, and the caller
-    // here is usually a customer. See release_device_fcm_token's migration.
+    // Unlinks FCM token via RPC
     await _db.rpc('release_device_fcm_token', params: {'p_token': token});
   }
 

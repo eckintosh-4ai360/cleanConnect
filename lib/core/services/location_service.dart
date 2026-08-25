@@ -6,33 +6,20 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../config/map_config.dart';
 
-/// Outcome of asking the OS for location access, so callers can render a
-/// specific message instead of a generic failure.
+/// Permission status for location access
 enum LocationAccess {
   granted,
-
-  /// Refused this time; asking again is allowed.
   denied,
-
-  /// Refused permanently — only Settings can undo it, so the UI must offer
-  /// [openAppSettings] rather than re-prompting.
   deniedForever,
-
-  /// Permission is fine but the device's location toggle is off.
   serviceDisabled,
 }
 
-/// Thin wrapper over geolocator that centralises permission flow and the
-/// platform-specific settings needed for continuous rider tracking.
+/// Geolocator wrapper managing permissions and rider tracking streams
 class LocationService {
   LocationService._();
   static final LocationService instance = LocationService._();
 
-  /// Requests foreground location, reporting exactly why it failed.
-  ///
-  /// The service check runs first: on a device with location switched off,
-  /// the permission dialog can be accepted and every subsequent fix still
-  /// times out, which reads to the user as the app being broken.
+  // Requests foreground location permission
   Future<LocationAccess> ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       return LocationAccess.serviceDisabled;
@@ -55,8 +42,7 @@ class LocationService {
     }
   }
 
-  /// One-shot fix. Returns null rather than throwing so callers can degrade to
-  /// a last-known position or the city fallback without a try/catch each time.
+  // Get single GPS fix, with fallback to last known position
   Future<Position?> currentPosition({
     LocationAccuracy accuracy = LocationAccuracy.high,
     Duration timeout = const Duration(seconds: 12),
@@ -68,7 +54,6 @@ class LocationService {
       );
     } catch (e) {
       debugPrint('LocationService.currentPosition failed: $e');
-      // A cached fix beats no map at all while the GPS chip is still warming up.
       try {
         return await Geolocator.getLastKnownPosition();
       } catch (_) {
@@ -77,13 +62,7 @@ class LocationService {
     }
   }
 
-  /// Continuous position stream.
-  ///
-  /// With [forJob] true the Android stream is promoted to a foreground service
-  /// with a persistent notification, so tracking survives the rider locking
-  /// their screen or switching to the Google Maps app mid-delivery. Android 14
-  /// kills a background location stream within minutes otherwise, which is what
-  /// makes an active pickup silently stop updating for dispatch.
+  // Live GPS position stream (uses foreground service during active jobs)
   Stream<Position> positionStream({
     bool forJob = false,
     int distanceFilterMeters = MapConfig.riderDistanceFilterMeters,
@@ -111,9 +90,6 @@ class LocationService {
       return AndroidSettings(
         accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: distanceFilterMeters,
-        // Upper bound on silence from the OS. Without it a stationary rider
-        // produces no events at all and the UI cannot distinguish "parked"
-        // from "GPS died".
         intervalDuration: const Duration(seconds: 5),
         forceLocationManager: false,
         foregroundNotificationConfig: forJob
@@ -134,9 +110,6 @@ class LocationService {
         accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: distanceFilterMeters,
         activityType: ActivityType.automotiveNavigation,
-        // Both are required for iOS to keep delivering fixes with the app
-        // backgrounded; pauseAutomatically would otherwise stop the stream
-        // when iOS decides the rider has stopped moving.
         allowBackgroundLocationUpdates: forJob,
         showBackgroundLocationIndicator: forJob,
         pauseLocationUpdatesAutomatically: false,
@@ -149,11 +122,7 @@ class LocationService {
     );
   }
 
-  /// Deep-links to the OS app settings page — the only recovery path after
-  /// [LocationAccess.deniedForever].
   Future<bool> openAppSettings() => Geolocator.openAppSettings();
-
-  /// Opens the system location toggle for [LocationAccess.serviceDisabled].
   Future<bool> openLocationSettings() => Geolocator.openLocationSettings();
 
   static LatLng toLatLng(Position p) => LatLng(p.latitude, p.longitude);

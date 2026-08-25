@@ -15,7 +15,7 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase — only used for push (FCM); auth/data live in Supabase.
+  // Init Firebase for push notifications (FCM)
   var firebaseReady = false;
   try {
     await Firebase.initializeApp(
@@ -24,11 +24,10 @@ void main() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     firebaseReady = true;
   } catch (e) {
-    // Non-fatal: the app is fully usable without push, so don't block startup.
     debugPrint('!! PUSH DISABLED — Firebase failed to initialize: $e');
   }
 
-  // Initialize Supabase (auth, database, realtime, storage)
+  // Init Supabase
   try {
     await Supabase.initialize(
       url: 'https://mfysompctaxldphbxvkv.supabase.co',
@@ -38,14 +37,12 @@ void main() async {
     debugPrint('Supabase initialization warning: $e');
   }
 
-  // Initialize Local Cache (Hive)
+  // Local storage
   await Hive.initFlutter();
   await Hive.openBox('auth_box');
   await Hive.openBox('settings_box');
 
-  // A container we hold onto directly (rather than only inside ProviderScope)
-  // so NotificationService can read/navigate from outside the widget tree —
-  // needed to react to FCM taps received while the app is backgrounded.
+  // ProviderContainer for background notifications & top-level routing
   final container = ProviderContainer();
   if (firebaseReady) {
     try {
@@ -54,10 +51,6 @@ void main() async {
       debugPrint('!! PUSH DISABLED — NotificationService failed to start: $e');
     }
   }
-
-  // runApp(
-  //   UncontrolledProviderScope(container: container, child: const EcoWasteApp()),
-  // );
 
   runApp(
     DevicePreview(

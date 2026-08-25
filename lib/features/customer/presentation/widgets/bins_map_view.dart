@@ -7,9 +7,7 @@ import '../../../../core/shared/widgets/app_map.dart';
 import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/customer_entities.dart';
 
-/// Map view of every registered bin, colour-coded green for company-owned
-/// (CCB) bins and blue for self-registered personal (PB) bins, so a customer
-/// can see at a glance where their bins are scattered.
+/// Displays customer's registered bins on a map with company vs personal markers
 class BinsMapView extends HookWidget {
   final List<BinEntity> bins;
 
@@ -79,8 +77,7 @@ class BinsMapView extends HookWidget {
 
       buildMarkers();
       return null;
-      // mapController.value flips from null -> controller once the map is
-      // ready; re-running then lets the just-built markers also fit-camera.
+      // Re-fit camera when map controller initializes
     }, [mappableBins, mapController.value]);
 
     if (mappableBins.isEmpty) {

@@ -12,22 +12,14 @@ import 'rider_providers.dart';
 
 part 'rider_tracking_provider.g.dart';
 
-/// Snapshot of the rider's own device location, plus whether it is currently
-/// being broadcast to Supabase.
+/// Live tracking state of the rider's device and broadcast status
 @immutable
 class RiderTrackingState {
   final Position? position;
   final LocationAccess? access;
   final bool isBroadcasting;
-
-  /// Job whose row is being mirrored, if any. Null means "profile only".
   final String? jobId;
-
-  /// Last error seen while pushing a fix. Kept so the UI can show a quiet
-  /// "reconnecting" hint rather than a blocking dialog -- a dropped upload is
-  /// recoverable and the next fix retries in seconds.
   final String? uploadError;
-
   final DateTime? lastUploadAt;
 
   const RiderTrackingState({
@@ -44,17 +36,14 @@ class RiderTrackingState {
   LatLng? get latLng =>
       position == null ? null : LatLng(position!.latitude, position!.longitude);
 
-  /// Heading in degrees. GPS reports -1 (or a meaningless value) when the
-  /// device is stationary, so callers should treat null as "keep the last
-  /// known bearing" rather than snapping the marker to north.
+  // Heading in degrees (null if stationary or unavailable)
   double? get heading {
     final h = position?.heading;
     if (h == null || h < 0) return null;
     return h;
   }
 
-  /// Ground speed in km/h, floored at zero -- some Android devices report a
-  /// small negative speed when the fix is interpolated.
+  // Speed in km/h
   double get speedKmh {
     final s = position?.speed ?? 0;
     return s <= 0 ? 0 : s * 3.6;
@@ -86,12 +75,7 @@ class RiderTrackingState {
   }
 }
 
-/// Owns the rider's GPS stream and mirrors each fix to Supabase.
-///
-/// This replaces the timer that used to nudge fake coordinates on the
-/// navigation screen. There is exactly one of these per app session, so a rider
-/// moving between the navigation screen and the route screen keeps a single
-/// subscription and a single upload cadence rather than stacking them.
+/// Streams rider GPS updates and broadcasts location to Supabase
 @Riverpod(keepAlive: true)
 class RiderTracking extends _$RiderTracking {
   StreamSubscription<Position>? _subscription;
@@ -105,22 +89,10 @@ class RiderTracking extends _$RiderTracking {
     return const RiderTrackingState();
   }
 
-  /// Starts streaming. With [jobId] set, fixes are mirrored onto that pickup's
-  /// row as well as the rider profile, and Android promotes the stream to a
-  /// foreground service so tracking survives the screen locking.
-  ///
-  /// Safe to call repeatedly. Switching between two jobs only re-points the
-  /// mirror target; switching between "no job" and "on a job" restarts the
-  /// stream, because that is what changes the platform settings underneath it.
+  // Starts continuous GPS tracking (with optional foreground service for active job)
   Future<void> start({String? jobId}) async {
     if (state.isBroadcasting && state.jobId == jobId) return;
 
-    // Whether we need a foreground service is decided by the presence of a job,
-    // not its identity. Only when that flag is unchanged can we swap the target
-    // without tearing the stream down -- otherwise the rider accepts a job and
-    // the foreground service never starts, so tracking dies the moment they
-    // lock the screen. That failure is invisible on the rider's own device and
-    // only shows up as a frozen marker for dispatch and the customer.
     final needsForegroundService = jobId != null;
     final hadForegroundService = state.jobId != null;
 
@@ -138,8 +110,7 @@ class RiderTracking extends _$RiderTracking {
       return;
     }
 
-    // Seed the map with whatever fix is available immediately so the camera
-    // does not sit on the city fallback while the first stream event lands.
+    // Seed initial position fix
     final initial = await LocationService.instance.currentPosition();
     if (initial != null) {
       state = state.copyWith(position: initial);
@@ -166,9 +137,7 @@ class RiderTracking extends _$RiderTracking {
     );
   }
 
-  /// Stops streaming and tears down the Android foreground service. Called when
-  /// the rider ends a job or goes off duty -- not on every screen dispose, so
-  /// navigating away from the map does not silently stop dispatch tracking.
+  // Stops GPS stream and background service
   Future<void> stop() async {
     await _subscription?.cancel();
     _subscription = null;
@@ -178,7 +147,7 @@ class RiderTracking extends _$RiderTracking {
     state = state.copyWith(isBroadcasting: false, clearJobId: true);
   }
 
-  /// Re-runs the permission request after the rider returns from Settings.
+  // Re-evaluates location permission
   Future<LocationAccess> retryPermission() async {
     final access = await LocationService.instance.ensurePermission();
     state = state.copyWith(access: access);
@@ -193,12 +162,7 @@ class RiderTracking extends _$RiderTracking {
     _queueUpload(position);
   }
 
-  /// Throttles writes to [MapConfig.riderUploadInterval].
-  ///
-  /// The GPS stream fires far faster than dispatch needs while driving, and
-  /// every write fans out over Realtime to the admin panel and the customer's
-  /// tracking screen. The newest fix always wins -- a queued older one is
-  /// replaced rather than sent late.
+  // Throttles database location writes
   void _queueUpload(Position position) {
     _pendingUpload = position;
 
@@ -242,8 +206,6 @@ class RiderTracking extends _$RiderTracking {
         state = state.copyWith(lastUploadAt: _lastUploadAt);
       }
     } catch (e) {
-      // Non-fatal: the rider keeps navigating on-device and the next fix
-      // retries. Surfacing it lets the UI show a "not syncing" indicator.
       debugPrint('RiderTracking: location upload failed - $e');
       state = state.copyWith(uploadError: 'Not syncing with dispatch');
     }
@@ -255,8 +217,7 @@ class RiderTracking extends _$RiderTracking {
   }
 }
 
-/// Distance in metres from the rider's current fix to [target], or null when
-/// there is no fix yet. Used for the arrival check on the navigation screen.
+// Calculates distance in meters from current rider position to target
 double? riderDistanceTo(RiderTrackingState state, LatLng? target) {
   final from = state.latLng;
   if (from == null || target == null) return null;

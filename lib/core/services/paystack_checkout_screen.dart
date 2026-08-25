@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-/// How the hosted Paystack checkout page was closed.
-///
-/// [completed] only means Paystack redirected to the callback URL — it is not
-/// proof of payment. PaystackService still verifies the reference server-side
-/// before treating the charge as real.
+/// Checkout completion outcome
 enum CheckoutOutcome { completed, cancelled, loadFailed }
 
-/// Renders Paystack's hosted checkout (the `authorization_url` returned by the
-/// initialize-paystack-transaction Edge Function) and pops with a
-/// [CheckoutOutcome] once the page redirects to the callback URL or the user
-/// backs out.
+/// Renders Paystack hosted checkout in a WebView
 class PaystackCheckoutScreen extends StatefulWidget {
   const PaystackCheckoutScreen({
     super.key,
@@ -30,8 +23,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
 
-  /// Guards against popping twice — onPageStarted and onNavigationRequest can
-  /// both see the callback URL for a single redirect.
+  // Prevent double pop on multiple redirect events
   bool _finished = false;
 
   @override
@@ -55,9 +47,7 @@ class _PaystackCheckoutScreenState extends State<PaystackCheckoutScreen> {
             if (mounted) setState(() => _isLoading = false);
           },
           onWebResourceError: (error) {
-            // Sub-resources (fonts, analytics beacons) fail routinely on the
-            // checkout page; only a failure of the main document means the
-            // customer is looking at a broken screen.
+            // Only report failures if main document failed to load
             if (error.isForMainFrame ?? false) {
               _finish(CheckoutOutcome.loadFailed);
             }

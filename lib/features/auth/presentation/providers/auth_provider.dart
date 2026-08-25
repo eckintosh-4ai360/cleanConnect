@@ -107,7 +107,6 @@ class AuthStateController extends _$AuthStateController {
         _subscription?.cancel();
       });
     } catch (e) {
-      // Return AuthError to prevent app crash if Supabase is not initialized
       return AuthError('Supabase is not initialized: ${e.toString()}');
     }
 
@@ -158,10 +157,7 @@ class AuthStateController extends _$AuthStateController {
   }
 
   Future<void> logout() async {
-    // Before the session goes away, while RLS still allows the write: hand
-    // back this device's push registration. The new-pickup fan-out targets
-    // every token stored on the riders table, so one left behind here keeps
-    // alerting (and vibrating) whoever signs in on this device next.
+    // Clear device push token and cancel notifications before signing out
     await NotificationService.instance.handleLogout();
     state = const AuthLoading();
     try {

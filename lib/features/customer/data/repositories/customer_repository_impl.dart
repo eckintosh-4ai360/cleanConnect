@@ -175,10 +175,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'p_surcharge_applied_percentage': surchargeAppliedPercentage,
       'p_receipt_number': receiptNumber,
       'p_payment_reference': paymentReference,
-      // Sent only when the device actually produced a fix. Omitting the keys
-      // (rather than passing nulls) lets schedule_pickup fall back to parsing
-      // coordinates out of the location text, which is where a saved bin's
-      // gps_location already puts them.
+      // Pass coordinates if GPS fix is available
       if (locationLat != null && locationLng != null) 'p_location_lat': locationLat,
       if (locationLat != null && locationLng != null) 'p_location_lng': locationLng,
     });
@@ -191,7 +188,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     await _db.rpc('cancel_pickup', params: {'p_request_id': requestId});
   }
 
-  // -- Live tracking --------------------------------------------------------
+  // Live tracking
 
   @override
   Stream<PickupTrackingEntity?> watchPickupTracking(String requestId) {
@@ -207,10 +204,6 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
   @override
   Stream<PickupTrackingEntity?> watchActivePickupTracking() {
-    // .stream() supports a single .eq(), so the status filter is applied in
-    // Dart. The customer's own request list is small, and doing it here keeps
-    // the Realtime subscription on the same channel the rest of the customer
-    // screens already use.
     return _db
         .from('pickup_requests')
         .stream(primaryKey: ['id'])
@@ -221,8 +214,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
           Map<String, dynamic>? best;
           for (final row in rows) {
             if (!liveStatuses.contains(row['status'] as String? ?? '')) continue;
-            // An assigned request outranks a still-pending one: that is the
-            // one with a rider to actually follow on the map.
+            // Prefer assigned/in-progress pickup over pending
             if (best == null ||
                 (row['assigned_rider_id'] != null && best['assigned_rider_id'] == null)) {
               best = row;
@@ -246,10 +238,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     });
   }
 
-  /// Rider contact details are fetched through an RPC rather than a join --
-  /// customers have no select policy on `riders` or another user's `profiles`.
-  /// Cached per request id so a position update every few seconds does not
-  /// re-fetch a card that cannot have changed.
+  // Cached rider cards to prevent refetching during live tracking
   final Map<String, Map<String, dynamic>?> _riderCardCache = {};
 
   Future<Map<String, dynamic>?> _riderCard(String requestId, String? riderId) async {
@@ -265,7 +254,6 @@ class CustomerRepositoryImpl implements CustomerRepository {
       _riderCardCache[requestId] = card;
       return card;
     } catch (_) {
-      // Contact details are a nicety; losing them must not blank the map.
       return null;
     }
   }
@@ -447,10 +435,6 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String fileName,
   }) async {
     final extension = fileName.contains('.') ? fileName.split('.').last : 'jpg';
-    // Fixed path per customer (not a new file per upload) so re-uploading
-    // overwrites the old photo instead of accumulating orphaned files, and so
-    // every pickup_requests snapshot that already points at this URL updates
-    // too -- see schedule_pickup, which copies the URL at request time.
     final path = '$_uid/house.$extension';
     await _db.storage.from('house-photos').uploadBinary(
           path,
@@ -458,10 +442,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
           fileOptions: const FileOptions(upsert: true),
         );
     final publicUrl = _db.storage.from('house-photos').getPublicUrl(path);
-    // The path is fixed per customer, so a re-upload keeps the same URL --
-    // append a cache-busting query param or every viewer (rider app, this
-    // app's own Image.network cache) keeps showing the photo it fetched
-    // before this update.
+    // Cache-busting timestamp query param
     final url = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
     await _db.from('customers').update({'house_photo_url': url}).eq('id', _uid);
   }

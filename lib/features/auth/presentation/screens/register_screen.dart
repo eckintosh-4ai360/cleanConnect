@@ -300,15 +300,11 @@ class RegisterScreen extends HookConsumerWidget {
                             if (value == null || value.trim().isEmpty) {
                               return 'Please enter your phone number';
                             }
-                            // Matches the normalization notify-bin-assignment-sms
-                            // applies before dispatch: 0XXXXXXXXX or 233XXXXXXXXX
-                            // (optionally with a leading '+'). Anything else is a
-                            // number the SMS provider can't actually deliver to.
-                            final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-                            final isValid = RegExp(r'^0\d{9}$').hasMatch(digits) ||
-                                RegExp(r'^233\d{9}$').hasMatch(digits);
-                            if (!isValid) {
-                              return 'Enter a valid Ghana phone number';
+                            // Valid Ghana phone number format (0XXXXXXXXX or +233XXXXXXXXX)
+                            final clean = value.replaceAll(RegExp(r'[\s-]'), '');
+                            final ghanaPattern = RegExp(r'^(\+?233|0)[235][0-9]{8}$');
+                            if (!ghanaPattern.hasMatch(clean)) {
+                              return 'Enter a valid 10-digit Ghana phone number';
                             }
                             return null;
                           },

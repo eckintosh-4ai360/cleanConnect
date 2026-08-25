@@ -5,10 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/map_config.dart';
 import '../utils/geo_utils.dart';
 
-/// A drivable route between two points, plus the turn-by-turn text for the
-/// current leg. [isFallback] tells the UI whether this came off the Routes API
-/// or is the straight-line approximation, so it can label the ETA honestly
-/// instead of presenting a guess as a traffic-aware estimate.
+/// Drivable route between two points with turn-by-turn steps
 class RouteResult {
   final List<LatLng> polyline;
   final double distanceMeters;
@@ -30,7 +27,7 @@ class RouteResult {
   RouteStep? get nextStep => steps.isEmpty ? null : steps.first;
 }
 
-/// One manoeuvre from the Routes API, e.g. "Turn right onto Ring Road East".
+/// A single turn-by-turn navigation maneuver
 class RouteStep {
   final String instruction;
   final double distanceMeters;
@@ -45,12 +42,7 @@ class RouteStep {
   String get distanceLabel => GeoUtils.formatDistance(distanceMeters);
 }
 
-/// Google Routes API client with a straight-line fallback.
-///
-/// Every method degrades instead of throwing: with no API key, no network, or
-/// a quota error, the caller still gets a usable [RouteResult] built from
-/// haversine geometry. That keeps navigation working offline and keeps the
-/// screens honest -- `isFallback` surfaces which one they got.
+/// Google Routes API client with straight-line haversine fallback
 class DirectionsService {
   DirectionsService._();
   static final DirectionsService instance = DirectionsService._();
@@ -67,16 +59,10 @@ class DirectionsService {
     ),
   );
 
-  /// Cache keyed by rounded origin/destination. A rider's GPS jitters every few
-  /// seconds; without this the same route would be re-billed continuously while
-  /// they sit at a junction.
+  // Cache to avoid refetching on minor GPS jitter
   final Map<String, RouteResult> _routeCache = {};
 
-  /// Road-following route from [origin] to [destination].
-  ///
-  /// [travelMode] accepts the Routes API values -- 'DRIVE' for vans,
-  /// 'TWO_WHEELER' for motorbikes, which routes through bike-legal roads and
-  /// gives a realistic ETA for Accra traffic.
+  // Fetches road route between two points
   Future<RouteResult> getRoute({
     required LatLng origin,
     required LatLng destination,
@@ -98,8 +84,6 @@ class DirectionsService {
           headers: {
             'Content-Type': 'application/json',
             'X-Goog-Api-Key': MapConfig.webServiceApiKey,
-            // The Routes API bills by the fields requested, so ask only for
-            // what the navigation UI actually renders.
             'X-Goog-FieldMask': includeSteps
                 ? 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,'
                     'routes.legs.steps.navigationInstruction,routes.legs.steps.distanceMeters'
@@ -110,9 +94,6 @@ class DirectionsService {
           'origin': _waypoint(origin),
           'destination': _waypoint(destination),
           'travelMode': travelMode,
-          // TRAFFIC_AWARE is the cheaper of the two traffic models and is
-          // accurate enough for a pickup ETA; TRAFFIC_AWARE_OPTIMAL costs more
-          // and is aimed at long-haul routing.
           if (travelMode == 'DRIVE') 'routingPreference': 'TRAFFIC_AWARE',
           'polylineQuality': 'HIGH_QUALITY',
           'languageCode': 'en-GB',
@@ -127,9 +108,6 @@ class DirectionsService {
       }
       debugPrint('DirectionsService: Routes API returned no usable route.');
     } on DioException catch (e) {
-      // 403 = key not enabled for Routes API, 429 = quota exhausted. Both are
-      // configuration problems the developer needs to see in the log, not
-      // user-facing errors -- the fallback below keeps the screen working.
       debugPrint(
         'DirectionsService: Routes API ${e.response?.statusCode} - '
         '${e.response?.data ?? e.message}',
@@ -141,12 +119,7 @@ class DirectionsService {
     return _straightLine(origin, destination);
   }
 
-  /// Resolves a human-readable address to coordinates.
-  ///
-  /// Only used for legacy pickup rows whose `location` column holds an address
-  /// rather than coordinates; new requests store lat/lng directly, so this
-  /// should be a rare call. Returns null when it cannot resolve, letting the
-  /// caller fall back to the customer's registered bin location.
+  // Geocodes address string to LatLng
   Future<LatLng?> geocodeAddress(String address, {String region = 'gh'}) async {
     if (!MapConfig.hasWebServiceKey || address.trim().isEmpty) return null;
 
@@ -185,10 +158,7 @@ class DirectionsService {
     }
   }
 
-  /// Resolves coordinates to a human-readable address, for labelling a pin the
-  /// customer just dropped on the map. Returns null (never throws) when the
-  /// key is absent or the point has no known address -- callers fall back to
-  /// showing the raw coordinates.
+  // Converts LatLng coordinates to readable address
   Future<String?> reverseGeocode(LatLng point) async {
     if (!MapConfig.hasWebServiceKey) return null;
 
@@ -217,7 +187,7 @@ class DirectionsService {
 
   void clearCache() => _routeCache.clear();
 
-  // -- Internals ------------------------------------------------------------
+  // Internal Helpers
 
   Map<String, dynamic> _waypoint(LatLng p) => {
         'location': {
@@ -225,7 +195,7 @@ class DirectionsService {
         },
       };
 
-  /// Rounded to ~11 m so tiny GPS drift maps onto the same cache entry.
+  // Rounded to ~11m precision for cache keys
   String _cacheKey(LatLng a, LatLng b, String mode) =>
       '${a.latitude.toStringAsFixed(4)},${a.longitude.toStringAsFixed(4)}'
       '|${b.latitude.toStringAsFixed(4)},${b.longitude.toStringAsFixed(4)}|$mode';
@@ -268,7 +238,6 @@ class DirectionsService {
     );
   }
 
-  /// Routes API returns protobuf durations as `"832s"`.
   Duration _parseDuration(String? raw) {
     if (raw == null) return Duration.zero;
     final seconds = int.tryParse(raw.replaceAll(RegExp(r'[^0-9]'), ''));
@@ -286,10 +255,7 @@ class DirectionsService {
     );
   }
 
-  /// Google's encoded polyline algorithm, format 1.
-  ///
-  /// Implemented here rather than pulled in as a dependency -- it is ~30 lines
-  /// and the published packages wrap the legacy Directions API we are not using.
+  // Google polyline decoder
   @visibleForTesting
   static List<LatLng> decodePolyline(String encoded) {
     final points = <LatLng>[];
@@ -313,7 +279,6 @@ class DirectionsService {
     return points;
   }
 
-  /// Reads one zig-zag-encoded varint starting at [start].
   static _VarintRead _decodeValue(String encoded, int start) {
     var index = start;
     var shift = 0;

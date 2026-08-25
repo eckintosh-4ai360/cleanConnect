@@ -10,10 +10,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   AuthRepositoryImpl();
 
-  /// Whether a real Supabase backend is initialized. Mirrors the app's
-  /// pre-existing Firebase demo-mode precedent: if `Supabase.initialize()`
-  /// was never called (e.g. a stripped-down test harness), fall back to a
-  /// local Hive-backed mock auth instead of crashing.
+  // Check if Supabase client is initialized; fall back to local mock if not
   static bool get isSupabaseAvailable {
     try {
       sb.Supabase.instance.client;
@@ -144,9 +141,7 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     try {
-      // The handle_new_user() Postgres trigger fans this metadata out into
-      // profiles + customers/riders (and an admin_notifications row) as soon
-      // as the auth.users row is inserted — see supabase/migrations.
+      // User metadata triggers the DB handle_new_user function to create role rows
       final response = await _client.auth.signUp(
         email: email,
         password: password,
@@ -164,12 +159,7 @@ class AuthRepositoryImpl implements AuthRepository {
         throw Exception('Registration failed.');
       }
 
-      // House photo goes to customers.house_photo_url (not
-      // profiles.profile_picture_url — that column is the shared account
-      // avatar, and a house/building photo is a customer-only, pickup-facing
-      // concept riders read straight off pickup_requests). Uploaded to
-      // Storage rather than kept as a local path, which only ever resolved
-      // on the device that took the photo.
+      // Upload house photo if provided (customers only)
       if (housePhotoBytes != null && housePhotoBytes.isNotEmpty) {
         try {
           final extension = (housePhotoFileName ?? '').contains('.')
@@ -185,10 +175,7 @@ class AuthRepositoryImpl implements AuthRepository {
           await _client
               .from('customers')
               .update({'house_photo_url': photoUrl}).eq('id', authUser.id);
-        } catch (_) {
-          // Non-fatal: registration already succeeded. A missing house photo
-          // just means the rider falls back to the map pin alone.
-        }
+        } catch (_) {}
       }
 
       return UserEntity(

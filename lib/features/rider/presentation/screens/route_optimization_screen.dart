@@ -218,10 +218,7 @@ class _StopListTab extends ConsumerWidget {
             itemCount: route.stops.length,
             itemBuilder: (context, index) {
               final stop = route.stops[index];
-              // A stop standing in for an accepted pickup is completed through
-              // the QR-verified collection flow, not mark_stop_collected --
-              // and "problem" has no equivalent there, so that action is only
-              // offered on dispatcher route stops.
+              // Pickup stops use QR collection flow; route stops use dispatcher mark-collected
               final pickup = stop.pickupRequest;
               return _StopTile(
                 stop: stop,
@@ -635,12 +632,7 @@ class _StopTile extends StatelessWidget {
 
 // Map View Tab
 
-/// Real Google map of the active route: one numbered pin per stop, coloured by
-/// collection status, joined by the road path between them.
-///
-/// This replaced a `CustomPaint` that scattered dots on a grid of fake roads --
-/// the pin positions bore no relation to [RouteStopEntity.latitude] /
-/// [RouteStopEntity.longitude], which the route data has carried all along.
+/// Interactive map showing stops along the active route with road paths
 class _MapViewTab extends ConsumerStatefulWidget {
   final ActiveRouteEntity route;
   const _MapViewTab({required this.route});
@@ -655,9 +647,7 @@ class _MapViewTabState extends ConsumerState<_MapViewTab> {
   RouteResult? _roadRoute;
   bool _loadingRoute = false;
 
-  /// Stop ids the current [_roadRoute] was built from, so the route is only
-  /// re-fetched when the itinerary actually changes -- not on every rebuild
-  /// caused by an unrelated status update elsewhere in the stream.
+  // Cached signature of stop IDs to avoid redundant route re-fetching
   String? _routeSignature;
 
   @override
@@ -718,10 +708,7 @@ class _MapViewTabState extends ConsumerState<_MapViewTab> {
     setState(() => _markers = markers);
   }
 
-  /// Fetches the road path through the remaining stops.
-  ///
-  /// The Routes API takes intermediate waypoints, so the whole itinerary comes
-  /// back as one polyline rather than one call per leg.
+  // Fetches road directions polyline for remaining stops
   Future<void> _loadRoadRoute() async {
     final stops = _plottableStops;
     if (stops.length < 2 || _loadingRoute) return;
@@ -731,8 +718,6 @@ class _MapViewTabState extends ConsumerState<_MapViewTab> {
 
     setState(() => _loadingRoute = true);
 
-    // Routes API caps intermediates; with a long route the shape between the
-    // first and last stop is still right, just less detailed in the middle.
     final result = await DirectionsService.instance.getRoute(
       origin: LatLng(stops.first.latitude, stops.first.longitude),
       destination: LatLng(stops.last.latitude, stops.last.longitude),
@@ -756,8 +741,7 @@ class _MapViewTabState extends ConsumerState<_MapViewTab> {
   }
 
   Future<void> _centreOnRider() async {
-    // Prefer the live tracking fix; fall back to a one-shot read when the rider
-    // has not started a job yet and the stream is therefore idle.
+    // Live tracking fix or fallback to single GPS read
     var position = ref.read(riderTrackingProvider).latLng;
     if (position == null) {
       final fix = await LocationService.instance.currentPosition();
@@ -920,9 +904,7 @@ class _MapViewTabState extends ConsumerState<_MapViewTab> {
   }
 }
 
-/// Shown when the route has stops but none carry usable coordinates, which is
-/// the one case where a map genuinely has nothing to draw. Saying so beats
-/// rendering an empty city view that looks like a loading failure.
+// Notice when no stops have valid GPS coordinates
 class _NoPlottableStopsNotice extends StatelessWidget {
   final int stopCount;
   const _NoPlottableStopsNotice({required this.stopCount});
@@ -1035,9 +1017,7 @@ class _NextStopCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  // Hands the stop to the Google Maps app for voice guidance.
-                  // Prefers coordinates over the address so the handoff lands
-                  // on the same point the pin is drawn at.
+                  // Open navigation in external Google Maps app
                   onPressed: () => _navigateToStop(context, nextStop),
                   icon: const Icon(Icons.navigation, size: 16),
                   label: const Text('Navigate', style: TextStyle(fontSize: 12)),

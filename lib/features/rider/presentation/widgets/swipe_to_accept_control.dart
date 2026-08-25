@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// A hand-built "slide to accept" control (Uber/Bolt-style incoming-ride
-/// pattern): the rider drags the thumb to the end of the track to confirm.
-/// Dragging less than the confirm threshold snaps the thumb back to start.
+/// Slide-to-confirm gesture control for accepting pickups
 class SwipeToAcceptControl extends StatefulWidget {
   const SwipeToAcceptControl({
     super.key,

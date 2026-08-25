@@ -12,6 +12,7 @@ import '../../../../core/services/directions_service.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/services/paystack_service.dart';
 import '../../../../core/utils/geo_utils.dart';
+import '../../../../core/utils/paystack_fees.dart';
 import 'location_picker_screen.dart';
 
 class PickupRequestScreen extends HookConsumerWidget {
@@ -254,6 +255,10 @@ class PickupRequestScreen extends HookConsumerWidget {
     final surchargeAmount = hasOverduePayment ? (originalTotal * 0.10) : 0.0;
     final pickupTotal = originalTotal - discountAmount + surchargeAmount;
 
+    // Paystack deducts its fee from whatever is charged, so the customer is
+    // charged the grossed-up amount and the company still settles pickupTotal.
+    final charge = PaystackFees.chargeForAmount(pickupTotal);
+
     Future<void> handleConfirmPickup() async {
       if (selectedBins.value.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -304,12 +309,10 @@ class PickupRequestScreen extends HookConsumerWidget {
             return;
           }
 
-          final amountInPesewas = (pickupTotal * 100).round();
-
           final paymentResult = await PaystackService.instance.initiatePayment(
             context: context,
             email: email,
-            amountInSmallest: amountInPesewas,
+            amountInSmallest: charge.total,
             currency: 'GHS',
             metadata: {
               'type': 'pickup_request_pay_as_you_go',
@@ -321,6 +324,9 @@ class PickupRequestScreen extends HookConsumerWidget {
               'discount_percentage': discountPercentage,
               'surcharge_percentage': surchargePercentage,
               'original_total': originalTotal,
+              'net_total': charge.netAmount,
+              'paystack_fee': charge.feeAmount,
+              'amount_charged': charge.totalAmount,
             },
           );
 

@@ -12,14 +12,9 @@ import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/pickup_tracking_entity.dart';
 import '../providers/customer_providers.dart';
 
-/// Live map of the rider on their way to the customer.
-///
-/// Fed by the same `pickup_requests` row the rider's device writes to, over
-/// Supabase Realtime -- so the marker moves because a real vehicle moved, not
-/// on a timer.
+/// Live map tracking the assigned rider on their way to the pickup location
 class TrackPickupScreen extends ConsumerStatefulWidget {
-  /// Request to follow. When null the screen follows whichever request is
-  /// currently active, which is how it is opened from the dashboard banner.
+  // Target request ID; null tracks active pickup from dashboard
   final String? requestId;
 
   const TrackPickupScreen({super.key, this.requestId});
@@ -42,20 +37,8 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
   LatLng? _routeOrigin;
   bool _loadingRoute = false;
 
-  /// Set once the camera has framed rider + destination, so later position
-  /// updates do not keep yanking the view back and fighting the customer's
-  /// own panning.
   bool _hasFramedRoute = false;
-
-  /// Guards the one-off geocode + write-back for legacy requests that were
-  /// created before destination coordinates were captured.
   bool _attemptedDestinationRepair = false;
-
-  /// Whether the first tracking value has been folded in. `ref.listen` only
-  /// fires on *changes*, so a provider that already holds data -- the dashboard
-  /// banner keeps `activePickupTrackingProvider` alive -- would deliver nothing
-  /// until the next rider fix. With a stale or stationary rider that is never,
-  /// leaving the ETA panel permanently blank.
   bool _seededFromFirstValue = false;
 
   @override
@@ -114,10 +97,7 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
     _refreshRoute(position, tracking);
   }
 
-  /// A request booked before coordinates were captured has a plain address and
-  /// nothing to plot. Geocode it once and write the result back, so every later
-  /// open of this screen -- and the rider's navigation screen -- has a real
-  /// destination.
+  // Geocodes address for legacy requests lacking coordinates
   Future<void> _repairDestinationIfNeeded(PickupTrackingEntity tracking) async {
     if (_attemptedDestinationRepair || tracking.hasDestination) return;
     if (!MapConfig.hasWebServiceKey) return;
@@ -128,10 +108,6 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
         await DirectionsService.instance.geocodeAddress(tracking.location);
     if (resolved == null || !mounted) return;
 
-    // Straight to the repository rather than through pickupTrackingProvider:
-    // when this screen is following the *active* request it has no id-keyed
-    // provider open, and reaching for one would start a second Realtime
-    // subscription purely to make a single RPC call.
     await ref.read(customerRepositoryProvider).setPickupDestination(
           requestId: tracking.requestId,
           latitude: resolved.latitude,
@@ -468,9 +444,7 @@ class _PhaseBanner extends StatelessWidget {
   }
 }
 
-/// A frozen marker with no explanation reads as a broken app. This says plainly
-/// that the last fix is old, so the customer knows the rider has not actually
-/// been parked in one spot for ten minutes.
+// Banner shown when rider location updates are paused
 class _StaleBanner extends StatelessWidget {
   const _StaleBanner();
 

@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,9 +8,7 @@ class ProfileImagePickerService {
   static GoTrueClient get _auth => Supabase.instance.client.auth;
   static SupabaseClient get _db => Supabase.instance.client;
 
-  /// Pick an image from camera or gallery and update the profile photo in
-  /// Postgres (profiles.profile_picture_url — shared across customer/rider/
-  /// admin, unlike the old per-role Firestore collections) and Supabase Auth.
+  // Picks image from camera/gallery and saves to profile in Supabase
   static Future<String?> pickAndUploadProfileImage({
     required ImageSource source,
     String? customUid,
@@ -32,10 +30,10 @@ class ProfileImagePickerService {
       final uid = customUid ?? _auth.currentUser?.id;
       if (uid == null || uid.isEmpty) return photoUrl;
 
-      // 1. Update the shared profiles row (customer/rider/admin all read this)
+      // Update profile picture in database
       await _db.from('profiles').update({'profile_picture_url': photoUrl}).eq('id', uid);
 
-      // 2. Update Supabase Auth user profile photo if current logged in user
+      // Update user metadata if editing current user
       if (uid == _auth.currentUser?.id) {
         try {
           await _auth.updateUser(UserAttributes(data: {'avatar_url': photoUrl}));

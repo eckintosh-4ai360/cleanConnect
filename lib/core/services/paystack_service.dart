@@ -3,13 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'paystack_checkout_screen.dart';
 
-/// Sentinel URL Paystack redirects to once checkout finishes. Nothing is served
-/// from it — the WebView intercepts the navigation. Must stay in sync with
-/// PAYMENT_CALLBACK_URL in
-/// supabase/functions/initialize-paystack-transaction/index.ts.
+// Callback URL intercepted by WebView when checkout finishes
 const String kPaystackCallbackUrl = 'https://cleanconnect.app/payment-complete';
 
-/// The result returned after a Paystack payment attempt.
 enum PaymentStatus { success, cancelled, failed }
 
 class PaymentResult {
@@ -26,30 +22,12 @@ class PaymentResult {
   bool get isSuccess => status == PaymentStatus.success;
 }
 
-/// Drives the full Paystack payment flow:
-///
-///   1. `initialize-paystack-transaction` creates the transaction server-side
-///      (using the live secret key and the cleanConnect subaccount) and returns
-///      an `authorization_url` + `reference`.
-///   2. [PaystackCheckoutScreen] renders that hosted checkout page.
-///   3. `verify-paystack-transaction` confirms the charge against Paystack's
-///      own record before it is ever treated as paid.
-///
-/// Checkout is rendered as Paystack's hosted page rather than through the
-/// native `paystack_flutter_sdk`, which is an abandoned alpha (two releases,
-/// last pinned to Compose BOM 2023.01.00) that crashes on modern Compose and
-/// has no web implementation.
+/// Service handling Paystack transaction initialization, checkout WebView, and verification
 class PaystackService {
   PaystackService._();
   static final PaystackService instance = PaystackService._();
 
-  /// Starts a payment and returns only once it has been verified server-side.
-  ///
-  /// [email]             Customer's email address (required by Paystack).
-  /// [amountInSmallest]  Amount in the smallest currency unit (pesewas for GHS,
-  ///                     kobo for NGN). e.g. GHS 50.00 → 5000.
-  /// [currency]          ISO 4217 currency code. Defaults to 'GHS'.
-  /// [metadata]          Optional key-value pairs stored on the transaction.
+  // Initiates transaction, shows checkout sheet, and verifies payment status
   Future<PaymentResult> initiatePayment({
     required BuildContext context,
     required String email,
@@ -60,7 +38,7 @@ class PaystackService {
     final String authorizationUrl;
     final String reference;
 
-    // ── 1. Create the transaction server-side ───────────────────────────────
+    // 1. Initialize transaction via Edge Function
     try {
       final response = await Supabase.instance.client.functions.invoke(
         'initialize-paystack-transaction',
@@ -101,7 +79,7 @@ class PaystackService {
       );
     }
 
-    // ── 2. Show Paystack's hosted checkout ──────────────────────────────────
+    // 2. Open Paystack hosted checkout in a WebView
     if (!context.mounted) {
       return const PaymentResult(
         status: PaymentStatus.cancelled,
@@ -127,8 +105,7 @@ class PaystackService {
       );
     }
 
-    // A dismissed sheet may still have been charged (the customer could close
-    // it during the redirect), so verify instead of assuming a cancellation.
+    // Verify even on dismiss in case payment went through before user closed sheet
     if (outcome != CheckoutOutcome.completed) {
       final verified = await _verifyTransaction(
         reference: reference,
@@ -143,7 +120,7 @@ class PaystackService {
       );
     }
 
-    // ── 3. Confirm the charge with Paystack before trusting it ──────────────
+    // 3. Verify transaction server-side
     return _verifyTransaction(
       reference: reference,
       expectedAmount: amountInSmallest,
@@ -151,12 +128,7 @@ class PaystackService {
     );
   }
 
-  /// Confirms a transaction reference against Paystack's own record via the
-  /// verify-paystack-transaction Edge Function. Only a confirmed, successful
-  /// charge for the expected amount and currency counts as a real payment.
-  ///
-  /// [quiet] suppresses the "contact support" copy for the speculative check
-  /// after a dismissed sheet, where a failure just means "not paid".
+  // Verifies transaction via Edge Function against Paystack API
   Future<PaymentResult> _verifyTransaction({
     required String reference,
     required int expectedAmount,

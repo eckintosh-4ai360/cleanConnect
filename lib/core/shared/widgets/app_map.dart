@@ -7,12 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../config/map_config.dart';
 
-/// Thin wrapper around [GoogleMap] carrying the app-wide defaults: theme-aware
-/// styling, sane gesture/control settings, and a graceful notice on platforms
-/// where google_maps_flutter has no implementation (Windows, Linux, macOS).
-///
-/// Screens still own their markers, polylines and camera logic -- this only
-/// removes the boilerplate that was otherwise copy-pasted across four surfaces.
+/// Reusable GoogleMap wrapper with default themes and platform fallbacks
 class AppMap extends StatelessWidget {
   final CameraPosition initialCameraPosition;
   final Set<Marker> markers;
@@ -66,9 +61,6 @@ class AppMap extends StatelessWidget {
       compassEnabled: showCompass,
       zoomControlsEnabled: showZoomControls,
       mapToolbarEnabled: false,
-      // Tilt and rotate are disabled by default: on a navigation screen the
-      // camera is driven programmatically, and a rider accidentally rotating
-      // the map mid-drive makes the view hard to recover from.
       tiltGesturesEnabled: false,
       rotateGesturesEnabled: false,
       liteModeEnabled: liteMode,
@@ -112,19 +104,14 @@ class _UnsupportedPlatformNotice extends StatelessWidget {
   }
 }
 
-/// Builds and caches the custom [BitmapDescriptor] marker icons.
-///
-/// google_maps_flutter can only take a bitmap, so each icon is painted once
-/// with [Canvas] and reused. Doing this lazily on a background-free path keeps
-/// the first map frame from stalling on asset decode.
+/// Custom map marker icon builder and cache
 class MapMarkerIcons {
   MapMarkerIcons._();
   static final MapMarkerIcons instance = MapMarkerIcons._();
 
   final Map<String, BitmapDescriptor> _cache = {};
 
-  /// A directional chevron used for the moving rider. [colorValue] keeps the
-  /// cache key stable across themes.
+  // Directional rider chevron marker
   Future<BitmapDescriptor> riderMarker({
     required Color color,
     double size = 108,
@@ -134,7 +121,7 @@ class MapMarkerIcons {
       final canvas = Canvas(recorder);
       final center = Offset(size / 2, size / 2);
 
-      // Soft halo, mirroring the "live GPS" pulse the old placeholder painted.
+      // Outer halo
       canvas.drawCircle(
         center,
         size / 2,
@@ -146,11 +133,11 @@ class MapMarkerIcons {
         Paint()..color = color.withValues(alpha: 0.30),
       );
 
-      // White disc keeps the arrow readable over dark roads and parkland.
+      // Disc and inner color
       canvas.drawCircle(center, size / 4.4, Paint()..color = Colors.white);
       canvas.drawCircle(center, size / 5.2, Paint()..color = color);
 
-      // Arrow points up; the marker's rotation property aims it at the heading.
+      // Chevron arrow
       final arrow = Path()
         ..moveTo(center.dx, center.dy - size / 9)
         ..lineTo(center.dx + size / 13, center.dy + size / 13)
@@ -163,7 +150,7 @@ class MapMarkerIcons {
     });
   }
 
-  /// A numbered pin for route stops. [label] is usually the stop order.
+  // Numbered pin marker for route stops
   Future<BitmapDescriptor> numberedPin({
     required Color color,
     required String label,
@@ -217,7 +204,7 @@ class MapMarkerIcons {
     });
   }
 
-  /// Destination flag for the customer's doorstep.
+  // Destination house pin marker
   Future<BitmapDescriptor> destinationMarker({
     required Color color,
     double size = 96,
@@ -245,7 +232,7 @@ class MapMarkerIcons {
       );
       canvas.drawPath(pin, Paint()..color = color);
 
-      // Simple house glyph -- reads at marker size where an icon font would not.
+      // House icon glyph
       final house = Path()
         ..moveTo(headCenter.dx, headCenter.dy - headRadius * 0.46)
         ..lineTo(headCenter.dx + headRadius * 0.48, headCenter.dy)
@@ -286,11 +273,7 @@ class MapMarkerIcons {
   }
 }
 
-/// Drives smooth marker motion between two GPS fixes.
-///
-/// Raw fixes arrive every few seconds, so a marker bound directly to them
-/// teleports. This interpolates position and heading over [duration], which is
-/// what makes tracking read as a vehicle moving rather than a dot jumping.
+/// Smoothly animates marker position and bearing between GPS updates
 class MarkerAnimator {
   Timer? _timer;
   LatLng? _current;
@@ -299,9 +282,7 @@ class MarkerAnimator {
   LatLng? get current => _current;
   double get currentBearing => _currentBearing;
 
-  /// Steps from the current position toward [target], calling [onFrame] about
-  /// 30 times a second. Cheaper than a full [AnimationController] and does not
-  /// need a TickerProvider, so it can live in a plain state object.
+  // Interpolates marker position and heading at ~30 fps
   void animateTo({
     required LatLng target,
     required double targetBearing,
@@ -325,7 +306,6 @@ class MarkerAnimator {
     _timer = Timer.periodic(frame, (timer) {
       final elapsed = DateTime.now().difference(began);
       final t = (elapsed.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-      // Ease-out so the marker decelerates into each fix instead of stopping dead.
       final eased = 1 - math.pow(1 - t, 3).toDouble();
 
       final lat = start.latitude + (target.latitude - start.latitude) * eased;
@@ -340,8 +320,7 @@ class MarkerAnimator {
     });
   }
 
-  /// Interpolates the short way around the compass, so 350 deg to 10 deg turns
-  /// 20 degrees clockwise rather than spinning 340 the other way.
+  // Angular interpolation taking the shortest arc
   double _lerpBearing(double from, double to, double t) {
     var delta = (to - from) % 360;
     if (delta > 180) delta -= 360;
