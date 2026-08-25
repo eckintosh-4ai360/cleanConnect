@@ -990,6 +990,57 @@ class PickupRequestScreen extends HookConsumerWidget {
                           ],
                         ),
                       ],
+                      if (charge.hasFee) ...[
+                        const SizedBox(height: 10),
+                        Divider(
+                          height: 1,
+                          color: isDark
+                              ? Colors.grey.shade700
+                              : Colors.amber.shade200,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                PaystackFees.label,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '+ GHS ${charge.feeAmount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Total to pay',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'GHS ${charge.totalAmount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       if (!isBonusEligible && !hasOverduePayment) ...[
                         const SizedBox(height: 4),
                         const Align(
@@ -1095,7 +1146,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               const SizedBox(height: 32),
               EcoButton(
                 text: isPayAsYouGo
-                    ? 'Pay GHS ${pickupTotal.toStringAsFixed(2)} & Confirm Pickup'
+                    ? 'Pay GHS ${charge.totalAmount.toStringAsFixed(2)} & Confirm Pickup'
                     : 'Confirm Pickup',
                 onPressed: handleConfirmPickup,
                 isLoading: isSubmitting.value,

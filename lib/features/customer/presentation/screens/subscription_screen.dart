@@ -7,6 +7,7 @@ import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/services/paystack_service.dart';
+import '../../../../core/utils/paystack_fees.dart';
 
 class SubscriptionScreen extends HookConsumerWidget {
   const SubscriptionScreen({super.key});
@@ -18,7 +19,6 @@ class SubscriptionScreen extends HookConsumerWidget {
     final pricingPlansState = ref.watch(customerPricingPlansProvider);
 
     final selectedPlan = useState('Weekly Plan');
-    final selectedFee = useState(15.0);
     final selectedPaymentMethod = useState('Mobile Money');
     final isProcessing = useState(false);
 
@@ -66,11 +66,21 @@ class SubscriptionScreen extends HookConsumerWidget {
       ],
     );
 
+    // Details of the highlighted plan, plus what Paystack has to charge for it
+    final matchingPlans = plans.where((p) => p.title == selectedPlan.value);
+    final selectedPlanData = matchingPlans.isEmpty ? null : matchingPlans.first;
+    final isPaygSelected =
+        selectedPlanData?.isPayg ?? (selectedPlan.value == 'Pay-As-You-Go');
+    final selectedPlanFee = isPaygSelected ? 0.0 : (selectedPlanData?.price ?? 0.0);
+    final selectedCharge = selectedPlanFee > 0
+        ? PaystackFees.chargeForAmount(selectedPlanFee)
+        : null;
+
     Future<void> handleSubscribe() async {
       if (isProcessing.value) return;
 
-      final isPAYG = selectedPlan.value == 'Pay-As-You-Go';
-      final fee = isPAYG ? 0.0 : selectedFee.value;
+      final isPAYG = isPaygSelected;
+      final fee = selectedPlanFee;
       String? paymentReference;
 
       // Pay-As-You-Go plans have no upfront fee — skip payment
@@ -91,18 +101,21 @@ class SubscriptionScreen extends HookConsumerWidget {
           return;
         }
 
-        // Amount in pesewas (GHS smallest unit): GHS 1 = 100 pesewas
-        final amountInPesewas = (fee * 100).round();
+        // Charge the grossed-up amount so the plan fee survives Paystack's cut
+        final charge = PaystackFees.chargeForAmount(fee);
 
         final result = await PaystackService.instance.initiatePayment(
           context: context,
           email: email,
-          amountInSmallest: amountInPesewas,
+          amountInSmallest: charge.total,
           currency: 'GHS',
           metadata: {
             'plan': selectedPlan.value,
             'payment_method': selectedPaymentMethod.value,
             'type': 'subscription',
+            'net_total': charge.netAmount,
+            'paystack_fee': charge.feeAmount,
+            'amount_charged': charge.totalAmount,
           },
         );
 
@@ -253,7 +266,6 @@ class SubscriptionScreen extends HookConsumerWidget {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         onTap: () {
                           selectedPlan.value = plan.title;
-                          selectedFee.value = plan.price;
                         },
                         title: Text(plan.title, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(plan.description, style: const TextStyle(fontSize: 12)),
@@ -302,6 +314,56 @@ class SubscriptionScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
+                // What Paystack will actually charge for the selected plan
+                if (selectedCharge != null) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Plan fee',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        ),
+                      ),
+                      Text(
+                        'GHS ${selectedCharge.netAmount.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          PaystackFees.label,
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        ),
+                      ),
+                      Text(
+                        '+ GHS ${selectedCharge.feeAmount.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total to pay',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'GHS ${selectedCharge.totalAmount.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Paystack badge
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -320,7 +382,9 @@ class SubscriptionScreen extends HookConsumerWidget {
                 isProcessing.value
                     ? const Center(child: CircularProgressIndicator())
                     : EcoButton(
-                        text: 'Confirm & Subscribe via Paystack',
+                        text: selectedCharge == null
+                            ? 'Confirm & Subscribe via Paystack'
+                            : 'Pay GHS ${selectedCharge.totalAmount.toStringAsFixed(2)} & Subscribe',
                         onPressed: handleSubscribe,
                       ),
               ],

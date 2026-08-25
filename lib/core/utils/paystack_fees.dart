@@ -36,7 +36,7 @@ class PaystackFees {
     if (grossAmount <= 0) return 0;
     var fee = (grossAmount * percentage).ceil();
     if (grossAmount >= flatFeeWaiverBelow) fee += flatFee;
-    final cap = feeCap;
+    const cap = feeCap;
     if (cap != null && fee > cap) fee = cap;
     return fee;
   }
@@ -49,7 +49,7 @@ class PaystackFees {
     // Solve total - fee(total) = net for total, then correct for the rounding,
     // the flat-fee waiver and the cap, which the closed form can't see.
     var total = ((netAmount + flatFee) / (1 - percentage)).ceil();
-    final cap = feeCap;
+    const cap = feeCap;
     if (cap != null && total - netAmount > cap) total = netAmount + cap;
     while (total - feeOn(total) < netAmount) {
       total++;
