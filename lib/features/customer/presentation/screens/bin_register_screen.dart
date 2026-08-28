@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -9,8 +9,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/services/location_service.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
-import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
+import '../../../../core/shared/widgets/clean_connect_text_field.dart';
 import '../providers/customer_providers.dart';
 
 enum _BinRegistrationMode { requestCompanyBin, personalBin }
@@ -482,7 +482,7 @@ class _BinDetailsStep extends StatelessWidget {
             }).toList(),
           ),
           const SizedBox(height: 16),
-          EcoTextField(
+          CleanConnectTextField(
             labelText: 'Location Assignment',
             hintText: 'Detecting location...',
             controller: TextEditingController(text: gpsLocation.value),
@@ -544,7 +544,7 @@ class _BinDetailsStep extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 32),
-          EcoButton(
+          CleanConnectButton(
             text: isPersonal ? 'Continue Registration' : 'Review Request',
             onPressed: handleNextStep,
           ),
@@ -609,7 +609,7 @@ class _ScheduleStep extends StatelessWidget {
         ),
         _FrequencyTile(
           title: 'Bi-weekly',
-          subtitle: 'Eco-conscious choice',
+          subtitle: 'Clean-conscious choice',
           isSelected: selectedFrequency.value == 'Bi-weekly',
           onTap: () {
             selectedFrequency.value = 'Bi-weekly';
@@ -670,7 +670,7 @@ class _ScheduleStep extends StatelessWidget {
           }).toList(),
         ),
         const SizedBox(height: 32),
-        EcoButton(text: 'Next', onPressed: handleNextStep),
+        CleanConnectButton(text: 'Next', onPressed: handleNextStep),
         const SizedBox(height: 20),
       ],
     );
@@ -733,7 +733,7 @@ class _RequestReviewStep extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 32),
-        EcoButton(text: 'Submit Bin Request', onPressed: handleConfirm),
+        CleanConnectButton(text: 'Submit Bin Request', onPressed: handleConfirm),
         const SizedBox(height: 20),
       ],
     );
@@ -850,7 +850,7 @@ class _PersonalReviewStep extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 32),
-        EcoButton(
+        CleanConnectButton(
           text: 'Confirm & Complete Registration',
           onPressed: handleConfirm,
         ),

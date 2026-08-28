@@ -82,10 +82,10 @@ class CustomerBottomNavBar extends StatelessWidget {
                         ? Colors.white.withValues(alpha: 0.45)
                         : Colors.white.withValues(alpha: 0.6),
                     activeColor: isTabSelected
-                        ? EcoTheme.primaryColor
+                        ? CleanConnectTheme.primaryColor
                         : Colors.white.withValues(alpha: 0.6),
                     tabBackgroundColor: isTabSelected
-                        ? EcoTheme.primaryColor.withValues(alpha: 0.16)
+                        ? CleanConnectTheme.primaryColor.withValues(alpha: 0.16)
                         : Colors.transparent,
                     tabBorderRadius: 28,
                     rippleColor: Colors.white.withValues(alpha: 0.06),
@@ -98,7 +98,7 @@ class CustomerBottomNavBar extends StatelessWidget {
                     textStyle: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: EcoTheme.primaryColor,
+                      color: CleanConnectTheme.primaryColor,
                     ),
                     tabs: const [
                       GButton(icon: Icons.home_rounded, text: 'Home'),

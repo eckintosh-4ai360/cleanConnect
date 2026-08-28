@@ -3,8 +3,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
-import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
+import '../../../../core/shared/widgets/clean_connect_text_field.dart';
 
 class ForgotPasswordScreen extends HookConsumerWidget {
   const ForgotPasswordScreen({super.key});
@@ -82,7 +82,7 @@ class ForgotPasswordScreen extends HookConsumerWidget {
                 key: formKey,
                 child: Column(
                   children: [
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Email',
                       hintText: 'Enter your email address',
                       controller: emailController,
@@ -99,7 +99,7 @@ class ForgotPasswordScreen extends HookConsumerWidget {
                       },
                     ),
                     const SizedBox(height: 24),
-                    EcoButton(
+                    CleanConnectButton(
                       text: 'Send Reset Link',
                       onPressed: handleSendReset,
                       isLoading: isSending.value,

@@ -4,8 +4,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
-import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
+import '../../../../core/shared/widgets/clean_connect_text_field.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 
 class LoginScreen extends HookConsumerWidget {
@@ -107,7 +107,7 @@ class LoginScreen extends HookConsumerWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'EcoWaste',
+                            'CleanConnect',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -178,7 +178,7 @@ class LoginScreen extends HookConsumerWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Test Tip: Sign in with an email containing "rider" (e.g. rider@ecowaste.com) to access the Rider dashboard.',
+                              'Test Tip: Sign in with an email containing "rider" (e.g. rider@cleanconnect.com) to access the Rider dashboard.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: theme.colorScheme.primary,
@@ -191,7 +191,7 @@ class LoginScreen extends HookConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Email / Rider ID',
                       hintText: 'Enter your email or ID',
                       controller: emailController,
@@ -204,7 +204,7 @@ class LoginScreen extends HookConsumerWidget {
                         return null;
                       },
                     ),
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Password',
                       hintText: 'Enter your password',
                       controller: passwordController,
@@ -239,7 +239,7 @@ class LoginScreen extends HookConsumerWidget {
                     ),
                     const SizedBox(height: 24),
                     // Sign In Button
-                    EcoButton(
+                    CleanConnectButton(
                       text: 'Sign In',
                       onPressed: handleSignIn,
                       isLoading: isLoading,

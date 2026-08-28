@@ -9,13 +9,18 @@ class OnboardingController extends _$OnboardingController {
 
   @override
   bool build() {
+    if (!Hive.isBoxOpen('settings_box')) {
+      return false;
+    }
     final box = Hive.box('settings_box');
     return box.get(_key, defaultValue: false) as bool;
   }
 
   void completeOnboarding() {
-    final box = Hive.box('settings_box');
-    box.put(_key, true);
+    if (Hive.isBoxOpen('settings_box')) {
+      final box = Hive.box('settings_box');
+      box.put(_key, true);
+    }
     state = true;
   }
 }

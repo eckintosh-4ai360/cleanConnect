@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
 
 class PickupConfirmedScreen extends StatelessWidget {
   const PickupConfirmedScreen({super.key});
@@ -94,12 +94,12 @@ class PickupConfirmedScreen extends StatelessWidget {
               const Spacer(),
 
               // Buttons
-              EcoButton(
+              CleanConnectButton(
                 text: 'View History',
                 onPressed: () => context.go('/customer/history'),
               ),
               const SizedBox(height: 12),
-              EcoButton(
+              CleanConnectButton(
                 text: 'Back to Home',
                 onPressed: () => context.go('/dashboard'),
                 isOutlined: true,

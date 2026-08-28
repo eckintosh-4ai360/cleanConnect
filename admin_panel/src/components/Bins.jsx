@@ -5,8 +5,8 @@ import { supabase } from '../supabase';
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
-// Accra. Only the opening camera position before bins are fitted into view.
-const FALLBACK_CENTER = { lat: 5.6037, lng: -0.187 };
+// Tarkwa. Only the opening camera position before bins are fitted into view.
+const FALLBACK_CENTER = { lat: 5.3018, lng: -1.9930 };
 
 // Matches the "5.603700, -0.187000" shape bins.gps_location is stored as
 // (see GeoUtils.formatCoordinates on the Flutter side). Tolerates a trailing

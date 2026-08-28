@@ -88,7 +88,7 @@ class RiderRepositoryImpl implements RiderRepository {
     return RiderEntity(
       id: _uid,
       fullName: authUser?.userMetadata?['full_name'] as String? ?? 'Marcus Sterling',
-      email: authUser?.email ?? 'marcus@ecowaste.com',
+      email: authUser?.email ?? 'marcus@cleanconnect.com',
       phoneNumber: '+1 (555) 234-5678',
       profilePhotoUrl:
           'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
@@ -252,8 +252,8 @@ class RiderRepositoryImpl implements RiderRepository {
         estimatedWeightKg: (r['estimated_weight_kg'] as num?)?.toDouble() ?? 15.0,
         actualWeightKg: (r['actual_weight_kg'] as num?)?.toDouble(),
         notes: r['notes'] as String?,
-        latitude: (r['latitude'] as num?)?.toDouble() ?? 5.6037,
-        longitude: (r['longitude'] as num?)?.toDouble() ?? -0.1870,
+        latitude: (r['latitude'] as num?)?.toDouble() ?? 5.3018,
+        longitude: (r['longitude'] as num?)?.toDouble() ?? -1.9930,
         stopOrder: (r['stop_order'] as num?)?.toInt() ?? 1,
       );
 

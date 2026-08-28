@@ -85,7 +85,7 @@ class SplashScreen extends HookConsumerWidget {
                       child: Icon(
                         Icons.recycling,
                         size: 52,
-                        color: Color(0xFF4CAF50), // Eco Green
+                        color: Color(0xFF4CAF50), // Clean Connect Green
                       ),
                     ),
                   ),

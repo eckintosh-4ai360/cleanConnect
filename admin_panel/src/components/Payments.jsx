@@ -91,7 +91,7 @@ export default function Payments() {
 
       const { error: plansError } = await supabase.from('pricing_plans').upsert([
         { slug: 'weekly', name: 'Weekly Plan', frequency: 'Weekly', description: 'Most popular for busy households', is_payg: false, prices: { '120L': w120, '240L': w240, '360L': w360 } },
-        { slug: 'biweekly', name: 'Bi-weekly Plan', frequency: 'Bi-weekly', description: 'Eco-conscious & flexible', is_payg: false, prices: { '120L': bw120, '240L': bw240, '360L': bw360 } },
+        { slug: 'biweekly', name: 'Bi-weekly Plan', frequency: 'Bi-weekly', description: 'Clean-conscious & flexible', is_payg: false, prices: { '120L': bw120, '240L': bw240, '360L': bw360 } },
         { slug: 'monthly', name: 'Monthly Plan', frequency: 'Monthly', description: 'Low volume waste collection', is_payg: false, prices: { '120L': m120, '240L': m240, '360L': m360 } },
         { slug: 'payg', name: 'Pay-As-You-Go', frequency: 'Pay-As-You-Go', description: 'Pay per collection request (Weekly price + 30% surcharge)', is_payg: true, prices: { '120L': p120, '240L': p240, '360L': p360 } },
       ], { onConflict: 'slug' });

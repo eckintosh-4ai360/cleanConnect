@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../providers/customer_providers.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
 import '../../../../core/config/map_config.dart';
 import '../../../../core/services/directions_service.dart';
 import '../../../../core/services/location_service.dart';
@@ -174,7 +174,7 @@ class PickupRequestScreen extends HookConsumerWidget {
     }
 
     Future<void> chooseOnMap() async {
-      // Try a real GPS fix before falling back to the Accra placeholder, so
+      // Try a real GPS fix before falling back to the Tarkwa placeholder, so
       // the picker opens centered on the customer's actual position instead
       // of always looking like it's ignoring GPS.
       if (selectedLocation.value == null) {
@@ -1148,7 +1148,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               ),
 
               const SizedBox(height: 32),
-              EcoButton(
+              CleanConnectButton(
                 text: isPayAsYouGo
                     ? 'Pay GHS ${charge.totalAmount.toStringAsFixed(2)} & Confirm Pickup'
                     : 'Confirm Pickup',

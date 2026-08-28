@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/customer_providers.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
 
 /// Fallback contact details used if app_settings hasn't been seeded yet.
 const _kDefaultPhone = '+233 24 881 4260';
@@ -126,7 +126,7 @@ class SupportHomeScreen extends HookConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  EcoButton(
+                  CleanConnectButton(
                     text: 'Submit Report',
                     onPressed: () {
                       if (problemNoteController.text.trim().isNotEmpty) {

@@ -55,7 +55,7 @@ const _slides = [
     cardBg: Color(0xFFFFF3D0),
     heroIcon: Icons.recycling_rounded,
     badges: [
-      _FloatingBadge(Icons.eco_rounded, 'Eco-Friendly', _kGreen),
+      _FloatingBadge(Icons.eco_rounded, 'Clean Connect', _kGreen),
       _FloatingBadge(Icons.flash_on_rounded, 'Fast & Easy', _kPrimary),
     ],
     buttonText: 'See How It Works',

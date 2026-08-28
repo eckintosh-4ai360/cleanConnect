@@ -11,4 +11,4 @@ PRODUCT_NAME = clean_connect
 PRODUCT_BUNDLE_IDENTIFIER = com.ecowaste.cleanconnect.cleanConnect
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.ecowaste.cleanconnect. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 com.cleanconnect. All rights reserved.

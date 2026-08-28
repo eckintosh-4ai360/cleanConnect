@@ -5,7 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
 import '../../../../core/services/paystack_service.dart';
 import '../../../../core/utils/paystack_fees.dart';
 
@@ -44,7 +44,7 @@ class SubscriptionScreen extends HookConsumerWidget {
           final multiplier = userBinSize == '120L' ? 0.7 : (userBinSize == '360L' ? 1.4 : 1.0);
           return [
             _PlanData(title: 'Weekly Plan', price: (15.0 * multiplier).roundToDouble(), description: 'Most popular for busy households'),
-            _PlanData(title: 'Bi-weekly Plan', price: (10.0 * multiplier).roundToDouble(), description: 'Eco-conscious & flexible'),
+            _PlanData(title: 'Bi-weekly Plan', price: (10.0 * multiplier).roundToDouble(), description: 'Clean-conscious & flexible'),
             _PlanData(title: 'Monthly Plan', price: (6.0 * multiplier).roundToDouble(), description: 'Low volume waste collection'),
             _PlanData(title: 'Pay As You Go', price: (3.0 * multiplier).roundToDouble(), description: 'Pay only when you request collection', isPayg: true),
           ];
@@ -61,13 +61,13 @@ class SubscriptionScreen extends HookConsumerWidget {
       },
       error: (_, _) => [
         _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
-        _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
+        _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Clean-conscious & flexible'),
         _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
         _PlanData(title: 'Pay As You Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
       ],
       loading: () => [
         _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
-        _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
+        _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Clean-conscious & flexible'),
         _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
         _PlanData(title: 'Pay As You Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
       ],
@@ -387,7 +387,7 @@ class SubscriptionScreen extends HookConsumerWidget {
                 // Subscribe Button
                 isProcessing.value
                     ? const Center(child: CircularProgressIndicator())
-                    : EcoButton(
+                    : CleanConnectButton(
                         text: selectedCharge == null
                             ? 'Confirm & Subscribe via Paystack'
                             : 'Pay GHS ${selectedCharge.totalAmount.toStringAsFixed(2)} & Subscribe',

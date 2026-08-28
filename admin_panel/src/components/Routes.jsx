@@ -12,8 +12,8 @@ import { supabase } from '../supabase';
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
-// Accra — opening camera position, replaced as soon as any rider reports a fix.
-const FALLBACK_CENTER = { lat: 5.6037, lng: -0.187 };
+// Tarkwa — opening camera position, replaced as soon as any rider reports a fix.
+const FALLBACK_CENTER = { lat: 5.3018, lng: -1.9930 };
 
 // ── Trip-estimate helpers ────────────────────────────────────────────────────
 // Rider positions come from real riders.current_lat/current_lng GPS fields.
@@ -137,8 +137,8 @@ export default function Routes() {
         id: 'rider-01',
         fullName: 'Kofi Mensah',
         status: 'active',
-        currentLat: 5.608,
-        currentLng: -0.182,
+        currentLat: 5.305,
+        currentLng: -1.991,
         speed: 32.4,
         heading: 45,
         targetCustomer: 'Sarah Jenkins (123 Green St)',
@@ -149,20 +149,20 @@ export default function Routes() {
         id: 'rider-02',
         fullName: 'Ama Osei',
         status: 'active',
-        currentLat: 5.615,
-        currentLng: -0.176,
+        currentLat: 5.308,
+        currentLng: -1.988,
         speed: 12.0,
         heading: 120,
         targetCustomer: 'Michael Scott (45 Corporate Way)',
-        vehicleType: 'Eco Van',
+        vehicleType: 'Clean Connect Van',
         totalCollections: 22,
       },
       {
         id: 'rider-03',
         fullName: 'Kwame Antwi',
         status: 'active',
-        currentLat: 5.599,
-        currentLng: -0.191,
+        currentLat: 5.298,
+        currentLng: -1.995,
         speed: 0.0,
         heading: 0,
         targetCustomer: 'Standby / Idle',
@@ -181,8 +181,8 @@ export default function Routes() {
       id: r.id,
       fullName: r.profiles?.full_name || 'Rider',
       status: r.status || 'active',
-      currentLat: r.current_lat ?? 5.6037,
-      currentLng: r.current_lng ?? -0.187,
+      currentLat: r.current_lat ?? 5.3018,
+      currentLng: r.current_lng ?? -1.9930,
       speed: r.speed ?? 25.0,
       heading: r.heading ?? 0,
       vehicleType: r.vehicle_type || 'Motorbike',
@@ -364,7 +364,7 @@ export default function Routes() {
             </h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Accra & Eco City District
+                Tarkwa & Clean Connect District
               </span>
               <button
                 className="btn-outline"
@@ -569,12 +569,12 @@ export default function Routes() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
                 <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>Live GPS Coordinates</span>
                 <p style={{ fontWeight: '600', fontFamily: 'monospace' }}>
-                  Lat: {selectedRider.currentLat?.toFixed(4) || '5.6037'} • Lng: {selectedRider.currentLng?.toFixed(4) || '-0.1870'}
+                  Lat: {selectedRider.currentLat?.toFixed(4) || '5.3018'} • Lng: {selectedRider.currentLng?.toFixed(4) || '-1.9930'}
                 </p>
 
                 <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px' }}>Target Customer</span>
                 <p style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                  {selectedTrip?.targetLabel || selectedRider.targetCustomer || 'Sarah Jenkins (123 Green St, Eco City)'}
+                  {selectedTrip?.targetLabel || selectedRider.targetCustomer || 'Sarah Jenkins (123 Green St, Tarkwa)'}
                 </p>
               </div>
 

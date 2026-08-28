@@ -10,8 +10,8 @@ import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
 import '../widgets/customer_nav_bar.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
-import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
+import '../../../../core/shared/widgets/clean_connect_text_field.dart';
 
 class ProfileSettingsScreen extends HookConsumerWidget {
   const ProfileSettingsScreen({super.key});
@@ -24,15 +24,15 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     // Personal Info state
     final nameController = useTextEditingController(text: 'Eckintosh');
     final emailController = useTextEditingController(
-      text: 'Mark.aggrey@ecowaste.com',
+      text: 'Mark.aggrey@cleanconnect.com',
     );
     final phoneController = useTextEditingController(text: '+1 (555) 019-2834');
     final dobController = useTextEditingController(text: '12/11/1992');
 
     // Address Management state
     final addresses = useState<List<Map<String, String>>>([
-      {'label': 'Home', 'details': '123 Green St, Eco City, 95210'},
-      {'label': 'Office', 'details': '456 Corporate Way, Eco City, 95215'},
+      {'label': 'Home', 'details': '123 Green St, Tarkwa, 95210'},
+      {'label': 'Office', 'details': '456 Corporate Way, Tarkwa, 95215'},
     ]);
     final newAddressLabelController = useTextEditingController();
     final newAddressDetailsController = useTextEditingController();
@@ -68,7 +68,7 @@ class ProfileSettingsScreen extends HookConsumerWidget {
 
     final displayName =
         user?.fullName ?? currentUser?.userMetadata?['full_name'] as String? ?? 'Mark Aggrey';
-    final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@ecowaste.com';
+    final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@cleanconnect.com';
     final currentPhotoUrl = photoUrlState.value ?? currentPhotoUrlFromAuth;
 
     void handleLogout() async {
@@ -309,28 +309,28 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                 expandedContent: Column(
                   children: [
                     const SizedBox(height: 16),
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Full Name',
                       hintText: 'Mark Aggrey',
                       controller: nameController,
                     ),
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Email Address',
-                      hintText: 'mark.aggrey@ecowaste.com',
+                      hintText: 'mark.aggrey@cleanconnect.com',
                       controller: emailController,
                     ),
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Phone Number',
                       hintText: '+1 (555) 019-2834',
                       controller: phoneController,
                     ),
-                    EcoTextField(
+                    CleanConnectTextField(
                       labelText: 'Date of Birth',
                       hintText: 'MM/DD/YYYY',
                       controller: dobController,
                     ),
                     const SizedBox(height: 8),
-                    EcoButton(
+                    CleanConnectButton(
                       text: 'Save Changes',
                       onPressed: () {
                         activeSection.value = 'none';
@@ -422,7 +422,7 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    EcoButton(
+                    CleanConnectButton(
                       text: 'Add Address',
                       onPressed: () {
                         if (newAddressLabelController.text.isNotEmpty &&
@@ -476,7 +476,7 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                             ),
                     ),
                     const SizedBox(height: 16),
-                    EcoButton(
+                    CleanConnectButton(
                       text: housePhotoUrl == null || housePhotoUrl.isEmpty
                           ? 'Add House Photo'
                           : 'Update House Photo',
@@ -540,7 +540,7 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    EcoButton(
+                    CleanConnectButton(
                       text: 'Add Payment Method',
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(

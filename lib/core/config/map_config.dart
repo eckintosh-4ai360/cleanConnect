@@ -22,9 +22,9 @@ class MapConfig {
   /// Whether Routes/Geocoding HTTP calls can be attempted at all.
   static bool get hasWebServiceKey => webServiceApiKey.isNotEmpty;
 
-  /// Accra, Ghana — the platform's operating city. Used as the initial camera
+  /// Tarkwa, Ghana — the platform's operating city. Used as the initial camera
   /// target before the first GPS fix arrives, never as a substitute for one.
-  static const LatLng fallbackCenter = LatLng(5.6037, -0.1870);
+  static const LatLng fallbackCenter = LatLng(5.3018, -1.9930);
 
   static const double cityZoom = 12.0;
   static const double navigationZoom = 16.5;

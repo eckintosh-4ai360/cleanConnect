@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class EcoButton extends StatelessWidget {
+class CleanConnectButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
   final bool isLoading;
@@ -8,7 +8,7 @@ class EcoButton extends StatelessWidget {
   final bool isOutlined;
   final Widget? icon;
 
-  const EcoButton({
+  const CleanConnectButton({
     super.key,
     required this.text,
     required this.onPressed,
@@ -88,13 +88,13 @@ class EcoButton extends StatelessWidget {
   }
 }
 
-class EcoSocialButton extends StatelessWidget {
+class CleanConnectSocialButton extends StatelessWidget {
   final String text;
   final String logoAssetPath; // SVG or PNG path, or Widget
   final Widget? logoWidget;
   final VoidCallback onPressed;
 
-  const EcoSocialButton({
+  const CleanConnectSocialButton({
     super.key,
     required this.text,
     required this.onPressed,
@@ -141,3 +141,7 @@ class EcoSocialButton extends StatelessWidget {
     );
   }
 }
+
+typedef EcoButton = CleanConnectButton;
+typedef EcoSocialButton = CleanConnectSocialButton;
+

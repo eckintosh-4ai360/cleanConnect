@@ -10,19 +10,25 @@ class ThemeModeController extends _$ThemeModeController {
 
   @override
   ThemeMode build() {
+    if (!Hive.isBoxOpen('settings_box')) {
+      return ThemeMode.light;
+    }
     final box = Hive.box('settings_box');
     final saved = box.get(_key, defaultValue: 'light') as String;
     return saved == 'dark' ? ThemeMode.dark : ThemeMode.light;
   }
 
   void toggleTheme() {
-    final box = Hive.box('settings_box');
     if (state == ThemeMode.dark) {
       state = ThemeMode.light;
-      box.put(_key, 'light');
+      if (Hive.isBoxOpen('settings_box')) {
+        Hive.box('settings_box').put(_key, 'light');
+      }
     } else {
       state = ThemeMode.dark;
-      box.put(_key, 'dark');
+      if (Hive.isBoxOpen('settings_box')) {
+        Hive.box('settings_box').put(_key, 'dark');
+      }
     }
   }
 

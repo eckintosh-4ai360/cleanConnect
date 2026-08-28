@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../providers/customer_providers.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
 
 class CollectionDetailScreen extends ConsumerWidget {
   final String recordId;
@@ -193,12 +193,12 @@ class CollectionDetailScreen extends ConsumerWidget {
                   ],
 
                   const SizedBox(height: 40),
-                  EcoButton(
+                  CleanConnectButton(
                     text: 'Back to History',
                     onPressed: () => context.pop(),
                   ),
                   const SizedBox(height: 12),
-                  EcoButton(
+                  CleanConnectButton(
                     text: 'View Receipt',
                     onPressed: () {
                       _showReceipt(context, record);

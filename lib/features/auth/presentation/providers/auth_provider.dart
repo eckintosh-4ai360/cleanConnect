@@ -51,11 +51,14 @@ class AuthStateController extends _$AuthStateController {
 
     if (useMock) {
       try {
+        if (!Hive.isBoxOpen('auth_box')) {
+          return const AuthUnauthenticated();
+        }
         final box = Hive.box('auth_box');
         final savedUserId = box.get('userId');
         if (savedUserId != null) {
           final fullName = box.get('fullName') ?? 'Demo User';
-          final email = box.get('email') ?? 'demo@ecowaste.com';
+          final email = box.get('email') ?? 'demo@cleanconnect.com';
           final phoneNumber = box.get('phoneNumber') ?? '0000000000';
           final address = box.get('address');
           final gpsLocation = box.get('gpsLocation');

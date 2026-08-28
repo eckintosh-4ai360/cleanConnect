@@ -162,7 +162,7 @@ class _RiderNavigationScreenState extends ConsumerState<RiderNavigationScreen> {
   }
 
   /// Motorbikes get TWO_WHEELER routing, which picks bike-legal roads and gives
-  /// a far more realistic Accra ETA than car routing does.
+  /// a far more realistic Tarkwa ETA than car routing does.
   String _travelModeForVehicle() {
     final vehicle = ref.read(riderProfileProvider).value?.vehicleType.toLowerCase();
     if (vehicle == null) return 'DRIVE';

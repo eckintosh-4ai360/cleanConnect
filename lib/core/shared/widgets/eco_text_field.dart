@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class EcoTextField extends StatefulWidget {
+class CleanConnectTextField extends StatefulWidget {
   final String labelText;
   final String hintText;
   final TextEditingController controller;
@@ -12,7 +12,7 @@ class EcoTextField extends StatefulWidget {
   final bool readOnly;
   final VoidCallback? onTap;
 
-  const EcoTextField({
+  const CleanConnectTextField({
     super.key,
     required this.labelText,
     required this.hintText,
@@ -27,10 +27,10 @@ class EcoTextField extends StatefulWidget {
   });
 
   @override
-  State<EcoTextField> createState() => _EcoTextFieldState();
+  State<CleanConnectTextField> createState() => _CleanConnectTextFieldState();
 }
 
-class _EcoTextFieldState extends State<EcoTextField> {
+class _CleanConnectTextFieldState extends State<CleanConnectTextField> {
   bool _obscureText = true;
 
   @override
@@ -84,3 +84,6 @@ class _EcoTextFieldState extends State<EcoTextField> {
     );
   }
 }
+
+typedef EcoTextField = CleanConnectTextField;
+

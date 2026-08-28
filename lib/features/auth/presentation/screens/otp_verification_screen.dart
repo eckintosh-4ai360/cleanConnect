@@ -5,7 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../domain/entities/user_entity.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
 
 class OtpVerificationScreen extends HookConsumerWidget {
   final String phoneNumber;
@@ -291,7 +291,7 @@ class OtpVerificationScreen extends HookConsumerWidget {
                     ),
                     const SizedBox(height: 32),
                     // Verify button
-                    EcoButton(
+                    CleanConnectButton(
                       text: 'Verify & Proceed',
                       onPressed: handleVerify,
                       isLoading: isVerifying.value,

@@ -9,8 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/auth_provider.dart';
 import '../../../../core/services/location_service.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
-import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
+import '../../../../core/shared/widgets/clean_connect_text_field.dart';
 import '../../../../core/shared/widgets/image_source_picker_sheet.dart';
 
 class RegisterScreen extends HookConsumerWidget {
@@ -36,7 +36,7 @@ class RegisterScreen extends HookConsumerWidget {
       if (next is AuthAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Registration successful! Welcome to EcoWaste.'),
+            content: Text('Registration successful! Welcome to CleanConnect.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -190,7 +190,7 @@ class RegisterScreen extends HookConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     const Text(
-                      'EcoWaste',
+                      'CleanConnect',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
@@ -251,7 +251,7 @@ class RegisterScreen extends HookConsumerWidget {
                         ),
                         const SizedBox(height: 24),
                         // Fields
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'Full Name',
                           hintText: 'Jane Doe',
                           controller: fullNameController,
@@ -266,7 +266,7 @@ class RegisterScreen extends HookConsumerWidget {
                             return null;
                           },
                         ),
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'Email Address',
                           hintText: 'jane.doe@example.com',
                           controller: emailController,
@@ -287,7 +287,7 @@ class RegisterScreen extends HookConsumerWidget {
                             return null;
                           },
                         ),
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'Phone Number',
                           hintText: '024 881 4260',
                           controller: phoneController,
@@ -309,7 +309,7 @@ class RegisterScreen extends HookConsumerWidget {
                             return null;
                           },
                         ),
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'Password',
                           hintText: '••••••••',
                           controller: passwordController,
@@ -325,7 +325,7 @@ class RegisterScreen extends HookConsumerWidget {
                             return null;
                           },
                         ),
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'Confirm Password',
                           hintText: '••••••••',
                           controller: confirmPasswordController,
@@ -341,7 +341,7 @@ class RegisterScreen extends HookConsumerWidget {
                             return null;
                           },
                         ),
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'GPS Location',
                           hintText: 'Detecting location...',
                           controller: gpsController,
@@ -367,9 +367,9 @@ class RegisterScreen extends HookConsumerWidget {
                             return null;
                           },
                         ),
-                        EcoTextField(
+                        CleanConnectTextField(
                           labelText: 'House Address',
-                          hintText: '123 Green St, Eco City',
+                          hintText: '123 Green St, Tarkwa',
                           controller: addressController,
                           prefixIcon: const Icon(Icons.home_outlined, size: 20),
                           validator: (value) {
@@ -496,7 +496,7 @@ class RegisterScreen extends HookConsumerWidget {
                         ),
                         const SizedBox(height: 32),
                         // Register button
-                        EcoButton(
+                        CleanConnectButton(
                           text: 'Create Account',
                           onPressed: handleRegister,
                           isLoading: isLoading,

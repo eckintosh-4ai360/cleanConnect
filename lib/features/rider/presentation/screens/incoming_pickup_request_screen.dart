@@ -123,11 +123,11 @@ class _IncomingPickupRequestScreenState
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: EcoTheme.secondaryColor,
+        backgroundColor: CleanConnectTheme.secondaryColor,
         body: SafeArea(
           child: pickupAsync.when(
             loading: () => const Center(
-              child: CircularProgressIndicator(color: EcoTheme.primaryColor),
+              child: CircularProgressIndicator(color: CleanConnectTheme.primaryColor),
             ),
             error: (e, _) => _InfoState(
               message: 'Could not load this request.',
@@ -272,9 +272,9 @@ class _RequestContent extends StatelessWidget {
                     CircleAvatar(
                       radius: 26,
                       backgroundColor:
-                          EcoTheme.primaryColor.withValues(alpha: 0.15),
+                          CleanConnectTheme.primaryColor.withValues(alpha: 0.15),
                       child: const Icon(Icons.person,
-                          color: EcoTheme.primaryColor, size: 28),
+                          color: CleanConnectTheme.primaryColor, size: 28),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -404,7 +404,7 @@ class _RequestContent extends StatelessWidget {
           if (processing)
             const Padding(
               padding: EdgeInsets.only(bottom: 16),
-              child: CircularProgressIndicator(color: EcoTheme.primaryColor),
+              child: CircularProgressIndicator(color: CleanConnectTheme.primaryColor),
             )
           else ...[
             SwipeToAcceptControl(onConfirmed: onAccept),
@@ -444,7 +444,7 @@ class _CountdownRing extends StatelessWidget {
             value: secondsLeft / total,
             strokeWidth: 3,
             backgroundColor: Colors.white24,
-            valueColor: const AlwaysStoppedAnimation(EcoTheme.primaryColor),
+            valueColor: const AlwaysStoppedAnimation(CleanConnectTheme.primaryColor),
           ),
           Text(
             '$secondsLeft',

@@ -83,7 +83,7 @@ class AuthRepositoryImpl implements AuthRepository {
         email: email,
         phoneNumber: '+15550000000',
         address: '123 Mock Street',
-        gpsLocation: '5.6037° N, 0.1870° W',
+        gpsLocation: '5.3018° N, 1.9930° W',
         role: role,
         status: 'active',
         createdAt: DateTime.now(),
@@ -246,7 +246,7 @@ class AuthRepositoryImpl implements AuthRepository {
         final savedUserId = box.get('userId');
         if (savedUserId != null) {
           final fullName = box.get('fullName') ?? 'Demo User';
-          final email = box.get('email') ?? 'demo@ecowaste.com';
+          final email = box.get('email') ?? 'demo@cleanconnect.com';
           final phoneNumber = box.get('phoneNumber') ?? '0000000000';
           final address = box.get('address');
           final gpsLocation = box.get('gpsLocation');

@@ -11,8 +11,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/config/map_config.dart';
-import '../../../../core/shared/widgets/eco_button.dart';
-import '../../../../core/shared/widgets/eco_text_field.dart';
+import '../../../../core/shared/widgets/clean_connect_button.dart';
+import '../../../../core/shared/widgets/clean_connect_text_field.dart';
 import '../../../../core/utils/geo_utils.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
@@ -262,7 +262,7 @@ class ReportIncidentScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                EcoTextField(
+                CleanConnectTextField(
                   labelText: 'Location',
                   hintText: 'e.g. Near Achimota Market, opposite the pharmacy',
                   controller: locationController,
@@ -349,7 +349,7 @@ class ReportIncidentScreen extends HookConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 32),
-                EcoButton(
+                CleanConnectButton(
                   text: 'Submit Report',
                   isLoading: isSubmitting.value,
                   onPressed: handleSubmit,

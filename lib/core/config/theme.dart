@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class EcoTheme {
+class CleanConnectTheme {
   // Brand Colors
   static const Color primaryColor = Color(0xFFF0A500); // Golden Orange
   static const Color primaryDarkColor = Color(0xFFC78200);
   static const Color secondaryColor = Color(0xFF2E2A24); // Deep charcoal
-  static const Color accentColor = Color(0xFF4CAF50); // Eco green
+  static const Color accentColor = Color(0xFF4CAF50); // Clean Connect green
 
   // Light Mode Colors
   static const Color lightBgColor = Color(0xFFF8F9FA);
@@ -208,3 +208,6 @@ class EcoTheme {
     );
   }
 }
+
+typedef EcoTheme = CleanConnectTheme;
+

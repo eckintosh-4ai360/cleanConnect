@@ -485,7 +485,7 @@ class _Step1PersonalInfo extends StatelessWidget {
             controller: emailCtrl,
             keyboardType: TextInputType.emailAddress,
             decoration: InputDecoration(
-              hintText: 'e.g. rider@ecowaste.com',
+              hintText: 'e.g. rider@cleanconnect.com',
               prefixIcon: const Icon(Icons.email_outlined),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),

@@ -5,9 +5,9 @@ import { supabase } from '../supabase';
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
-// Accra. Only the opening camera position — it is replaced as soon as any
+// Tarkwa. Only the opening camera position — it is replaced as soon as any
 // rider reports a fix.
-const FALLBACK_CENTER = { lat: 5.6037, lng: -0.187 };
+const FALLBACK_CENTER = { lat: 5.3018, lng: -1.9930 };
 
 // A rider whose last fix is older than this is treated as offline on the map.
 // Well past the 5s upload cadence the app uses, so it only trips on a real gap.

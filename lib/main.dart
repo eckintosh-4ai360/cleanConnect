@@ -53,12 +53,12 @@ void main() async {
   }
 
   runApp(
-    UncontrolledProviderScope(container: container, child: const EcoWasteApp()),
+    UncontrolledProviderScope(container: container, child: const CleanConnectApp()),
   );
 }
 
-class EcoWasteApp extends ConsumerWidget {
-  const EcoWasteApp({super.key});
+class CleanConnectApp extends ConsumerWidget {
+  const CleanConnectApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -70,10 +70,13 @@ class EcoWasteApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       locale: DevicePreview.locale(context),
       builder: (context, child) => DevicePreview.appBuilder(context, child!),
-      theme: EcoTheme.lightTheme,
-      darkTheme: EcoTheme.darkTheme,
+      theme: CleanConnectTheme.lightTheme,
+      darkTheme: CleanConnectTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
     );
   }
 }
+
+typedef EcoWasteApp = CleanConnectApp;
+
