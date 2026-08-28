@@ -286,12 +286,12 @@ class RiderProfileScreen extends ConsumerWidget {
                     _ActionRow(
                       label: 'Help & Support',
                       icon: Icons.headset_mic_outlined,
-                      onTap: () {},
+                      onTap: () => context.push('/rider/help-support'),
                     ),
                     _ActionRow(
                       label: 'Privacy Policy',
                       icon: Icons.privacy_tip_outlined,
-                      onTap: () {},
+                      onTap: () => context.push('/rider/privacy-policy'),
                     ),
                   ],
                 ),
@@ -331,7 +331,6 @@ class RiderProfileScreen extends ConsumerWidget {
     );
   }
 }
-
 // ── Sub Widgets ───────────────────────────────────────────────────────────────
 
 class _ProfileStat extends StatelessWidget {

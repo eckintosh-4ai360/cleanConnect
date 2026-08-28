@@ -62,6 +62,7 @@ skills-lock.json
 # Google Maps / secrets
 admin_panel/.env
 admin_panel/.env.local
+db.json
 
 # --dart-define-from-file payload: holds the Routes/Geocoding web-service key,
 # which is billable and must never be committed.

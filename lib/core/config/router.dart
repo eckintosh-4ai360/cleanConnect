@@ -29,6 +29,8 @@ import '../../features/rider/presentation/screens/rider_collection_screen.dart';
 import '../../features/rider/presentation/screens/performance_analytics_screen.dart';
 import '../../features/rider/presentation/screens/rider_profile_screen.dart';
 import '../../features/rider/presentation/screens/rider_notifications_screen.dart';
+import '../../features/rider/presentation/screens/rider_help_support_screen.dart';
+import '../../features/rider/presentation/screens/rider_privacy_policy_screen.dart';
 import '../../features/rider/presentation/screens/available_pickups_screen.dart';
 import '../../features/rider/presentation/screens/rider_navigation_screen.dart';
 import '../../features/rider/presentation/screens/incoming_pickup_request_screen.dart';
@@ -227,6 +229,14 @@ GoRouter router(Ref ref) {
         builder: (context, state) => const RiderNotificationsScreen(),
       ),
       GoRoute(
+        path: '/rider/help-support',
+        builder: (context, state) => const RiderHelpSupportScreen(),
+      ),
+      GoRoute(
+        path: '/rider/privacy-policy',
+        builder: (context, state) => const RiderPrivacyPolicyScreen(),
+      ),
+      GoRoute(
         path: '/rider/pickups',
         builder: (context, state) => const AvailablePickupsScreen(),
       ),
@@ -266,5 +276,4 @@ String _getDashboardRoute(UserRole role) {
       return '/admin/home';
   }
 }
-
 
