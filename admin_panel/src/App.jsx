@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './AuthContext';
 import Login from './components/Login';
@@ -17,6 +17,8 @@ import Payments from './components/Payments';
 import Maintenance from './components/Maintenance';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
+import UserManagement from './components/UserManagement';
+import { roleLabel, tabsForRole } from './roles';
 
 export default function App() {
   const { session, profile, loading } = useAuth();
@@ -50,6 +52,7 @@ function AdminShell({ profile }) {
 
   const adminName = profile?.full_name || 'Admin';
   const adminPhoto = profile?.profile_picture_url || null;
+  const allowedTabs = useMemo(() => tabsForRole(profile?.role), [profile?.role]);
 
   // Synchronize CSS custom data theme values and persist preference
   useEffect(() => {
@@ -61,6 +64,14 @@ function AdminShell({ profile }) {
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
+
+  // A stale localStorage tab — or a role change made while signed in — can point
+  // at a page this user is no longer shown. Send them to their first page.
+  useEffect(() => {
+    if (allowedTabs.length > 0 && !allowedTabs.includes(activeTab)) {
+      setActiveTab(allowedTabs[0]);
+    }
+  }, [allowedTabs, activeTab]);
 
   // Real-time Platform Notifications
   const mapNotifRow = (r) => ({
@@ -274,6 +285,14 @@ function AdminShell({ profile }) {
       )
     },
     {
+      name: 'Users',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+        </svg>
+      )
+    },
+    {
       name: 'Settings',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -285,6 +304,8 @@ function AdminShell({ profile }) {
 
   // Dynamically Render Active Screen Component
   const renderActiveScreen = () => {
+    if (!allowedTabs.includes(activeTab)) return <Dashboard />;
+
     switch (activeTab) {
       case 'Dashboard':
         return <Dashboard />;
@@ -314,6 +335,8 @@ function AdminShell({ profile }) {
         return <Maintenance />;
       case 'Reports':
         return <Reports />;
+      case 'Users':
+        return <UserManagement />;
       case 'Settings':
         return <Settings />;
       default:
@@ -331,7 +354,7 @@ function AdminShell({ profile }) {
         </div>
 
         <nav className="sidebar-menu">
-          {menuItems.map((item) => (
+          {menuItems.filter((item) => allowedTabs.includes(item.name)).map((item) => (
             <div
               key={item.name}
               className={`sidebar-item ${activeTab === item.name ? 'active' : ''}`}
@@ -530,7 +553,12 @@ function AdminShell({ profile }) {
                   {adminName[0]?.toUpperCase() || 'A'}
                 </div>
               )}
-              <span className="user-name">{adminName.split(' ')[0]}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
+                <span className="user-name">{adminName.split(' ')[0]}</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '700' }}>
+                  {roleLabel(profile?.role)}
+                </span>
+              </div>
             </div>
           </div>
         </header>

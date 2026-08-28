@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { isBackOfficeRole, roleLabel } from './roles';
 
 const AuthContext = createContext(null);
 
@@ -29,9 +30,21 @@ export function AuthProvider({ children }) {
 
       if (cancelled) return;
 
-      if (error || !data || data.role !== 'admin') {
+      // Every back-office role signs in here, not just 'admin'; which pages
+      // they then see is decided by roles.js. A deactivated account is turned
+      // away at the door — is_admin() would refuse its queries anyway, so
+      // letting it in would just render an empty, confusing panel.
+      if (error || !data || !isBackOfficeRole(data.role)) {
         await supabase.auth.signOut();
-        setAuthError('This account does not have admin access.');
+        setAuthError('This account does not have admin panel access.');
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      if (data.status !== 'active') {
+        await supabase.auth.signOut();
+        setAuthError(`This ${roleLabel(data.role)} account has been deactivated. Contact an administrator.`);
         setProfile(null);
         setLoading(false);
         return;
