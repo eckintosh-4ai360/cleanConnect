@@ -36,49 +36,60 @@ class RiderBottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      onTap: (index) => _onItemTapped(context, index),
-      type: BottomNavigationBarType.fixed,
-      backgroundColor: theme.scaffoldBackgroundColor,
-      selectedItemColor: theme.colorScheme.primary,
-      unselectedItemColor: Colors.grey.shade400,
-      selectedLabelStyle:
-          const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
-      unselectedLabelStyle:
-          const TextStyle(fontWeight: FontWeight.w500, fontSize: 10),
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard_outlined),
-          activeIcon: Icon(Icons.dashboard),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.local_shipping_outlined),
-          activeIcon: Icon(Icons.local_shipping),
-          label: 'Pickups',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.map_outlined),
-          activeIcon: Icon(Icons.map),
-          label: 'Route',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner_outlined),
-          activeIcon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.bar_chart_outlined),
-          activeIcon: Icon(Icons.bar_chart),
-          label: 'Stats',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline),
-          activeIcon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
+    final safeIndex =
+        (currentIndex >= 0 && currentIndex < 6) ? currentIndex : 0;
+
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      child: BottomNavigationBar(
+        currentIndex: safeIndex,
+        onTap: (index) => _onItemTapped(context, index),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor: Colors.grey.shade400,
+        selectedFontSize: 10,
+        unselectedFontSize: 10,
+        selectedLabelStyle:
+            const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+        unselectedLabelStyle:
+            const TextStyle(fontWeight: FontWeight.w500, fontSize: 10),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_shipping_outlined),
+            activeIcon: Icon(Icons.local_shipping),
+            label: 'Pickups',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.map_outlined),
+            activeIcon: Icon(Icons.map),
+            label: 'Route',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.qr_code_scanner_outlined),
+            activeIcon: Icon(Icons.qr_code_scanner),
+            label: 'Scan',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_outlined),
+            activeIcon: Icon(Icons.bar_chart),
+            label: 'Stats',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
     );
   }
 }

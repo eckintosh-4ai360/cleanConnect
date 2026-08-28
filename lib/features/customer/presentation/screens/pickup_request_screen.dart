@@ -50,9 +50,13 @@ class PickupRequestScreen extends HookConsumerWidget {
     final isSubmitting = useState(false);
     final isInitialized = useState(false);
 
-    // Subscription state
-    final currentPlan = subState.value?.currentPlan ?? 'Pay-As-You-Go';
-    final isPayAsYouGo = currentPlan == 'Pay-As-You-Go';
+    // Subscription state. Whether this pickup has to be paid for comes from
+    // the database's derived flag, never from the plan's display name -- the
+    // seeded plan is 'Pay As You Go' while this screen used to compare against
+    // 'Pay-As-You-Go', so the charge was skipped for everybody. Absent state
+    // means charge.
+    final currentPlan = subState.value?.currentPlan ?? 'Pay As You Go';
+    final isPayAsYouGo = subState.value?.isPayAsYouGo ?? true;
 
     // List of date options (next 7 days). Pay-as-you-go pickups are paid for
     // immediately at booking time, so those customers can also book same-day.

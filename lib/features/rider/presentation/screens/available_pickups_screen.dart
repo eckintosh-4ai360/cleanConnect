@@ -6,6 +6,7 @@ import '../providers/rider_providers.dart';
 import '../widgets/rider_nav_bar.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 import '../../domain/entities/pickup_request_entity.dart';
+import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 
 class AvailablePickupsScreen extends ConsumerWidget {
   const AvailablePickupsScreen({super.key});
@@ -353,22 +354,53 @@ class _PickupCard extends StatelessWidget {
             const Divider(height: 1),
             const SizedBox(height: 12),
 
-            // ── Location ──────────────────────────────────────────────
+            // ── House photo + location ────────────────────────────────
+            // The photo the customer registered with. A GPS pin can be tens of
+            // metres out, so this is what actually tells the rider which
+            // building to walk up to. Tap to open it full-screen.
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 16, color: Colors.red),
-                const SizedBox(width: 6),
+                if (pickup.housePhotoUrl != null &&
+                    pickup.housePhotoUrl!.trim().isNotEmpty) ...[
+                  HousePhotoThumbnail(photoUrl: pickup.housePhotoUrl, size: 64),
+                  const SizedBox(width: 10),
+                ],
                 Expanded(
-                  child: Text(
-                    pickup.location,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? Colors.grey.shade300
-                          : Colors.grey.shade700,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 16, color: Colors.red),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              pickup.location,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? Colors.grey.shade300
+                                    : Colors.grey.shade700,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (pickup.housePhotoUrl != null &&
+                          pickup.housePhotoUrl!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Tap photo to enlarge',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],

@@ -87,66 +87,70 @@ class SupportHomeScreen extends HookConsumerWidget {
       final problemNoteController = TextEditingController();
       showModalBottomSheet(
         context: context,
+        useSafeArea: true,
         isScrollControlled: true,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (context) {
-          return Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-              top: 24,
-              left: 24,
-              right: 24,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Report: $categoryName',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Please provide details about the issue. Our support team will review this shortly.',
-                  style: TextStyle(color: Colors.grey, fontSize: 13),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: problemNoteController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    hintText: 'Enter description of the problem...',
+          return SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                top: 24,
+                left: 24,
+                right: 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Report: $categoryName',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                   ),
-                ),
-                const SizedBox(height: 24),
-                EcoButton(
-                  text: 'Submit Report',
-                  onPressed: () {
-                    if (problemNoteController.text.trim().isNotEmpty) {
-                      ref
-                          .read(customerHistoryProvider.notifier)
-                          .submitProblem(
-                            category: categoryName,
-                            description: problemNoteController.text.trim(),
-                          );
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Report submitted successfully! Ticket added to history.',
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Please provide details about the issue. Our support team will review this shortly.',
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: problemNoteController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter description of the problem...',
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  EcoButton(
+                    text: 'Submit Report',
+                    onPressed: () {
+                      if (problemNoteController.text.trim().isNotEmpty) {
+                        ref
+                            .read(customerHistoryProvider.notifier)
+                            .submitProblem(
+                              category: categoryName,
+                              description: problemNoteController.text.trim(),
+                            );
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Report submitted successfully! Ticket added to history.',
+                            ),
+                            backgroundColor: Colors.green,
                           ),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 24),
-              ],
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           );
         },

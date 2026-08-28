@@ -27,6 +27,38 @@ class PaystackService {
   PaystackService._();
   static final PaystackService instance = PaystackService._();
 
+  /// Turns an edge-function failure into something that names the actual cause.
+  ///
+  /// This used to read `details['error']` and fall back to a bare "Payment
+  /// server error" for anything else. But only our own functions answer in that
+  /// shape: when a request is rejected by the Supabase gateway before it ever
+  /// reaches the function, the body is `{code, message}`, and a platform or
+  /// proxy failure is plain text. Both landed on the generic string, which hid
+  /// the one piece of information needed to fix the problem. Every shape is now
+  /// unwrapped, and the status code is always shown so a report is actionable.
+  String _describeFunctionError(FunctionException e) {
+    final details = e.details;
+
+    String? extracted;
+    if (details is Map) {
+      // 'error' is our own functions; 'message'/'msg' is the Supabase gateway.
+      for (final key in const ['error', 'message', 'msg']) {
+        final value = details[key];
+        if (value != null && value.toString().trim().isNotEmpty) {
+          extracted = value.toString().trim();
+          break;
+        }
+      }
+    } else if (details is String && details.trim().isNotEmpty) {
+      extracted = details.trim();
+    }
+
+    if (extracted == null || extracted.isEmpty) {
+      return 'Payment service error (HTTP ${e.status}). Please try again.';
+    }
+    return '$extracted (HTTP ${e.status})';
+  }
+
   // Initiates transaction, shows checkout sheet, and verifies payment status
   Future<PaymentResult> initiatePayment({
     required BuildContext context,
@@ -64,12 +96,11 @@ class PaystackService {
       authorizationUrl = url;
       reference = ref;
     } on FunctionException catch (e) {
-      final details = e.details;
-      final message = details is Map ? details['error']?.toString() : null;
-      debugPrint('[PaystackService] Initialize failed: ${e.status} — $message');
+      final message = _describeFunctionError(e);
+      debugPrint('[PaystackService] Initialize failed: ${e.status} — ${e.details}');
       return PaymentResult(
         status: PaymentStatus.failed,
-        errorMessage: message ?? 'Payment server error. Please try again.',
+        errorMessage: message,
       );
     } catch (e) {
       debugPrint('[PaystackService] Initialize error: $e');
@@ -166,9 +197,10 @@ class PaystackService {
         errorMessage: failureMessage(),
       );
     } on FunctionException catch (e) {
-      final details = e.details;
-      final message = details is Map ? details['error']?.toString() : null;
-      debugPrint('[PaystackService] Verify failed: ${e.status} — $message');
+      debugPrint(
+        '[PaystackService] Verify failed: ${e.status} — '
+        '${_describeFunctionError(e)} | raw: ${e.details}',
+      );
       return PaymentResult(
         status: PaymentStatus.failed,
         reference: reference,

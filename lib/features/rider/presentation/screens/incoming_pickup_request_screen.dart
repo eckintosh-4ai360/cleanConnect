@@ -33,7 +33,7 @@ class _IncomingPickupRequestScreenState
   @override
   void initState() {
     super.initState();
-    NotificationService.instance.startVibrationLoop();
+    NotificationService.instance.startIncomingPickupAlert();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsLeft <= 1) {
         timer.cancel();
@@ -47,8 +47,23 @@ class _IncomingPickupRequestScreenState
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    NotificationService.instance.stopVibration();
+    NotificationService.instance.stopIncomingPickupAlert();
     super.dispose();
+  }
+
+  /// Leaves this screen. [PopScope.canPop] is false here so the rider cannot
+  /// swipe the decision away, but that also makes `Navigator.maybePop()` a
+  /// no-op -- it asks the route's pop disposition first and gets `doNotPop`.
+  /// The screen then sat on its spinner forever. `pop()` bypasses that check,
+  /// and a rider who arrived from a cold-start notification has nothing to pop
+  /// back to, so fall through to their dashboard.
+  void _dismiss() {
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/rider/home');
+    }
   }
 
   Future<void> _onAccept(PickupRequestEntity pickup) async {
@@ -60,7 +75,7 @@ class _IncomingPickupRequestScreenState
           .read(availablePickupsProvider.notifier)
           .accept(pickup.id, pickup.customerId);
       _resolved = true;
-      NotificationService.instance.stopVibration();
+      NotificationService.instance.stopIncomingPickupAlert();
       NotificationService.instance.cancelIncomingPickupNotification(pickup.id);
       if (mounted) {
         context.go('/rider/navigation', extra: pickup);
@@ -74,17 +89,19 @@ class _IncomingPickupRequestScreenState
             backgroundColor: Colors.red,
           ),
         );
-        Navigator.of(context).maybePop();
+        _dismiss();
       }
     }
   }
 
   Future<void> _onDecline(PickupRequestEntity? pickup) async {
-    if (_processing || _resolved) return;
+    // _InfoState schedules this on a delay, so it can land after the screen is
+    // already gone.
+    if (_processing || _resolved || !mounted) return;
     _resolved = true;
     setState(() => _processing = true);
     _countdownTimer?.cancel();
-    NotificationService.instance.stopVibration();
+    NotificationService.instance.stopIncomingPickupAlert();
     NotificationService.instance.cancelIncomingPickupNotification(widget.requestId);
     try {
       if (pickup != null) {
@@ -96,9 +113,7 @@ class _IncomingPickupRequestScreenState
       // Declining is best-effort — the request just stays in the pool for
       // other riders regardless.
     }
-    if (mounted) {
-      Navigator.of(context).maybePop();
-    }
+    _dismiss();
   }
 
   @override
@@ -304,12 +319,48 @@ class _RequestContent extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (pickup.housePhotoUrl != null) ...[
-                      const SizedBox(width: 10),
-                      HousePhotoThumbnail(photoUrl: pickup.housePhotoUrl, size: 44),
-                    ],
                   ],
                 ),
+                // The rider is deciding whether to take this job in 20 seconds,
+                // so the building they'd be driving to gets real estate rather
+                // than a 44px thumbnail squeezed beside the address.
+                if (pickup.housePhotoUrl != null &&
+                    pickup.housePhotoUrl!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      HousePhotoThumbnail(
+                        photoUrl: pickup.housePhotoUrl,
+                        size: 88,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Customer's house",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Tap to enlarge',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Wrap(
                   spacing: 8,

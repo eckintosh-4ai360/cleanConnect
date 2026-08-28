@@ -9,6 +9,13 @@ import '../../../../core/shared/widgets/eco_button.dart';
 import '../../../../core/services/paystack_service.dart';
 import '../../../../core/utils/paystack_fees.dart';
 
+/// Display-only check for a plan whose price is charged per pickup. Whether a
+/// pickup actually needs paying for is decided by SubscriptionEntity.isPayAsYouGo,
+/// which the database derives -- this just tolerates both the seeded
+/// 'Pay As You Go' and the older hyphenated spelling in UI copy.
+bool _looksPayg(String planName) =>
+    planName.toLowerCase().replaceAll('-', ' ').trim() == 'pay as you go';
+
 class SubscriptionScreen extends HookConsumerWidget {
   const SubscriptionScreen({super.key});
 
@@ -39,7 +46,7 @@ class SubscriptionScreen extends HookConsumerWidget {
             _PlanData(title: 'Weekly Plan', price: (15.0 * multiplier).roundToDouble(), description: 'Most popular for busy households'),
             _PlanData(title: 'Bi-weekly Plan', price: (10.0 * multiplier).roundToDouble(), description: 'Eco-conscious & flexible'),
             _PlanData(title: 'Monthly Plan', price: (6.0 * multiplier).roundToDouble(), description: 'Low volume waste collection'),
-            _PlanData(title: 'Pay-As-You-Go', price: (3.0 * multiplier).roundToDouble(), description: 'Pay only when you request collection', isPayg: true),
+            _PlanData(title: 'Pay As You Go', price: (3.0 * multiplier).roundToDouble(), description: 'Pay only when you request collection', isPayg: true),
           ];
         }
         return pricingPlans.map((plan) {
@@ -56,21 +63,20 @@ class SubscriptionScreen extends HookConsumerWidget {
         _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
         _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
         _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
-        _PlanData(title: 'Pay-As-You-Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
+        _PlanData(title: 'Pay As You Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
       ],
       loading: () => [
         _PlanData(title: 'Weekly Plan', price: 15.0, description: 'Most popular for busy households'),
         _PlanData(title: 'Bi-weekly Plan', price: 10.0, description: 'Eco-conscious & flexible'),
         _PlanData(title: 'Monthly Plan', price: 6.0, description: 'Low volume waste collection'),
-        _PlanData(title: 'Pay-As-You-Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
+        _PlanData(title: 'Pay As You Go', price: 3.0, description: 'Pay only when you request collection', isPayg: true),
       ],
     );
 
     // Details of the highlighted plan, plus what Paystack has to charge for it
     final matchingPlans = plans.where((p) => p.title == selectedPlan.value);
     final selectedPlanData = matchingPlans.isEmpty ? null : matchingPlans.first;
-    final isPaygSelected =
-        selectedPlanData?.isPayg ?? (selectedPlan.value == 'Pay-As-You-Go');
+    final isPaygSelected = selectedPlanData?.isPayg ?? _looksPayg(selectedPlan.value);
     final selectedPlanFee = isPaygSelected ? 0.0 : (selectedPlanData?.price ?? 0.0);
     final selectedCharge = selectedPlanFee > 0
         ? PaystackFees.chargeForAmount(selectedPlanFee)
@@ -398,7 +404,7 @@ class SubscriptionScreen extends HookConsumerWidget {
   }
 
   void _showSuccessDialog(BuildContext context, String planName) {
-    final isPAYG = planName == 'Pay-As-You-Go';
+    final isPAYG = _looksPayg(planName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

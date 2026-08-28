@@ -30,52 +30,85 @@ class CustomerBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(35),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-          child: Container(
-            height: 68,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.6),
+    final isTabSelected = currentIndex >= 0 && currentIndex < _routes.length;
+
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      minimum: const EdgeInsets.only(bottom: 12),
+      // heightFactor is essential: Scaffold hands bottomNavigationBar loose
+      // constraints whose maxHeight is the whole screen, so an unconstrained
+      // Align swells to fill it and squeezes the body down to nothing.
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1.0,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(35),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 1,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(35),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: GNav(
+                    selectedIndex: isTabSelected ? currentIndex : 0,
+                    onTabChange: (index) => _onItemTapped(context, index),
+                    gap: 6,
+                    iconSize: 22,
+                    haptic: true,
+                    curve: Curves.easeOutExpo,
+                    duration: const Duration(milliseconds: 350),
+                    color: isTabSelected
+                        ? Colors.white.withValues(alpha: 0.45)
+                        : Colors.white.withValues(alpha: 0.6),
+                    activeColor: isTabSelected
+                        ? EcoTheme.primaryColor
+                        : Colors.white.withValues(alpha: 0.6),
+                    tabBackgroundColor: isTabSelected
+                        ? EcoTheme.primaryColor.withValues(alpha: 0.16)
+                        : Colors.transparent,
+                    tabBorderRadius: 28,
+                    rippleColor: Colors.white.withValues(alpha: 0.06),
+                    hoverColor: Colors.white.withValues(alpha: 0.04),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: EcoTheme.primaryColor,
+                    ),
+                    tabs: const [
+                      GButton(icon: Icons.home_rounded, text: 'Home'),
+                      GButton(icon: Icons.delete_rounded, text: 'Bins'),
+                      GButton(icon: Icons.history_rounded, text: 'History'),
+                      GButton(icon: Icons.person_rounded, text: 'Profile'),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            child: GNav(
-              selectedIndex: currentIndex,
-              onTabChange: (index) => _onItemTapped(context, index),
-              gap: 8,
-              iconSize: 24,
-              haptic: true,
-              curve: Curves.easeOutExpo,
-              duration: const Duration(milliseconds: 400),
-              color: Colors.white.withValues(alpha: 0.45),
-              activeColor: EcoTheme.primaryColor,
-              tabBackgroundColor: EcoTheme.primaryColor.withValues(alpha: 0.16),
-              tabBorderRadius: 30,
-              rippleColor: Colors.white.withValues(alpha: 0.06),
-              hoverColor: Colors.white.withValues(alpha: 0.04),
-              // Sized so the expanded active pill plus three collapsed tabs
-              // still fit inside the bar on a 320dp-wide screen.
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              textStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: EcoTheme.primaryColor,
-              ),
-              tabs: const [
-                GButton(icon: Icons.home_rounded, text: 'Home'),
-                GButton(icon: Icons.delete_rounded, text: 'Bins'),
-                GButton(icon: Icons.history_rounded, text: 'History'),
-                GButton(icon: Icons.person_rounded, text: 'Profile'),
-              ],
             ),
           ),
         ),

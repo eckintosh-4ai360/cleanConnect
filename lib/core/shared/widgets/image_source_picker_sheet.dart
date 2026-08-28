@@ -9,30 +9,34 @@ Future<ImageSource?> showImageSourcePickerSheet(
 }) {
   return showModalBottomSheet<ImageSource>(
     context: context,
+    useSafeArea: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (ctx) => Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          const SizedBox(height: 16),
-          ListTile(
-            leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
-            title: const Text('Take a Photo'),
-            onTap: () => Navigator.pop(ctx, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
-            title: const Text('Choose from Gallery'),
-            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-          ),
-        ],
+    builder: (ctx) => SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
+              title: const Text('Take a Photo'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
+              title: const Text('Choose from Gallery'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
       ),
     ),
   );

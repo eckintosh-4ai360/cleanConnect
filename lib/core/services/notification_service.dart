@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 
 import '../../features/auth/domain/entities/user_entity.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
@@ -135,6 +136,7 @@ class NotificationService {
   DateTime? _lastNavigatedAt;
   String? _pendingRequestId;
   Timer? _vibrationTimeout;
+  final FlutterRingtonePlayer _ringtonePlayer = FlutterRingtonePlayer();
 
   Future<void> initialize(ProviderContainer container) async {
     _container = container;
@@ -194,7 +196,7 @@ class NotificationService {
 
     // Silence and clean up notifications for non-riders
     _pendingRequestId = null;
-    await stopVibration();
+    await stopIncomingPickupAlert();
     await _cancelAllPickupNotifications();
     if (state is AuthAuthenticated) {
       await _releaseStaleDeviceToken();
@@ -207,7 +209,7 @@ class NotificationService {
       unawaited(_releaseStaleDeviceToken());
       return;
     }
-    unawaited(startVibrationLoop());
+    unawaited(startIncomingPickupAlert());
     _navigateToRequestId(message.data['requestId'] as String?);
   }
 
@@ -243,7 +245,13 @@ class NotificationService {
     _container!.read(routerProvider).push('/rider/incoming-request/$requestId');
   }
 
-  Future<void> startVibrationLoop() async {
+  /// Rings and vibrates until the rider answers, like an incoming call.
+  ///
+  /// Vibration alone was too easy to miss on a bike, so this also loops the
+  /// device's own ringtone. It plays on the ringer stream rather than the alarm
+  /// one, so a rider who has silenced their phone stays silenced -- the
+  /// vibration and the full-screen notification still get through.
+  Future<void> startIncomingPickupAlert() async {
     try {
       final hasVibrator = await Vibration.hasVibrator();
       if (hasVibrator == true) {
@@ -251,20 +259,30 @@ class NotificationService {
           pattern: _pickupVibrationPatternRaw,
           repeat: 0,
         );
-        _vibrationTimeout?.cancel();
-        _vibrationTimeout = Timer(
-          _maxVibrationDuration,
-          () => unawaited(stopVibration()),
-        );
       }
     } catch (_) {}
+
+    try {
+      await _ringtonePlayer.playRingtone(looping: true);
+    } catch (_) {}
+
+    // Both the tone and the buzzing stop themselves if nothing answers, so a
+    // missed request can't ring out the battery.
+    _vibrationTimeout?.cancel();
+    _vibrationTimeout = Timer(
+      _maxVibrationDuration,
+      () => unawaited(stopIncomingPickupAlert()),
+    );
   }
 
-  Future<void> stopVibration() async {
+  Future<void> stopIncomingPickupAlert() async {
     _vibrationTimeout?.cancel();
     _vibrationTimeout = null;
     try {
       await Vibration.cancel();
+    } catch (_) {}
+    try {
+      await _ringtonePlayer.stop();
     } catch (_) {}
   }
 
@@ -285,7 +303,7 @@ class NotificationService {
   // Clean up push tokens and alerts on logout
   Future<void> handleLogout() async {
     _pendingRequestId = null;
-    await stopVibration();
+    await stopIncomingPickupAlert();
     await _cancelAllPickupNotifications();
     await _setRiderPushEnabled(false);
     if (_isSignedInAsRider) {

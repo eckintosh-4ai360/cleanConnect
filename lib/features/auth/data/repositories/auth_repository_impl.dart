@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:hive/hive.dart';
 import '../../domain/entities/user_entity.dart';
@@ -159,23 +161,40 @@ class AuthRepositoryImpl implements AuthRepository {
         throw Exception('Registration failed.');
       }
 
-      // Upload house photo if provided (customers only)
+      // Upload house photo if provided (customers only).
+      //
+      // Both the storage policy and customers_update_own are scoped to
+      // auth.uid(), so this only works while signUp has actually returned a
+      // session. With email confirmation switched on it does not, and the
+      // upload would fail for every single customer -- silently, when this used
+      // to swallow the error bare. Riders rely on this photo to find the right
+      // building, so a failure has to be visible in the logs at least.
       if (housePhotoBytes != null && housePhotoBytes.isNotEmpty) {
-        try {
-          final extension = (housePhotoFileName ?? '').contains('.')
-              ? housePhotoFileName!.split('.').last
-              : 'jpg';
-          final path = '${authUser.id}/house.$extension';
-          await _client.storage.from('house-photos').uploadBinary(
-                path,
-                housePhotoBytes,
-                fileOptions: const sb.FileOptions(upsert: true),
-              );
-          final photoUrl = _client.storage.from('house-photos').getPublicUrl(path);
-          await _client
-              .from('customers')
-              .update({'house_photo_url': photoUrl}).eq('id', authUser.id);
-        } catch (_) {}
+        if (response.session == null) {
+          debugPrint(
+            '!! HOUSE PHOTO SKIPPED — signUp returned no session (is email '
+            'confirmation enabled?), so storage and customers are both '
+            'unwritable for this user.',
+          );
+        } else {
+          try {
+            final extension = (housePhotoFileName ?? '').contains('.')
+                ? housePhotoFileName!.split('.').last
+                : 'jpg';
+            final path = '${authUser.id}/house.$extension';
+            await _client.storage.from('house-photos').uploadBinary(
+                  path,
+                  housePhotoBytes,
+                  fileOptions: const sb.FileOptions(upsert: true),
+                );
+            final photoUrl = _client.storage.from('house-photos').getPublicUrl(path);
+            await _client
+                .from('customers')
+                .update({'house_photo_url': photoUrl}).eq('id', authUser.id);
+          } catch (e) {
+            debugPrint('!! HOUSE PHOTO UPLOAD FAILED — $e');
+          }
+        }
       }
 
       return UserEntity(

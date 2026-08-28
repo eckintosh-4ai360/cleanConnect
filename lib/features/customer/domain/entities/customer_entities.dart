@@ -168,6 +168,14 @@ class SubscriptionEntity {
   /// they schedule. Null if never uploaded.
   final String? housePhotoUrl;
 
+  /// Whether each pickup has to be paid for at request time. Derived in the
+  /// database from pricing_plans.is_payg (plus the subscription being active),
+  /// never from [currentPlan]'s text -- the plan is called 'Pay As You Go' in
+  /// pricing_plans but was being compared against 'Pay-As-You-Go' in the app,
+  /// which silently made every pickup free. Defaults to true so an unreadable
+  /// or missing subscription charges rather than gives the pickup away.
+  final bool isPayAsYouGo;
+
   const SubscriptionEntity({
     required this.currentPlan,
     required this.fee,
@@ -180,6 +188,7 @@ class SubscriptionEntity {
     this.delayBonusAvailable = false,
     this.lastPickupCompletedAt,
     this.housePhotoUrl,
+    this.isPayAsYouGo = true,
   });
 }
 

@@ -364,7 +364,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
   }
 
   SubscriptionEntity _subscriptionFromRow(Map<String, dynamic> r) => SubscriptionEntity(
-        currentPlan: r['subscription_plan_name'] as String? ?? 'Weekly Plan',
+        currentPlan: r['subscription_plan_name'] as String? ?? 'Pay As You Go',
         fee: (r['subscription_fee'] as num?)?.toDouble() ?? 0.0,
         status: r['subscription_status'] as String? ?? 'active',
         paymentMethod: r['payment_method'] as String? ?? 'Mobile Money',
@@ -379,14 +379,18 @@ class CustomerRepositoryImpl implements CustomerRepository {
             ? DateTime.tryParse(r['last_pickup_completed_at'].toString())
             : null,
         housePhotoUrl: r['house_photo_url'] as String?,
+        // Maintained by trg_customers_sync_payg; missing means charge.
+        isPayAsYouGo: r['subscription_is_payg'] as bool? ?? true,
       );
 
+  // No customers row yet (or unreadable): assume nothing is paid for.
   SubscriptionEntity _defaultSubscription() => const SubscriptionEntity(
-        currentPlan: 'Weekly Plan',
+        currentPlan: 'Pay As You Go',
         fee: 0.0,
         status: 'active',
         paymentMethod: 'Mobile Money',
         outstandingBalance: 0.0,
+        isPayAsYouGo: true,
       );
 
   @override

@@ -79,68 +79,74 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     Future<void> showImagePickerModal() async {
       showModalBottomSheet(
         context: context,
+        useSafeArea: true,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        builder: (ctx) => Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Update Profile Photo',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
-                title: const Text('Take a Photo'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  isUploading.value = true;
-                  try {
-                    final newUrl = await ProfileImagePickerService.pickAndUploadProfileImage(
-                      source: ImageSource.camera,
-                    );
-                    if (newUrl != null) {
-                      photoUrlState.value = newUrl;
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+        builder: (ctx) => SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Update Profile Photo',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
+                  title: const Text('Take a Photo'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    isUploading.value = true;
+                    try {
+                      final newUrl = await ProfileImagePickerService.pickAndUploadProfileImage(
+                        source: ImageSource.camera,
                       );
+                      if (newUrl != null) {
+                        photoUrlState.value = newUrl;
+                        ref.invalidate(authStateControllerProvider);
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    } finally {
+                      isUploading.value = false;
                     }
-                  } finally {
-                    isUploading.value = false;
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
-                title: const Text('Choose from Gallery'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  isUploading.value = true;
-                  try {
-                    final newUrl = await ProfileImagePickerService.pickAndUploadProfileImage(
-                      source: ImageSource.gallery,
-                    );
-                    if (newUrl != null) {
-                      photoUrlState.value = newUrl;
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    isUploading.value = true;
+                    try {
+                      final newUrl = await ProfileImagePickerService.pickAndUploadProfileImage(
+                        source: ImageSource.gallery,
                       );
+                      if (newUrl != null) {
+                        photoUrlState.value = newUrl;
+                        ref.invalidate(authStateControllerProvider);
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+                        );
+                      }
+                    } finally {
+                      isUploading.value = false;
                     }
-                  } finally {
-                    isUploading.value = false;
-                  }
-                },
-              ),
-            ],
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -184,38 +190,42 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     void showHousePhotoPickerModal() {
       showModalBottomSheet(
         context: context,
+        useSafeArea: true,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        builder: (ctx) => Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                housePhotoUrl == null || housePhotoUrl.isEmpty
-                    ? 'Add House Photo'
-                    : 'Update House Photo',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
-                title: const Text('Take a Photo'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  pickAndUploadHousePhoto(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  pickAndUploadHousePhoto(ImageSource.gallery);
-                },
-              ),
-            ],
+        builder: (ctx) => SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  housePhotoUrl == null || housePhotoUrl.isEmpty
+                      ? 'Add House Photo'
+                      : 'Update House Photo',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.photo_camera, color: Color(0xFFF0A500)),
+                  title: const Text('Take a Photo'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    pickAndUploadHousePhoto(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library, color: Color(0xFFF0A500)),
+                  title: const Text('Choose from Gallery'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    pickAndUploadHousePhoto(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -682,7 +692,7 @@ class _SwitchRow extends StatelessWidget {
         label,
         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
       ),
-      activeColor: const Color(0xFFF0A500),
+      activeThumbColor: const Color(0xFFF0A500),
     );
   }
 }

@@ -92,7 +92,7 @@ class SplashScreen extends HookConsumerWidget {
                   const SizedBox(height: 24),
                   // Title
                   const Text(
-                    'EcoSystem',
+                    'CleanConnect',
                     style: TextStyle(
                       fontSize: 36,
                       fontWeight: FontWeight.w900,
@@ -128,7 +128,11 @@ class SplashScreen extends HookConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(3, (index) {
                             final delay = index * 0.2;
-                            final animValue = (animationController.value - delay).clamp(0.0, 1.0);
+                            final animValue =
+                                (animationController.value - delay).clamp(
+                                  0.0,
+                                  1.0,
+                                );
                             double bounce = 0.0;
                             if (animValue < 0.5) {
                               bounce = animValue * 2;
@@ -139,7 +143,11 @@ class SplashScreen extends HookConsumerWidget {
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                               width: 8,
                               height: 8,
-                              transform: Matrix4.translationValues(0, -bounce * 10, 0),
+                              transform: Matrix4.translationValues(
+                                0,
+                                -bounce * 10,
+                                0,
+                              ),
                               decoration: const BoxDecoration(
                                 color: Color(0xFFF0A500),
                                 shape: BoxShape.circle,

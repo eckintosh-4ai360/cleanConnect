@@ -53,13 +53,7 @@ void main() async {
   }
 
   runApp(
-    DevicePreview(
-      enabled: !kReleaseMode,
-      builder: (context) => UncontrolledProviderScope(
-        container: container,
-        child: const EcoWasteApp(),
-      ),
-    ),
+    UncontrolledProviderScope(container: container, child: const EcoWasteApp()),
   );
 }
 

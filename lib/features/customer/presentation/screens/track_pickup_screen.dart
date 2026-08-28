@@ -77,7 +77,8 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
     final position = LatLng(tracking.riderLat!, tracking.riderLng!);
 
     final previous = _riderAnimator.current;
-    final bearing = tracking.riderHeading ??
+    final bearing =
+        tracking.riderHeading ??
         (previous == null
             ? _renderedBearing
             : GeoUtils.bearingDegrees(previous, position));
@@ -104,18 +105,24 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
     _attemptedDestinationRepair = true;
 
     final parsed = GeoUtils.tryParseLatLng(tracking.location);
-    final resolved = parsed ??
+    final resolved =
+        parsed ??
         await DirectionsService.instance.geocodeAddress(tracking.location);
     if (resolved == null || !mounted) return;
 
-    await ref.read(customerRepositoryProvider).setPickupDestination(
+    await ref
+        .read(customerRepositoryProvider)
+        .setPickupDestination(
           requestId: tracking.requestId,
           latitude: resolved.latitude,
           longitude: resolved.longitude,
         );
   }
 
-  Future<void> _refreshRoute(LatLng riderPosition, PickupTrackingEntity tracking) async {
+  Future<void> _refreshRoute(
+    LatLng riderPosition,
+    PickupTrackingEntity tracking,
+  ) async {
     if (!tracking.hasDestination || _loadingRoute) return;
 
     if (_routeOrigin != null) {
@@ -153,7 +160,9 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
     ];
     final bounds = GeoUtils.boundsFor(points);
     if (bounds == null || _mapController == null) return;
-    await _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 72));
+    await _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 72),
+    );
   }
 
   Future<void> _callRider(String phone) async {
@@ -208,7 +217,8 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
             return const _CentredMessage(
               icon: Icons.local_shipping_outlined,
               title: 'No active pickup',
-              body: 'Book a collection and you will be able to follow your '
+              body:
+                  'Book a collection and you will be able to follow your '
                   'rider here in real time.',
             );
           }
@@ -263,11 +273,7 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
             ),
           ),
         ),
-        _RiderPanel(
-          tracking: tracking,
-          route: _route,
-          onCall: _callRider,
-        ),
+        _RiderPanel(tracking: tracking, route: _route, onCall: _callRider),
       ],
     );
   }
@@ -276,7 +282,8 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
     final destination = tracking.hasDestination
         ? LatLng(tracking.destinationLat!, tracking.destinationLng!)
         : null;
-    final riderPosition = _renderedRiderPosition ??
+    final riderPosition =
+        _renderedRiderPosition ??
         (tracking.hasRiderPosition
             ? LatLng(tracking.riderLat!, tracking.riderLng!)
             : null);
@@ -289,9 +296,9 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
             : 'Waiting for a rider',
         body: tracking.isAssigned
             ? '${tracking.riderName ?? 'Your rider'} will appear on the map as '
-                'soon as they start the trip.'
+                  'soon as they start the trip.'
             : 'We will show the map here the moment a rider accepts your '
-                'pickup.',
+                  'pickup.',
       );
     }
 
@@ -311,7 +318,8 @@ class _TrackPickupScreenState extends ConsumerState<TrackPickupScreen> {
         Marker(
           markerId: const MarkerId('destination'),
           position: destination,
-          icon: _destinationIcon ??
+          icon:
+              _destinationIcon ??
               BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           anchor: const Offset(0.5, 1.0),
           infoWindow: const InfoWindow(title: 'Your pickup location'),
@@ -363,29 +371,29 @@ class _PhaseBanner extends StatelessWidget {
 
     final (color, icon, title, subtitle) = switch (tracking.phase) {
       PickupPhase.awaitingRider => (
-          const Color(0xFFF0A500),
-          Icons.hourglass_top_rounded,
-          'Finding you a rider',
-          'Your request is with our riders now.',
-        ),
+        const Color(0xFFF0A500),
+        Icons.hourglass_top_rounded,
+        'Finding you a rider',
+        'Your request is with our riders now.',
+      ),
       PickupPhase.enRoute => (
-          theme.colorScheme.primary,
-          Icons.local_shipping_rounded,
-          '${tracking.riderName ?? 'Your rider'} is on the way',
-          tracking.location,
-        ),
+        theme.colorScheme.primary,
+        Icons.local_shipping_rounded,
+        '${tracking.riderName ?? 'Your rider'} is on the way',
+        tracking.location,
+      ),
       PickupPhase.completed => (
-          const Color(0xFF2E7D32),
-          Icons.check_circle_rounded,
-          'Pickup completed',
-          'Thanks for keeping your community clean.',
-        ),
+        const Color(0xFF2E7D32),
+        Icons.check_circle_rounded,
+        'Pickup completed',
+        'Thanks for keeping your community clean.',
+      ),
       PickupPhase.cancelled => (
-          Colors.grey,
-          Icons.cancel_rounded,
-          'Pickup cancelled',
-          'This request is no longer active.',
-        ),
+        Colors.grey,
+        Icons.cancel_rounded,
+        'Pickup cancelled',
+        'This request is no longer active.',
+      ),
     };
 
     return Container(
@@ -493,143 +501,155 @@ class _RiderPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (route != null && !tracking.isComplete) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _TrackMetric(
-                  label: 'ARRIVING IN',
-                  value: route!.durationLabel,
-                  color: theme.colorScheme.primary,
-                ),
-                Container(height: 26, width: 1, color: Colors.grey.shade300),
-                _TrackMetric(
-                  label: 'DISTANCE AWAY',
-                  value: route!.distanceLabel,
-                  color: Colors.blue,
-                ),
-                Container(height: 26, width: 1, color: Colors.grey.shade300),
-                _TrackMetric(
-                  label: 'UPDATED',
-                  value: _updatedLabel(tracking.riderLocationUpdatedAt),
-                  color: tracking.isPositionStale
-                      ? const Color(0xFFF57C00)
-                      : Colors.green,
-                ),
-              ],
-            ),
-            if (route!.isFallback) ...[
-              const SizedBox(height: 8),
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      bottom: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.cardTheme.color,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (route != null && !tracking.isComplete) ...[
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Icon(Icons.info_outline, size: 12, color: theme.hintColor),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: Text(
-                      'Estimated in a straight line — road times may be longer',
-                      style: TextStyle(fontSize: 10, color: theme.hintColor),
-                    ),
+                  _TrackMetric(
+                    label: 'ARRIVING IN',
+                    value: route!.durationLabel,
+                    color: theme.colorScheme.primary,
+                  ),
+                  Container(height: 26, width: 1, color: Colors.grey.shade300),
+                  _TrackMetric(
+                    label: 'DISTANCE AWAY',
+                    value: route!.distanceLabel,
+                    color: Colors.blue,
+                  ),
+                  Container(height: 26, width: 1, color: Colors.grey.shade300),
+                  _TrackMetric(
+                    label: 'UPDATED',
+                    value: _updatedLabel(tracking.riderLocationUpdatedAt),
+                    color: tracking.isPositionStale
+                        ? const Color(0xFFF57C00)
+                        : Colors.green,
                   ),
                 ],
               ),
-            ],
-            const Divider(height: 26),
-          ],
-          if (tracking.isAssigned)
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.15),
-                  backgroundImage: tracking.riderPhotoUrl != null
-                      ? NetworkImage(tracking.riderPhotoUrl!)
-                      : null,
-                  child: tracking.riderPhotoUrl == null
-                      ? Icon(Icons.person, color: theme.colorScheme.primary)
-                      : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tracking.riderName ?? 'Your rider',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+              if (route!.isFallback) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.info_outline, size: 12, color: theme.hintColor),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        'Estimated in a straight line — road times may be longer',
+                        style: TextStyle(fontSize: 10, color: theme.hintColor),
                       ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          if (tracking.riderRating != null) ...[
-                            const Icon(Icons.star, size: 13, color: Color(0xFFF0A500)),
-                            const SizedBox(width: 3),
-                            Text(
-                              tracking.riderRating!.toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
+                    ),
+                  ],
+                ),
+              ],
+              const Divider(height: 26),
+            ],
+            if (tracking.isAssigned)
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: theme.colorScheme.primary.withValues(
+                      alpha: 0.15,
+                    ),
+                    backgroundImage: tracking.riderPhotoUrl != null
+                        ? NetworkImage(tracking.riderPhotoUrl!)
+                        : null,
+                    child: tracking.riderPhotoUrl == null
+                        ? Icon(Icons.person, color: theme.colorScheme.primary)
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tracking.riderName ?? 'Your rider',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            if (tracking.riderRating != null) ...[
+                              const Icon(
+                                Icons.star,
+                                size: 13,
+                                color: Color(0xFFF0A500),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          if (tracking.vehicleType != null)
-                            Flexible(
-                              child: Text(
-                                tracking.vehicleType!,
+                              const SizedBox(width: 3),
+                              Text(
+                                tracking.riderRating!.toStringAsFixed(1),
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (tracking.riderPhone != null)
-                  IconButton.filled(
-                    style: IconButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: Colors.white,
+                              const SizedBox(width: 8),
+                            ],
+                            if (tracking.vehicleType != null)
+                              Flexible(
+                                child: Text(
+                                  tracking.vehicleType!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
-                    tooltip: 'Call ${tracking.riderName ?? 'rider'}',
-                    onPressed: () => onCall(tracking.riderPhone!),
-                    icon: const Icon(Icons.phone),
                   ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Icon(Icons.schedule, color: theme.hintColor, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'We will introduce you to your rider as soon as one accepts.',
-                    style: TextStyle(fontSize: 12, color: theme.hintColor),
+                  if (tracking.riderPhone != null)
+                    IconButton.filled(
+                      style: IconButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      tooltip: 'Call ${tracking.riderName ?? 'rider'}',
+                      onPressed: () => onCall(tracking.riderPhone!),
+                      icon: const Icon(Icons.phone),
+                    ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Icon(Icons.schedule, color: theme.hintColor, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'We will introduce you to your rider as soon as one accepts.',
+                      style: TextStyle(fontSize: 12, color: theme.hintColor),
+                    ),
                   ),
-                ),
-              ],
-            ),
-        ],
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
