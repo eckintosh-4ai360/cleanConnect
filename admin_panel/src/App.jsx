@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './AuthContext';
 import Login from './components/Login';
+import SetPassword from './components/SetPassword';
 import Dashboard from './components/Dashboard';
 import Customers from './components/Customers';
 import Bins from './components/Bins';
@@ -21,7 +22,7 @@ import UserManagement from './components/UserManagement';
 import { roleLabel, tabsForRole } from './roles';
 
 export default function App() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, needsPasswordSetup, completePasswordSetup } = useAuth();
 
   if (loading) {
     return (
@@ -29,6 +30,13 @@ export default function App() {
         <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Loading…</span>
       </div>
     );
+  }
+
+  // A recovery link signs the user in before they have a password, so this has
+  // to come ahead of the profile gate: an invited user has a valid session but
+  // nothing they could sign in with again tomorrow.
+  if (session && needsPasswordSetup) {
+    return <SetPassword email={session.user?.email} onDone={completePasswordSetup} />;
   }
 
   if (!session || !profile) {

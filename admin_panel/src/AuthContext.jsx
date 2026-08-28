@@ -9,6 +9,13 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  // True while the signed-in session came from a password-reset link. Supabase
+  // signs the link's holder straight in, so without this the panel would drop
+  // an invited user onto the dashboard having never set a password — and they
+  // would need a fresh emailed link every time they wanted back in.
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(
+    () => typeof window !== 'undefined' && window.location.hash.includes('type=recovery')
+  );
 
   // Which user the profile in state belongs to. supabase-js re-emits auth
   // events for the same user constantly — TOKEN_REFRESHED on its refresh timer,
@@ -101,8 +108,11 @@ export function AuthProvider({ children }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (cancelled) return;
+
+      if (event === 'PASSWORD_RECOVERY') setNeedsPasswordSetup(true);
+      if (event === 'SIGNED_OUT') setNeedsPasswordSetup(false);
 
       // Always keep the freshest access token in context.
       setSession(newSession);
@@ -137,6 +147,22 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Called once the recovery-session user has actually chosen a password.
+  const completePasswordSetup = () => {
+    setNeedsPasswordSetup(false);
+    if (typeof window !== 'undefined' && window.location.hash) {
+      // Drop the recovery token so a refresh doesn't reopen this screen.
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  };
+
+  const sendPasswordReset = async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) throw error;
+  };
+
   const signIn = async (email, password) => {
     setAuthError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -162,7 +188,19 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, authError, signIn, signOut, setAuthError, refreshProfile }}
+      value={{
+        session,
+        profile,
+        loading,
+        authError,
+        signIn,
+        signOut,
+        setAuthError,
+        refreshProfile,
+        needsPasswordSetup,
+        completePasswordSetup,
+        sendPasswordReset,
+      }}
     >
       {children}
     </AuthContext.Provider>

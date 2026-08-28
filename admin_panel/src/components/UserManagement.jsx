@@ -15,6 +15,8 @@ export default function UserManagement() {
   const [formRole, setFormRole] = useState('staff');
   const [formError, setFormError] = useState(null);
   const [banner, setBanner] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const mapUserRow = (r) => ({
     id: r.id,
@@ -69,6 +71,9 @@ export default function UserManagement() {
         fullName: String(form.get('name')).trim(),
         phoneNumber: String(form.get('phone') || '').trim() || null,
         role,
+        // Only the browser knows where the panel is hosted; without this the
+        // invite link falls back to the project's Site URL.
+        redirectTo: window.location.origin,
       },
     });
 
@@ -91,7 +96,12 @@ export default function UserManagement() {
       // handle_new_user() writes the profiles row from the auth trigger, so the
       // response returning is our cue that it exists.
       await fetchUsers();
-      flash(`${roleLabel(role)} account created — a password-setup email has been sent to ${email}.`);
+      flash(
+        data?.inviteSent === false
+          ? `${roleLabel(role)} account created, but the password-setup email could not be sent. Use "Resend setup email" to try again.`
+          : `${roleLabel(role)} account created — a password-setup email has been sent to ${email}.`,
+        data?.inviteSent === false ? 'danger' : 'success'
+      );
     }
     setActionLoading(false);
   };
@@ -118,6 +128,67 @@ export default function UserManagement() {
     } else {
       await fetchUsers();
       flash(`${user.fullName} was ${status === 'active' ? 'reactivated' : 'deactivated'}.`);
+    }
+    setActionLoading(false);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    setActionLoading(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: String(form.get('name')).trim(),
+        phone_number: String(form.get('phone') || '').trim() || null,
+      })
+      .eq('id', editingUser.id);
+    if (error) {
+      flash('Failed to save changes: ' + error.message, 'danger');
+    } else {
+      setEditingUser(null);
+      await fetchUsers();
+      flash('Details updated.');
+    }
+    setActionLoading(false);
+  };
+
+  const handleResendInvite = async (user) => {
+    setActionLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) flash('Could not send the email: ' + error.message, 'danger');
+    else flash(`Password-setup email sent to ${user.email}.`);
+    setActionLoading(false);
+  };
+
+  const handleDelete = async (user) => {
+    setActionLoading(true);
+    const { data, error } = await supabase.functions.invoke('admin-delete-user', {
+      body: { userId: user.id },
+    });
+
+    let message = null;
+    if (error) {
+      message = error.message;
+      try {
+        const body = await error.context?.json?.();
+        if (body?.error) message = body.error;
+      } catch {
+        /* keep the generic message */
+      }
+    } else if (data?.error) {
+      message = data.error;
+    }
+
+    if (message) {
+      flash('Failed to delete: ' + message, 'danger');
+    } else {
+      setConfirmDelete(null);
+      if (selectedId === user.id) setSelectedId(null);
+      await fetchUsers();
+      flash(`${user.fullName} was deleted.`);
     }
     setActionLoading(false);
   };
@@ -322,6 +393,43 @@ export default function UserManagement() {
                   A deactivated user keeps their account but is refused at the panel login.
                 </span>
               </div>
+
+              {/* ── Account Actions ── */}
+              <div style={{ background: 'var(--bg-sidebar)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '800', color: 'var(--text-muted)', letterSpacing: '0.5px' }}>Manage Account</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '6px' }}>
+                  <button
+                    className="btn-outline"
+                    style={{ padding: '8px 10px', fontSize: '12px' }}
+                    disabled={actionLoading}
+                    onClick={() => setEditingUser(selectedUser)}
+                  >
+                    Edit Details
+                  </button>
+                  <button
+                    className="btn-outline"
+                    style={{ padding: '8px 10px', fontSize: '12px' }}
+                    disabled={actionLoading}
+                    onClick={() => handleResendInvite(selectedUser)}
+                    title="Emails them a fresh link for choosing a password"
+                  >
+                    Resend Setup Email
+                  </button>
+                </div>
+                <button
+                  className="btn-danger"
+                  style={{ padding: '8px 10px', fontSize: '12px', opacity: isSelf ? 0.5 : 1 }}
+                  disabled={isSelf || actionLoading}
+                  onClick={() => setConfirmDelete(selectedUser)}
+                  title={isSelf ? 'You cannot delete your own account.' : undefined}
+                >
+                  Delete User
+                </button>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  Deleting removes the account for good. To revoke access temporarily,
+                  deactivate instead.
+                </span>
+              </div>
             </>
           ) : (
             <>
@@ -341,6 +449,68 @@ export default function UserManagement() {
           )}
         </div>
       </div>
+
+      {/* ── Edit Details Modal ── */}
+      {editingUser && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 style={{ fontSize: '18px' }}>Edit {editingUser.fullName}</h3>
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label>Full Name</label>
+                <input name="name" type="text" defaultValue={editingUser.fullName} required />
+              </div>
+              <div className="form-group">
+                <label>Mobile Number</label>
+                <input
+                  name="phone"
+                  type="text"
+                  defaultValue={editingUser.phoneNumber === '—' ? '' : editingUser.phoneNumber}
+                />
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                Role and account access are changed from the panel behind this dialog.
+                Email cannot be changed here — delete the account and create it again
+                under the right address.
+              </p>
+              <div className="modal-actions">
+                <button type="button" className="btn-outline" onClick={() => setEditingUser(null)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={actionLoading}>
+                  {actionLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation ── */}
+      {confirmDelete && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 style={{ fontSize: '18px' }}>Delete {confirmDelete.fullName}?</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+              This permanently removes the account for <strong>{confirmDelete.email}</strong>.
+              They lose panel access immediately and cannot be restored — you would have to
+              create them again from scratch.
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+              If you only want to revoke access for now, cancel and use Deactivated instead.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn-outline" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={actionLoading}
+                onClick={() => handleDelete(confirmDelete)}
+              >
+                {actionLoading ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Create User Modal ── */}
       {showAddModal && (

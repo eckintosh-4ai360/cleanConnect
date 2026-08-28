@@ -85,6 +85,13 @@ Deno.serve(async (req: Request) => {
   const phoneNumber = (body.phoneNumber as string | undefined) ?? null;
   const role = body.role as string | undefined;
   const extra = (body.extra as Record<string, unknown> | undefined) ?? {};
+  // Where the password-setup link should land. The caller supplies it because
+  // only the browser knows which origin the panel is being served from; without
+  // it Supabase falls back to the project's Site URL, which points at the
+  // customer app and leaves a new panel user with nowhere to set a password.
+  const redirectTo = typeof body.redirectTo === "string" && body.redirectTo
+    ? body.redirectTo
+    : undefined;
 
   if (!email || typeof email !== "string") {
     return jsonResponse({ error: "A valid email address is required." }, 400);
@@ -126,10 +133,15 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email);
+  const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(
+    email,
+    redirectTo ? { redirectTo } : undefined,
+  );
   if (resetError) {
     console.error("[admin-create-user] failed to send password-reset email:", resetError);
   }
 
-  return jsonResponse({ id: created.user.id });
+  // The account exists either way, so this is not an error — but the caller
+  // needs to know the invite did not go out so it can tell the admin to resend.
+  return jsonResponse({ id: created.user.id, inviteSent: !resetError });
 });
