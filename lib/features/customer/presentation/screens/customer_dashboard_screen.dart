@@ -39,7 +39,9 @@ class CustomerDashboardScreen extends ConsumerWidget {
     final currentUser = Supabase.instance.client.auth.currentUser;
 
     final displayName = user?.fullName ?? currentUser?.userMetadata?['full_name'] as String? ?? 'Customer';
-    final photoUrl = currentUser?.userMetadata?['avatar_url'] as String? ?? user?.profilePictureUrl;
+    // The profiles row, not auth metadata — a picture in user_metadata rides on
+    // every access token and blows the gateway's header limit.
+    final photoUrl = user?.profilePictureUrl;
     final firstName = displayName.split(' ').first;
 
     final theme = Theme.of(context);

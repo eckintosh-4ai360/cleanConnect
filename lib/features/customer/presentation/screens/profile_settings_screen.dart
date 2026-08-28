@@ -56,7 +56,9 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     final authState = ref.watch(authStateControllerProvider);
     final user = authState is AuthAuthenticated ? authState.user : null;
     final currentUser = Supabase.instance.client.auth.currentUser;
-    final currentPhotoUrlFromAuth = currentUser?.userMetadata?['avatar_url'] as String?;
+    // The profiles row, not auth metadata — a picture in user_metadata rides on
+    // every access token and blows the gateway's header limit.
+    final currentPhotoUrlFromAuth = user?.profilePictureUrl;
     final photoUrlState = useState<String?>(currentPhotoUrlFromAuth);
     final isUploading = useState(false);
 

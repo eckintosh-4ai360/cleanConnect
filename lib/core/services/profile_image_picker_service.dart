@@ -30,15 +30,19 @@ class ProfileImagePickerService {
       final uid = customUid ?? _auth.currentUser?.id;
       if (uid == null || uid.isEmpty) return photoUrl;
 
-      // Update profile picture in database
+      // Update profile picture in database. profiles.profile_picture_url is the
+      // only home for the picture.
+      //
+      // It used to be copied into the auth user's metadata as 'avatar_url' as
+      // well, which quietly broke the account. Supabase embeds user_metadata in
+      // every access token, so a base64 photo — a few hundred bytes of JPEG
+      // become tens of kilobytes once base64'd and wrapped in a JWT — pushed the
+      // Authorization header past the ~16KB the API gateway accepts. Every
+      // request the app made after that was rejected by the proxy with a bare
+      // HTML "400 Bad Request" before it reached Postgres or any edge function,
+      // which is what stopped Paystack checkout from ever starting. Readers take
+      // the picture from the profiles row instead.
       await _db.from('profiles').update({'profile_picture_url': photoUrl}).eq('id', uid);
-
-      // Update user metadata if editing current user
-      if (uid == _auth.currentUser?.id) {
-        try {
-          await _auth.updateUser(UserAttributes(data: {'avatar_url': photoUrl}));
-        } catch (_) {}
-      }
 
       return photoUrl;
     } catch (e) {

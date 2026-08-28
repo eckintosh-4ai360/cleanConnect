@@ -23,14 +23,37 @@ class RiderRepositoryImpl implements RiderRepository {
         .from('riders')
         .stream(primaryKey: ['id'])
         .eq('id', _uid)
-        .map((rows) => rows.isEmpty ? _fallbackProfile() : _riderFromRow(rows.first));
+        .asyncMap((rows) async {
+          final photoUrl = await _profilePhotoUrl();
+          return rows.isEmpty
+              ? _fallbackProfile()
+              : _riderFromRow(rows.first, photoUrl: photoUrl);
+        });
   }
 
   @override
   Future<RiderEntity> getRiderProfile() async {
     final row = await _db.from('riders').select().eq('id', _uid).maybeSingle();
     if (row == null) return _fallbackProfile();
-    return _riderFromRow(row);
+    return _riderFromRow(row, photoUrl: await _profilePhotoUrl());
+  }
+
+  /// The rider's picture, which lives on the profiles row.
+  ///
+  /// It used to be read off the auth user's metadata, but a picture stored
+  /// there rides on every access token and pushes the Authorization header past
+  /// what the API gateway accepts — see ProfileImagePickerService.
+  Future<String?> _profilePhotoUrl() async {
+    try {
+      final row = await _db
+          .from('profiles')
+          .select('profile_picture_url')
+          .eq('id', _uid)
+          .maybeSingle();
+      return row?['profile_picture_url'] as String?;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -40,14 +63,14 @@ class RiderRepositoryImpl implements RiderRepository {
   }
 
   // Read identity fields from auth metadata for current rider
-  RiderEntity _riderFromRow(Map<String, dynamic> r) {
+  RiderEntity _riderFromRow(Map<String, dynamic> r, {String? photoUrl}) {
     final authUser = _auth.currentUser;
     return RiderEntity(
       id: r['id'] as String,
       fullName: authUser?.userMetadata?['full_name'] as String? ?? 'Rider',
       email: authUser?.email ?? '',
       phoneNumber: authUser?.userMetadata?['phone_number'] as String? ?? '',
-      profilePhotoUrl: authUser?.userMetadata?['avatar_url'] as String?,
+      profilePhotoUrl: photoUrl,
       vehicleType: r['vehicle_type'] as String? ?? 'Motorbike',
       licenseNumber: r['license_number'] as String? ?? '',
       nationalIdNumber: r['national_id_number'] as String? ?? '',
