@@ -17,6 +17,19 @@ export default function UserManagement() {
   const [banner, setBanner] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [formPassword, setFormPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  // Credentials to read out to the new user, shown once after creation.
+  const [newCredentials, setNewCredentials] = useState(null);
+
+  // Avoids the ambiguous glyphs (O/0, l/1/I) that get misread when an admin
+  // reads a password out or writes it on paper.
+  const generatePassword = () => {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = new Uint32Array(14);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (n) => alphabet[n % alphabet.length]).join('');
+  };
 
   const mapUserRow = (r) => ({
     id: r.id,
@@ -71,9 +84,7 @@ export default function UserManagement() {
         fullName: String(form.get('name')).trim(),
         phoneNumber: String(form.get('phone') || '').trim() || null,
         role,
-        // Only the browser knows where the panel is hosted; without this the
-        // invite link falls back to the project's Site URL.
-        redirectTo: window.location.origin,
+        password: String(form.get('password')),
       },
     });
 
@@ -93,15 +104,12 @@ export default function UserManagement() {
       setFormError(data.error);
     } else {
       setShowAddModal(false);
+      setNewCredentials({ email, password: String(form.get('password')), role });
+      setFormPassword('');
+      setShowPassword(false);
       // handle_new_user() writes the profiles row from the auth trigger, so the
       // response returning is our cue that it exists.
       await fetchUsers();
-      flash(
-        data?.inviteSent === false
-          ? `${roleLabel(role)} account created, but the password-setup email could not be sent. Use "Resend setup email" to try again.`
-          : `${roleLabel(role)} account created — a password-setup email has been sent to ${email}.`,
-        data?.inviteSent === false ? 'danger' : 'success'
-      );
     }
     setActionLoading(false);
   };
@@ -212,7 +220,13 @@ export default function UserManagement() {
           </span>
           <button
             className="btn-primary"
-            onClick={() => { setFormRole('staff'); setFormError(null); setShowAddModal(true); }}
+            onClick={() => {
+              setFormRole('staff');
+              setFormError(null);
+              setFormPassword(generatePassword());
+              setShowPassword(true);
+              setShowAddModal(true);
+            }}
           >
             + Create New User
           </button>
@@ -411,9 +425,9 @@ export default function UserManagement() {
                     style={{ padding: '8px 10px', fontSize: '12px' }}
                     disabled={actionLoading}
                     onClick={() => handleResendInvite(selectedUser)}
-                    title="Emails them a fresh link for choosing a password"
+                    title="For a user who has forgotten the password you gave them"
                   >
-                    Resend Setup Email
+                    Reset Password
                   </button>
                 </div>
                 <button
@@ -449,6 +463,54 @@ export default function UserManagement() {
           )}
         </div>
       </div>
+
+      {/* ── Credentials Hand-Over ── */}
+      {newCredentials && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 style={{ fontSize: '18px' }}>{roleLabel(newCredentials.role)} account created</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+              Give these to the new user — they can sign in immediately. The password is
+              not shown again after you close this.
+            </p>
+            {[
+              { label: 'Email', value: newCredentials.email },
+              { label: 'Password', value: newCredentials.password },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: 'var(--bg-app)', borderRadius: '10px', padding: '12px' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '800', color: 'var(--text-muted)', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  {label}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <code style={{ flex: 1, minWidth: 0, fontSize: '14px', fontWeight: '700', wordBreak: 'break-all' }}>
+                    {value}
+                  </code>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ padding: '6px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                    onClick={() => navigator.clipboard?.writeText(value)}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  flash(`${roleLabel(newCredentials.role)} account created for ${newCredentials.email}.`);
+                  setNewCredentials(null);
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Edit Details Modal ── */}
       {editingUser && (
@@ -542,9 +604,40 @@ export default function UserManagement() {
                 </p>
               </div>
 
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                No password is set here — the new user gets an email inviting them to choose their own.
-              </p>
+              <div className="form-group">
+                <label>Password</label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    minLength={8}
+                    required
+                    style={{ flex: 1, minWidth: 0 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ padding: '8px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                    onClick={() => setShowPassword((v) => !v)}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ padding: '8px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                    onClick={() => { setFormPassword(generatePassword()); setShowPassword(true); }}
+                  >
+                    Generate
+                  </button>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: '1.5' }}>
+                  At least 8 characters. Give this to the new user — they can sign in with it
+                  straight away.
+                </p>
+              </div>
 
               {formError && (
                 <p style={{ fontSize: '12px', color: 'var(--color-danger)', fontWeight: '700' }}>{formError}</p>

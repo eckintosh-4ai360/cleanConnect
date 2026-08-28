@@ -92,6 +92,13 @@ Deno.serve(async (req: Request) => {
   const redirectTo = typeof body.redirectTo === "string" && body.redirectTo
     ? body.redirectTo
     : undefined;
+  // An explicit password means the admin is handing the credentials over in
+  // person: use it and skip the email round-trip entirely. Customers and riders
+  // are still created without one from the panel's own screens, and those keep
+  // the emailed setup link.
+  const password = typeof body.password === "string" && body.password
+    ? body.password
+    : undefined;
 
   if (!email || typeof email !== "string") {
     return jsonResponse({ error: "A valid email address is required." }, 400);
@@ -110,10 +117,15 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Only an admin can create panel user accounts." }, 403);
   }
 
-  const tempPassword = crypto.randomUUID();
+  if (password !== undefined && password.length < 8) {
+    return jsonResponse({ error: "Password must be at least 8 characters." }, 400);
+  }
+
   const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
     email,
-    password: tempPassword,
+    // No password supplied: a random one nobody ever sees, paired with the
+    // setup email below so the account is not left sign-in-able by anyone.
+    password: password ?? crypto.randomUUID(),
     email_confirm: true,
     user_metadata: { full_name: fullName, phone_number: phoneNumber, role },
   });
@@ -133,6 +145,12 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  if (password) {
+    // The admin already has the credentials to pass on; emailing a reset link
+    // now would only invite confusion about which one is current.
+    return jsonResponse({ id: created.user.id, inviteSent: false, passwordSet: true });
+  }
+
   const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(
     email,
     redirectTo ? { redirectTo } : undefined,
@@ -143,5 +161,5 @@ Deno.serve(async (req: Request) => {
 
   // The account exists either way, so this is not an error — but the caller
   // needs to know the invite did not go out so it can tell the admin to resend.
-  return jsonResponse({ id: created.user.id, inviteSent: !resetError });
+  return jsonResponse({ id: created.user.id, inviteSent: !resetError, passwordSet: false });
 });
