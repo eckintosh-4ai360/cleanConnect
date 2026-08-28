@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import { isBackOfficeRole, roleLabel } from './roles';
 
@@ -9,6 +9,13 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+
+  // Which user the profile in state belongs to. supabase-js re-emits auth
+  // events for the same user constantly — TOKEN_REFRESHED on its refresh timer,
+  // and SIGNED_IN again every time the tab regains focus — and reloading the
+  // profile on those is what made the panel look like it kept refreshing
+  // itself. See the listener below.
+  const loadedUserId = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,8 +61,40 @@ export function AuthProvider({ children }) {
       setLoading(false);
     };
 
+    // Same access checks as loadProfile, but it never touches `loading` and
+    // only writes state when the row actually differs — so a background check
+    // cannot blank the screen or needlessly re-render the panel.
+    const revalidateProfile = async (currentSession) => {
+      if (!currentSession?.user) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentSession.user.id)
+        .single();
+
+      if (cancelled || error || !data) return;
+
+      if (!isBackOfficeRole(data.role) || data.status !== 'active') {
+        // signOut fires SIGNED_OUT, which the listener below treats as a real
+        // user change and routes back to Login.
+        setAuthError(
+          !isBackOfficeRole(data.role)
+            ? 'This account no longer has admin panel access.'
+            : `This ${roleLabel(data.role)} account has been deactivated. Contact an administrator.`
+        );
+        await supabase.auth.signOut();
+        return;
+      }
+
+      setProfile((prev) =>
+        JSON.stringify(prev) === JSON.stringify(data) ? prev : data
+      );
+    };
+
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (cancelled) return;
+      loadedUserId.current = initialSession?.user?.id ?? null;
       setSession(initialSession);
       loadProfile(initialSession);
     });
@@ -64,7 +103,30 @@ export function AuthProvider({ children }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (cancelled) return;
+
+      // Always keep the freshest access token in context.
       setSession(newSession);
+
+      const nextUserId = newSession?.user?.id ?? null;
+
+      // A token refresh or a tab-focus re-emit carries the same user we already
+      // loaded. Re-running loadProfile there flipped `loading` back to true,
+      // and App renders a bare "Loading…" while that is set — which unmounts
+      // AdminShell and every page under it, then rebuilds them once the profiles
+      // query returns. That is the "page keeps refreshing itself": open modals,
+      // scroll position, search text and the realtime notification channel were
+      // all being thrown away and recreated on every alt-tab back to the panel.
+      // The account could still have been deactivated or demoted since the last
+      // check, so re-read it — just silently, leaving `loading` alone so the
+      // shell stays mounted.
+      if (nextUserId === loadedUserId.current) {
+        revalidateProfile(newSession);
+        return;
+      }
+
+      // A genuinely different user (or a sign-out): this one does need the full
+      // gated reload.
+      loadedUserId.current = nextUserId;
       setLoading(true);
       loadProfile(newSession);
     });
