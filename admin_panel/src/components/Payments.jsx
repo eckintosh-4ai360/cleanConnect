@@ -505,7 +505,7 @@ export default function Payments() {
                 <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--color-primary)', marginBottom: '8px' }}>
                   1. Regular Weekly Plan Prices (Base Rate)
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
                   {['120L', '240L', '360L'].map((size) => {
                     const key = `weekly${size.replace('L', '')}`;
                     return (
@@ -539,7 +539,7 @@ export default function Payments() {
                 <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                   Customers paying per pickup pay the weekly rate plus 30% per bin request.
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
                   <div style={{ background: 'white', padding: '8px 12px', borderRadius: '6px', textAlign: 'center' }}>
                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 'bold' }}>120L PAYG</div>
                     <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--color-success)' }}>GHS {payg120}</div>
@@ -563,7 +563,7 @@ export default function Payments() {
                 <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '8px' }}>
                   2. Bi-weekly Plan Prices
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
                   {['120L', '240L', '360L'].map((size) => {
                     const key = `biweekly${size.replace('L', '')}`;
                     return (
@@ -589,7 +589,7 @@ export default function Payments() {
                 <h4 style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '8px' }}>
                   3. Monthly Plan Prices
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
                   {['120L', '240L', '360L'].map((size) => {
                     const key = `monthly${size.replace('L', '')}`;
                     return (

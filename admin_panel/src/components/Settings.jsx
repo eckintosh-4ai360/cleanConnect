@@ -859,7 +859,7 @@ export default function Settings() {
                 <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '10px' }}>
                   Price per Bin Capacity (GHS / {planForm.isPayg ? 'pickup' : 'month'})
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '10px' }}>
                   {BIN_SIZES.map((size) => (
                     <div key={size} style={{ background: 'var(--bg-app)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{size}</span>
@@ -872,7 +872,7 @@ export default function Settings() {
                           placeholder="0.00"
                           value={planForm.prices[size]}
                           onChange={(e) => handlePriceChange(size, e.target.value)}
-                          style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-divider)', background: 'var(--bg-sidebar)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '700' }}
+                          style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-divider)', background: 'var(--bg-sidebar)', color: 'var(--text-primary)', fontSize: '14px', fontWeight: '700' }}
                         />
                       </div>
                     </div>

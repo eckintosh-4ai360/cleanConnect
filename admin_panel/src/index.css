@@ -494,6 +494,9 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Keeps a tall modal off the very edges of the viewport, and gives
+     .modal-content's max-width/max-height something to measure against. */
+  padding: 24px;
   z-index: 100;
   animation: fadeIn 0.2s ease-out;
 }
@@ -504,12 +507,40 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--border-radius-md);
   padding: 32px;
   width: 480px;
-  max-width: 90vw;
+  max-width: 100%;
+  /* Without this a form taller than the window simply ran off the top and
+     bottom with no way to reach the buttons -- the overlay centres the modal,
+     so the overflow was split across both edges and neither the page nor the
+     modal scrolled. */
+  max-height: 100%;
+  overflow-y: auto;
   box-shadow: var(--shadow-premium);
   display: flex;
   flex-direction: column;
   gap: 20px;
   animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Form controls carry an intrinsic minimum width, and as grid/flex children
+   their default min-width:auto refuses to shrink below it. In a `1fr 1fr 1fr`
+   row that pushes the last column straight out through the side of the modal.
+   Letting them shrink is what makes those columns actually track the modal. */
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 520px) {
+  .modal-overlay {
+    padding: 12px;
+  }
+
+  .modal-content {
+    padding: 20px;
+    gap: 16px;
+  }
 }
 
 @keyframes fadeIn {
