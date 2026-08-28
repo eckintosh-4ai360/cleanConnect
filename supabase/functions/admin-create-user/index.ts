@@ -10,8 +10,16 @@
 // user (random password, never surfaced), applies any role-specific fields
 // the form collected, and emails a password-reset link so the new
 // customer/rider can set their own password.
+//
+// It also creates back-office (admin panel) accounts — admin, financial
+// secretary, supervisor, staff, support. Those hand out panel privileges, so
+// unlike customer/rider they may only be created by a true 'admin', not by
+// every panel user.
 
 import { createClient } from "@supabase/supabase-js";
+
+// Kept in sync with profiles_role_check and admin_panel/src/roles.js.
+const BACK_OFFICE_ROLES = ["admin", "financial_secretary", "supervisor", "staff", "support"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,11 +64,12 @@ Deno.serve(async (req: Request) => {
 
   const { data: callerProfile } = await supabaseAdmin
     .from("profiles")
-    .select("role")
+    .select("role, status")
     .eq("id", caller.id)
     .single();
 
-  if (callerProfile?.role !== "admin") {
+  const callerRole = callerProfile?.role ?? "";
+  if (!BACK_OFFICE_ROLES.includes(callerRole) || callerProfile?.status !== "active") {
     return jsonResponse({ error: "Admin access required." }, 403);
   }
 
@@ -83,8 +92,15 @@ Deno.serve(async (req: Request) => {
   if (!fullName || typeof fullName !== "string") {
     return jsonResponse({ error: "A full name is required." }, 400);
   }
-  if (role !== "customer" && role !== "rider") {
-    return jsonResponse({ error: "role must be 'customer' or 'rider'." }, 400);
+  const isBackOfficeRole = BACK_OFFICE_ROLES.includes(role ?? "");
+  if (role !== "customer" && role !== "rider" && !isBackOfficeRole) {
+    return jsonResponse({ error: `role must be one of: customer, rider, ${BACK_OFFICE_ROLES.join(", ")}.` }, 400);
+  }
+  // Creating a panel account grants panel privileges, so only a full admin may
+  // do it — a support agent creating themselves an admin colleague would be an
+  // escalation path around is_super_admin().
+  if (isBackOfficeRole && callerRole !== "admin") {
+    return jsonResponse({ error: "Only an admin can create panel user accounts." }, 403);
   }
 
   const tempPassword = crypto.randomUUID();
@@ -99,7 +115,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: createError?.message ?? "Failed to create account." }, 400);
   }
 
-  if (Object.keys(extra).length > 0) {
+  if (!isBackOfficeRole && Object.keys(extra).length > 0) {
     const table = role === "customer" ? "customers" : "riders";
     const { error: updateError } = await supabaseAdmin
       .from(table)
