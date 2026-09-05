@@ -357,7 +357,13 @@ function AdminShell({ profile }) {
       {/* ── Left Sidebar Navigation ── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="sidebar-logo">CC</div>
+          <img
+            src="/app-icon.png"
+            alt="CleanConnect"
+            width="32"
+            height="32"
+            style={{ borderRadius: '8px', display: 'block', flexShrink: 0 }}
+          />
           <span className="sidebar-title">CleanConnect Admin</span>
         </div>
 

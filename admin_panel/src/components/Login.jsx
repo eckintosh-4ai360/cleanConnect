@@ -48,9 +48,13 @@ export default function Login() {
         style={{ width: '360px', display: 'flex', flexDirection: 'column', gap: '24px', padding: '36px' }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-          <div className="sidebar-logo" style={{ width: '48px', height: '48px', fontSize: '20px' }}>
-            CC
-          </div>
+          <img
+            src="/app-icon.png"
+            alt="CleanConnect"
+            width="48"
+            height="48"
+            style={{ borderRadius: '12px', display: 'block' }}
+          />
           <h2 style={{ fontSize: '20px' }}>CleanConnect Admin</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center' }}>
             Sign in to manage operations.
