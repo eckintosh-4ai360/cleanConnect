@@ -21,13 +21,15 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     // Current active expanded section ('none', 'info', 'address', 'payment', 'notifications')
     final activeSection = useState('none');
 
-    // Personal Info state
-    final nameController = useTextEditingController(text: 'Eckintosh');
+    // Personal Info state — pre-filled from registration data
+    final authState = ref.watch(authStateControllerProvider);
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final nameController = useTextEditingController(text: user?.fullName ?? '');
     final emailController = useTextEditingController(
-      text: 'Mark.aggrey@cleanconnect.com',
+      text: user?.email ?? '',
     );
-    final phoneController = useTextEditingController(text: '+1 (555) 019-2834');
-    final dobController = useTextEditingController(text: '12/11/1992');
+    final phoneController = useTextEditingController(text: user?.phoneNumber ?? '');
+    final dobController = useTextEditingController(text: '');
 
     // Address Management state
     final addresses = useState<List<Map<String, String>>>([
@@ -53,8 +55,7 @@ class ProfileSettingsScreen extends HookConsumerWidget {
 
     final theme = Theme.of(context);
 
-    final authState = ref.watch(authStateControllerProvider);
-    final user = authState is AuthAuthenticated ? authState.user : null;
+    // authState and user are declared above (Personal Info state section)
     final currentUser = Supabase.instance.client.auth.currentUser;
     // The profiles row, not auth metadata — a picture in user_metadata rides on
     // every access token and blows the gateway's header limit.
