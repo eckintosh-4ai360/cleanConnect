@@ -357,13 +357,15 @@ function AdminShell({ profile }) {
     <div className="app-container">
       {/* ── Left Sidebar Navigation ── */}
       <aside className={`sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-        <div className="sidebar-brand">
+        <div className={`sidebar-brand ${sidebarCollapsed ? 'sidebar-brand-collapsed' : ''}`}>
           <img
             src="/app-icon.png"
             alt="CleanConnect"
             width="32"
             height="32"
-            style={{ borderRadius: '8px', display: 'block', flexShrink: 0 }}
+            onClick={() => sidebarCollapsed && setSidebarCollapsed(false)}
+            style={{ borderRadius: '8px', display: 'block', flexShrink: 0, cursor: sidebarCollapsed ? 'pointer' : 'default' }}
+            title={sidebarCollapsed ? 'Click to expand sidebar' : 'CleanConnect'}
           />
           {!sidebarCollapsed && <span className="sidebar-title">CleanConnect Admin</span>}
           <button
@@ -416,6 +418,19 @@ function AdminShell({ profile }) {
       <main className="main-viewport">
         {/* Top Header */}
         <header className="top-header">
+          {sidebarCollapsed && (
+            <button
+              className="sidebar-toggle-btn header-expand-btn"
+              onClick={() => setSidebarCollapsed(false)}
+              title="Expand sidebar"
+              style={{ marginRight: '14px', flexShrink: 0 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          )}
+
           {/* Search bar */}
           <div className="header-search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
