@@ -39,11 +39,8 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     final newAddressLabelController = useTextEditingController();
     final newAddressDetailsController = useTextEditingController();
 
-    // Payment Methods state
-    final cardMethods = useState<List<Map<String, String>>>([
-      {'type': 'Visa', 'last4': '4240', 'expiry': '12/28'},
-      {'type': 'Mastercard', 'last4': '9938', 'expiry': '05/29'},
-    ]);
+    // Payment Methods state — starts empty (no hardcoded cards)
+    final cardMethods = useState<List<Map<String, String>>>([]);
 
     // Notifications state
     final pickupReminders = useState(true);
