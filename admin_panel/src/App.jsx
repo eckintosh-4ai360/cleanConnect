@@ -57,6 +57,7 @@ function AdminShell({ profile }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState([]);
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const adminName = profile?.full_name || 'Admin';
   const adminPhoto = profile?.profile_picture_url || null;
@@ -355,7 +356,7 @@ function AdminShell({ profile }) {
   return (
     <div className="app-container">
       {/* ── Left Sidebar Navigation ── */}
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         <div className="sidebar-brand">
           <img
             src="/app-icon.png"
@@ -364,7 +365,24 @@ function AdminShell({ profile }) {
             height="32"
             style={{ borderRadius: '8px', display: 'block', flexShrink: 0 }}
           />
-          <span className="sidebar-title">CleanConnect Admin</span>
+          {!sidebarCollapsed && <span className="sidebar-title">CleanConnect Admin</span>}
+          <button
+            className="sidebar-toggle-btn"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              style={{ transition: 'transform 0.3s', transform: sidebarCollapsed ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
         </div>
 
         <nav className="sidebar-menu">
@@ -373,21 +391,24 @@ function AdminShell({ profile }) {
               key={item.name}
               className={`sidebar-item ${activeTab === item.name ? 'active' : ''}`}
               onClick={() => setActiveTab(item.name)}
+              title={sidebarCollapsed ? item.name : ''}
             >
               {item.icon}
-              {item.name}
+              {!sidebarCollapsed && item.name}
             </div>
           ))}
         </nav>
 
         <div className="sidebar-footer">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)' }}></div>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>Server Live</span>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', flexShrink: 0 }}></div>
+            {!sidebarCollapsed && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 'bold' }}>Server Live</span>}
           </div>
-          <button className="action-btn" style={{ width: '28px', height: '28px' }} onClick={signOut} title="Sign out">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-          </button>
+          {!sidebarCollapsed && (
+            <button className="action-btn" style={{ width: '28px', height: '28px' }} onClick={signOut} title="Sign out">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            </button>
+          )}
         </div>
       </aside>
 

@@ -29,6 +29,7 @@ class RegisterScreen extends HookConsumerWidget {
     final agreedToTerms = useState(false);
     final profileImagePath = useState<String?>(null);
     final profileImageBytes = useState<Uint8List?>(null);
+    final isDetectingLocation = useState(false);
     final formKey = useMemoized(() => GlobalKey<FormState>());
 
     // Listen to registration status
@@ -53,56 +54,65 @@ class RegisterScreen extends HookConsumerWidget {
 
     // Geolocator logic to fetch location
     Future<void> detectLocation() async {
+      if (isDetectingLocation.value) return;
+      isDetectingLocation.value = true;
       gpsController.text = 'Fetching current location...';
-      final access = await LocationService.instance.ensurePermission();
 
-      if (!context.mounted) return;
+      try {
+        final access = await LocationService.instance.ensurePermission();
 
-      switch (access) {
-        case LocationAccess.granted:
-          final position = await LocationService.instance.currentPosition();
-          if (!context.mounted) return;
-          if (position != null) {
-            gpsController.text = _formatMapCoordinates(
-              position.latitude,
-              position.longitude,
-            );
-          } else {
+        if (!context.mounted) return;
+
+        switch (access) {
+          case LocationAccess.granted:
+            final position = await LocationService.instance.currentPosition();
+            if (!context.mounted) return;
+            if (position != null) {
+              gpsController.text = _formatMapCoordinates(
+                position.latitude,
+                position.longitude,
+              );
+            } else {
+              gpsController.clear();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Could not get your current location. Please ensure location is enabled and try again.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          case LocationAccess.serviceDisabled:
             gpsController.clear();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Could not get your current location. Try again.'),
-                backgroundColor: Colors.red,
+              SnackBar(
+                content: const Text('Turn on location services to use this.'),
+                action: SnackBarAction(
+                  label: 'Open settings',
+                  onPressed: LocationService.instance.openLocationSettings,
+                ),
               ),
             );
-          }
-        case LocationAccess.serviceDisabled:
-          gpsController.clear();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Turn on location services to use this.'),
-              action: SnackBarAction(
-                label: 'Open settings',
-                onPressed: LocationService.instance.openLocationSettings,
+          case LocationAccess.deniedForever:
+            gpsController.clear();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Location permission is blocked for CleanConnect.'),
+                action: SnackBarAction(
+                  label: 'Open settings',
+                  onPressed: LocationService.instance.openAppSettings,
+                ),
               ),
-            ),
-          );
-        case LocationAccess.deniedForever:
-          gpsController.clear();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Location permission is blocked for CleanConnect.'),
-              action: SnackBarAction(
-                label: 'Open settings',
-                onPressed: LocationService.instance.openAppSettings,
-              ),
-            ),
-          );
-        case LocationAccess.denied:
-          gpsController.clear();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission was not granted.')),
-          );
+            );
+          case LocationAccess.denied:
+            gpsController.clear();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permission was not granted.')),
+            );
+        }
+      } finally {
+        if (context.mounted) {
+          isDetectingLocation.value = false;
+        }
       }
     }
 
@@ -351,13 +361,25 @@ class RegisterScreen extends HookConsumerWidget {
                             Icons.location_on_outlined,
                             size: 20,
                           ),
-                          suffixIcon: IconButton(
-                            icon: const Icon(
-                              Icons.my_location,
-                              color: Color(0xFFF0A500),
-                            ),
-                            onPressed: detectLocation,
-                          ),
+                          suffixIcon: isDetectingLocation.value
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFFF0A500),
+                                    ),
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.my_location,
+                                    color: Color(0xFFF0A500),
+                                  ),
+                                  onPressed: detectLocation,
+                                ),
                           validator: (value) {
                             if (value == null ||
                                 value.isEmpty ||

@@ -113,15 +113,45 @@ h1, h2, h3, h4, h5, h6 {
   position: sticky;
   top: 0;
   z-index: 10;
-  transition: var(--transition-smooth);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.sidebar-collapsed {
+  width: 64px;
+  min-width: 64px;
 }
 
 .sidebar-brand {
-  padding: 24px;
+  padding: 16px;
   display: flex;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--border-divider);
+  min-height: 72px;
+  position: relative;
+}
+
+.sidebar-toggle-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-divider);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
 }
 
 .sidebar-logo {
@@ -165,6 +195,14 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   cursor: pointer;
   transition: var(--transition-smooth);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-collapsed .sidebar-item {
+  justify-content: center;
+  padding: 12px;
+  gap: 0;
 }
 
 .sidebar-item:hover {

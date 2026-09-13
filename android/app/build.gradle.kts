@@ -14,7 +14,7 @@ plugins {
 val mapsApiKey: String = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
-}.getProperty("MAPS_API_KEY") ?: ""
+}.getProperty("MAPS_API_KEY") ?: (project.findProperty("MAPS_API_KEY") as? String) ?: System.getenv("MAPS_API_KEY") ?: ""
 
 android {
     namespace = "com.ecowaste.cleanconnect.clean_connect"

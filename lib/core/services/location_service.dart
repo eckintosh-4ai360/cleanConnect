@@ -26,7 +26,8 @@ class LocationService {
     }
 
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.unableToDetermine) {
       permission = await Geolocator.requestPermission();
     }
 
@@ -42,24 +43,99 @@ class LocationService {
     }
   }
 
-  // Get single GPS fix, with fallback to last known position
+  /// Get single GPS fix, with a 4-tier resilient fallback:
+  /// 1. Platform-optimized High Accuracy fix (18s timeout)
+  /// 2. Medium Accuracy fix (Wi-Fi / Cell tower triangulation, 8s timeout - works reliably indoors)
+  /// 3. Native Android LocationManager fix (bypasses Google Play Services, 8s timeout)
+  /// 4. Last known cached position from OS
   Future<Position?> currentPosition({
     LocationAccuracy accuracy = LocationAccuracy.high,
-    Duration timeout = const Duration(seconds: 12),
+    Duration timeout = const Duration(seconds: 18),
   }) async {
     if (await ensurePermission() != LocationAccess.granted) return null;
+
+    // 1. Primary attempt: Platform-specific settings for the requested accuracy
     try {
-      return await Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(accuracy: accuracy, timeLimit: timeout),
-      );
+      final LocationSettings primarySettings;
+      if (kIsWeb) {
+        primarySettings = LocationSettings(accuracy: accuracy, timeLimit: timeout);
+      } else if (Platform.isAndroid) {
+        primarySettings = AndroidSettings(
+          accuracy: accuracy,
+          timeLimit: timeout,
+          forceLocationManager: false,
+        );
+      } else if (Platform.isIOS || Platform.isMacOS) {
+        primarySettings = AppleSettings(
+          accuracy: accuracy,
+          timeLimit: timeout,
+        );
+      } else {
+        primarySettings = LocationSettings(accuracy: accuracy, timeLimit: timeout);
+      }
+
+      return await Geolocator.getCurrentPosition(locationSettings: primarySettings);
     } catch (e) {
-      debugPrint('LocationService.currentPosition failed: $e');
+      debugPrint('LocationService.currentPosition primary failed ($accuracy): $e');
+    }
+
+    // 2. Fallback attempt 1: Medium accuracy (Wi-Fi / Cell tower triangulation)
+    // Resolves in ~1s indoors where GPS satellite signals are blocked or weak.
+    if (accuracy == LocationAccuracy.high ||
+        accuracy == LocationAccuracy.best ||
+        accuracy == LocationAccuracy.bestForNavigation) {
       try {
-        return await Geolocator.getLastKnownPosition();
-      } catch (_) {
-        return null;
+        final LocationSettings mediumSettings;
+        if (kIsWeb) {
+          mediumSettings = const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 8),
+          );
+        } else if (Platform.isAndroid) {
+          mediumSettings = AndroidSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: const Duration(seconds: 8),
+            forceLocationManager: false,
+          );
+        } else {
+          mediumSettings = const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 8),
+          );
+        }
+        return await Geolocator.getCurrentPosition(locationSettings: mediumSettings);
+      } catch (e) {
+        debugPrint('LocationService.currentPosition fallback medium failed: $e');
       }
     }
+
+    // 3. Fallback attempt 2 (Android only): Native LocationManager
+    // In case Google Play Services FusedLocationProvider is unavailable or stalled.
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final lmSettings = AndroidSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
+          forceLocationManager: true,
+        );
+        return await Geolocator.getCurrentPosition(locationSettings: lmSettings);
+      } catch (e) {
+        debugPrint('LocationService.currentPosition forceLocationManager failed: $e');
+      }
+    }
+
+    // 4. Fallback attempt 3: Last known cached position
+    try {
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        debugPrint('LocationService.currentPosition using lastKnownPosition');
+        return lastKnown;
+      }
+    } catch (e) {
+      debugPrint('LocationService.currentPosition getLastKnownPosition failed: $e');
+    }
+
+    return null;
   }
 
   // Live GPS position stream (uses foreground service during active jobs)

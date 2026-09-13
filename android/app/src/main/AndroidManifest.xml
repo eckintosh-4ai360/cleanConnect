@@ -16,6 +16,8 @@
          service itself when LocationSettings carries a foregroundNotificationConfig. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.network" android:required="false"/>
 
     <!-- Real QR-code scanning of a customer's bin at pickup completion,
          via mobile_scanner (rider_collection_screen.dart). -->
