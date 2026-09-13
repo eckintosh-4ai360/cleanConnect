@@ -38,7 +38,7 @@ export default function FleetMap() {
     fullName: r.profiles?.full_name || 'Rider',
     phone: r.profiles?.phone_number || null,
     photoUrl: r.profiles?.profile_picture_url || null,
-    vehicleType: r.vehicle_type || 'Motorbike',
+    vehicleType: r.vehicle_type || 'Pickup Truck',
     status: r.status || 'active',
     rating: Number(r.rating) || 0,
     lat: r.current_lat,

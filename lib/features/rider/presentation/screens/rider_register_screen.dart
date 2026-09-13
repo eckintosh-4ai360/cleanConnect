@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
+import '../../../auth/data/repositories/auth_repository_impl.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -38,7 +40,7 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
   // Step 2 – Credentials & Vehicle
   final _licenseCtrl = TextEditingController();
   final _nationalIdCtrl = TextEditingController();
-  String _selectedVehicle = 'motorbike';
+  String _selectedVehicle = 'pickup_truck';
   final _vehicleRegCtrl = TextEditingController();
 
   // Step 3 – Documents
@@ -203,6 +205,19 @@ class _RiderRegisterScreenState extends ConsumerState<RiderRegisterScreen> {
 
       final authState = ref.read(authStateControllerProvider);
       if (authState is AuthAuthenticated) {
+        // Update rider record with credentials and vehicle info
+        try {
+          if (AuthRepositoryImpl.isSupabaseAvailable) {
+            await Supabase.instance.client.from('riders').update({
+              'vehicle_type': 'Pickup Truck',
+              'license_number': _licenseCtrl.text.trim(),
+              'national_id_number': _nationalIdCtrl.text.trim(),
+            }).eq('id', authState.user.id);
+          }
+        } catch (e) {
+          debugPrint('Rider credentials update: $e');
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -628,55 +643,25 @@ class _Step2CredentialsVehicle extends StatelessWidget {
           const SizedBox(height: 20),
           _FormLabel('Vehicle Type'),
           const SizedBox(height: 12),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.0,
+          _VehicleCard(
+            label: 'Pickup Truck',
+            subtitle: 'Designated waste collection & transport vehicle',
+            icon: Icons.local_shipping_outlined,
+            value: 'pickup_truck',
+            selected: selectedVehicle == 'pickup_truck',
+            onTap: () => onVehicleChanged('pickup_truck'),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _VehicleCard(
-                label: 'Motorbike',
-                icon: Icons.two_wheeler,
-                value: 'motorbike',
-                selected: selectedVehicle == 'motorbike',
-                onTap: () => onVehicleChanged('motorbike'),
-              ),
-              _VehicleCard(
-                label: 'Compact Van',
-                icon: Icons.airport_shuttle,
-                value: 'compact_van',
-                selected: selectedVehicle == 'compact_van',
-                onTap: () => onVehicleChanged('compact_van'),
-              ),
-              _VehicleCard(
-                label: 'Cargo Bike',
-                icon: Icons.pedal_bike,
-                value: 'cargo_bike',
-                selected: selectedVehicle == 'cargo_bike',
-                onTap: () => onVehicleChanged('cargo_bike'),
-              ),
-              _VehicleCard(
-                label: 'Heavy Duty',
-                icon: Icons.local_shipping,
-                value: 'heavy_duty',
-                selected: selectedVehicle == 'heavy_duty',
-                onTap: () => onVehicleChanged('heavy_duty'),
-              ),
-              _VehicleCard(
-                label: 'Pickup Truck',
-                icon: Icons.fire_truck,
-                value: 'pickup_truck',
-                selected: selectedVehicle == 'pickup_truck',
-                onTap: () => onVehicleChanged('pickup_truck'),
-              ),
-              _VehicleCard(
-                label: 'Electric Van',
-                icon: Icons.electric_car,
-                value: 'electric_van',
-                selected: selectedVehicle == 'electric_van',
-                onTap: () => onVehicleChanged('electric_van'),
+              Icon(Icons.info_outline, size: 15, color: Colors.grey.shade500),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'CleanConnect operates with Pickup Trucks for waste pickups. Motor Tricycles (Aboboyaa) and other categories will be enabled in upcoming phases.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500, height: 1.3),
+                ),
               ),
             ],
           ),
@@ -688,6 +673,7 @@ class _Step2CredentialsVehicle extends StatelessWidget {
 
 class _VehicleCard extends StatelessWidget {
   final String label;
+  final String subtitle;
   final IconData icon;
   final String value;
   final bool selected;
@@ -695,6 +681,7 @@ class _VehicleCard extends StatelessWidget {
 
   const _VehicleCard({
     required this.label,
+    required this.subtitle,
     required this.icon,
     required this.value,
     required this.selected,
@@ -709,37 +696,85 @@ class _VehicleCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: selected
               ? theme.colorScheme.primary.withOpacity(0.1)
               : (isDark ? theme.cardTheme.color : Colors.grey.shade50),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? theme.colorScheme.primary : Colors.grey.shade200,
             width: selected ? 2 : 1,
           ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
           children: [
-            Icon(
-              icon,
-              color: selected
-                  ? theme.colorScheme.primary
-                  : Colors.grey.shade500,
-              size: 28,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: selected
-                    ? theme.colorScheme.primary
-                    : Colors.grey.shade600,
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: Icon(
+                icon,
+                color: theme.colorScheme.primary,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: selected
+                              ? theme.colorScheme.primary
+                              : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0A500),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Active Fleet',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: selected ? theme.colorScheme.primary : Colors.grey.shade400,
+              size: 24,
             ),
           ],
         ),

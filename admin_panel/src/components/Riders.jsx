@@ -15,7 +15,7 @@ export default function Riders() {
     phoneNumber: r.profiles?.phone_number || '—',
     photoUrl: r.profiles?.profile_picture_url,
     profilePhotoUrl: r.profiles?.profile_picture_url,
-    vehicleType: r.vehicle_type || 'Motorbike',
+    vehicleType: r.vehicle_type || 'Pickup Truck',
     licenseNumber: r.license_number || '—',
     nationalIdNumber: r.national_id_number || '—',
     status: r.status || 'active',
@@ -344,11 +344,9 @@ export default function Riders() {
               </div>
               <div className="form-group">
                 <label>Vehicle Type</label>
-                <select name="vehicle">
-                  <option value="Motorbike">Motorbike</option>
-                  <option value="Tricycle">Tricycle</option>
-                  <option value="Compact Van">Compact Van</option>
-                  <option value="Truck">Truck</option>
+                <select name="vehicle" defaultValue="Pickup Truck">
+                  <option value="Pickup Truck">Pickup Truck</option>
+                  <option value="Tricycle">Tricycle (Aboboyaa)</option>
                 </select>
               </div>
               <div className="form-group">

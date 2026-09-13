@@ -71,7 +71,7 @@ class RiderRepositoryImpl implements RiderRepository {
       email: authUser?.email ?? '',
       phoneNumber: authUser?.userMetadata?['phone_number'] as String? ?? '',
       profilePhotoUrl: photoUrl,
-      vehicleType: r['vehicle_type'] as String? ?? 'Motorbike',
+      vehicleType: r['vehicle_type'] as String? ?? 'Pickup Truck',
       licenseNumber: r['license_number'] as String? ?? '',
       nationalIdNumber: r['national_id_number'] as String? ?? '',
       status: r['status'] as String? ?? 'active',
@@ -92,7 +92,7 @@ class RiderRepositoryImpl implements RiderRepository {
       phoneNumber: '+1 (555) 234-5678',
       profilePhotoUrl:
           'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
-      vehicleType: 'compact_van',
+      vehicleType: 'Pickup Truck',
       licenseNumber: 'DL-GH-20240312',
       nationalIdNumber: 'GHA-0012345678',
       status: 'active',
