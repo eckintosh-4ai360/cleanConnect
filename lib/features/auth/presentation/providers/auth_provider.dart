@@ -90,6 +90,11 @@ class AuthStateController extends _$AuthStateController {
     try {
       // Listen to Supabase auth changes in real-time
       _subscription = sb.Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+        // Set before the session lands in state so the router sends the user
+        // to /reset-password instead of their dashboard.
+        if (data.event == sb.AuthChangeEvent.passwordRecovery) {
+          ref.read(passwordRecoveryProvider.notifier).set(true);
+        }
         if (data.session == null) {
           state = const AuthUnauthenticated();
         } else {
@@ -159,7 +164,16 @@ class AuthStateController extends _$AuthStateController {
     }
   }
 
+  /// Sets the new password for a user signed in via a reset-password link.
+  Future<void> updatePassword(String password) async {
+    await sb.Supabase.instance.client.auth.updateUser(
+      sb.UserAttributes(password: password),
+    );
+    ref.read(passwordRecoveryProvider.notifier).set(false);
+  }
+
   Future<void> logout() async {
+    ref.read(passwordRecoveryProvider.notifier).set(false);
     // Clear device push token and cancel notifications before signing out
     await NotificationService.instance.handleLogout();
     state = const AuthLoading();
@@ -170,6 +184,17 @@ class AuthStateController extends _$AuthStateController {
       state = AuthError(e.toString().replaceAll('Exception: ', ''));
     }
   }
+}
+
+/// True between opening a password-reset link and choosing a new password.
+/// The recovery link signs the user in, so the router needs this to keep
+/// them on /reset-password rather than their dashboard.
+@Riverpod(keepAlive: true)
+class PasswordRecovery extends _$PasswordRecovery {
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
 }
 
 @riverpod

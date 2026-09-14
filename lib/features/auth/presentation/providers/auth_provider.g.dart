@@ -83,7 +83,7 @@ final class AuthStateControllerProvider
 }
 
 String _$authStateControllerHash() =>
-    r'd939635f1fdf5b06a501fac1ca2449a93d6569bd';
+    r'5e21c3f80bcc74620fa65c07f3a782c10e5c9093';
 
 abstract class _$AuthStateController extends $Notifier<AuthState> {
   AuthState build();
@@ -96,6 +96,72 @@ abstract class _$AuthStateController extends $Notifier<AuthState> {
             as $ClassProviderElement<
               AnyNotifier<AuthState, AuthState>,
               AuthState,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+/// True between opening a password-reset link and choosing a new password.
+/// The recovery link signs the user in, so the router needs this to keep
+/// them on /reset-password rather than their dashboard.
+
+@ProviderFor(PasswordRecovery)
+final passwordRecoveryProvider = PasswordRecoveryProvider._();
+
+/// True between opening a password-reset link and choosing a new password.
+/// The recovery link signs the user in, so the router needs this to keep
+/// them on /reset-password rather than their dashboard.
+final class PasswordRecoveryProvider
+    extends $NotifierProvider<PasswordRecovery, bool> {
+  /// True between opening a password-reset link and choosing a new password.
+  /// The recovery link signs the user in, so the router needs this to keep
+  /// them on /reset-password rather than their dashboard.
+  PasswordRecoveryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'passwordRecoveryProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$passwordRecoveryHash();
+
+  @$internal
+  @override
+  PasswordRecovery create() => PasswordRecovery();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(bool value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<bool>(value),
+    );
+  }
+}
+
+String _$passwordRecoveryHash() => r'9aea4ffbceb236df714f20a836ef0ac65f7f4027';
+
+/// True between opening a password-reset link and choosing a new password.
+/// The recovery link signs the user in, so the router needs this to keep
+/// them on /reset-password rather than their dashboard.
+
+abstract class _$PasswordRecovery extends $Notifier<bool> {
+  bool build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<bool, bool>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<bool, bool>,
+              bool,
               Object?,
               Object?
             >;

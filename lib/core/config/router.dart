@@ -9,6 +9,7 @@ import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/customer/presentation/screens/customer_dashboard_screen.dart';
 import '../../features/customer/presentation/screens/bin_management_screen.dart';
@@ -49,6 +50,12 @@ class RiverpodRefreshListenable extends ChangeNotifier {
       },
     );
     ref.listen<bool>(
+      passwordRecoveryProvider,
+      (previous, next) {
+        notifyListeners();
+      },
+    );
+    ref.listen<bool>(
       onboardingControllerProvider,
       (previous, next) {
         notifyListeners();
@@ -75,6 +82,15 @@ GoRouter router(Ref ref) {
 
       final user = authState is AuthAuthenticated ? authState.user : null;
       final isLoggedIn = user != null;
+
+      // A reset link signs the user in; hold them here until they pick a
+      // new password (or cancel, which signs them out).
+      if (isLoggedIn && ref.read(passwordRecoveryProvider)) {
+        return loc == '/reset-password' ? null : '/reset-password';
+      }
+      if (loc == '/reset-password') {
+        return isLoggedIn ? _getDashboardRoute(user.role) : '/login';
+      }
 
       final isAuthRoute = loc == '/login' ||
           loc == '/register' ||
@@ -131,6 +147,10 @@ GoRouter router(Ref ref) {
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: '/rider/register',

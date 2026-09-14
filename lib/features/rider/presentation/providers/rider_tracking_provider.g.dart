@@ -8,30 +8,15 @@ part of 'rider_tracking_provider.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Owns the rider's GPS stream and mirrors each fix to Supabase.
-///
-/// This replaces the timer that used to nudge fake coordinates on the
-/// navigation screen. There is exactly one of these per app session, so a rider
-/// moving between the navigation screen and the route screen keeps a single
-/// subscription and a single upload cadence rather than stacking them.
+/// Streams rider GPS updates and broadcasts location to Supabase
 
 @ProviderFor(RiderTracking)
 final riderTrackingProvider = RiderTrackingProvider._();
 
-/// Owns the rider's GPS stream and mirrors each fix to Supabase.
-///
-/// This replaces the timer that used to nudge fake coordinates on the
-/// navigation screen. There is exactly one of these per app session, so a rider
-/// moving between the navigation screen and the route screen keeps a single
-/// subscription and a single upload cadence rather than stacking them.
+/// Streams rider GPS updates and broadcasts location to Supabase
 final class RiderTrackingProvider
     extends $NotifierProvider<RiderTracking, RiderTrackingState> {
-  /// Owns the rider's GPS stream and mirrors each fix to Supabase.
-  ///
-  /// This replaces the timer that used to nudge fake coordinates on the
-  /// navigation screen. There is exactly one of these per app session, so a rider
-  /// moving between the navigation screen and the route screen keeps a single
-  /// subscription and a single upload cadence rather than stacking them.
+  /// Streams rider GPS updates and broadcasts location to Supabase
   RiderTrackingProvider._()
     : super(
         from: null,
@@ -61,12 +46,7 @@ final class RiderTrackingProvider
 
 String _$riderTrackingHash() => r'017fb508421f47632c7444828414b5145b4d79f5';
 
-/// Owns the rider's GPS stream and mirrors each fix to Supabase.
-///
-/// This replaces the timer that used to nudge fake coordinates on the
-/// navigation screen. There is exactly one of these per app session, so a rider
-/// moving between the navigation screen and the route screen keeps a single
-/// subscription and a single upload cadence rather than stacking them.
+/// Streams rider GPS updates and broadcasts location to Supabase
 
 abstract class _$RiderTracking extends $Notifier<RiderTrackingState> {
   RiderTrackingState build();

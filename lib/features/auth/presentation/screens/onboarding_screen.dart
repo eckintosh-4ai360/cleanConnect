@@ -5,7 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/onboarding_provider.dart';
 
-// ─── Color palette ───────────────────────────────────────────────────────────
+// ─── Color palette
 const _kPrimary = Color(0xFFF0A500);
 const _kGreen = Color(0xFF3EC16B);
 const _kBlue = Color(0xFF3A8EF6);
@@ -14,7 +14,7 @@ const _kDark = Color(0xFF1A1A1A);
 const _kMuted = Color(0xFF6E685E);
 const _kBg = Color(0xFFFFFDF9);
 
-// ─── Slide data model ────────────────────────────────────────────────────────
+// ─── Slide data model
 class _SlideData {
   final String stepLabel;
   final String title;
@@ -44,7 +44,7 @@ class _FloatingBadge {
   const _FloatingBadge(this.icon, this.label, this.color);
 }
 
-// ─── Slide definitions ───────────────────────────────────────────────────────
+// ─── Slide definitions
 const _slides = [
   _SlideData(
     stepLabel: 'Welcome',
@@ -161,11 +161,7 @@ class OnboardingScreen extends HookConsumerWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            slide.accentColor.withValues(alpha: 0.08),
-            _kBg,
-            _kBg,
-          ],
+          colors: [slide.accentColor.withValues(alpha: 0.08), _kBg, _kBg],
         ),
       ),
       child: Scaffold(
@@ -326,10 +322,7 @@ class _PipelineIndicator extends StatelessWidget {
   final int currentPage;
   final List<_SlideData> slides;
 
-  const _PipelineIndicator({
-    required this.currentPage,
-    required this.slides,
-  });
+  const _PipelineIndicator({required this.currentPage, required this.slides});
 
   @override
   Widget build(BuildContext context) {
@@ -405,22 +398,18 @@ class _SlidePage extends HookWidget {
   final _SlideData slide;
   final AnimationController animController;
 
-  const _SlidePage({
-    required this.slide,
-    required this.animController,
-  });
+  const _SlidePage({required this.slide, required this.animController});
 
   @override
   Widget build(BuildContext context) {
-    final fadeAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: animController, curve: Curves.easeOut),
-    );
+    final fadeAnim = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: animController, curve: Curves.easeOut));
     final slideAnim = Tween<Offset>(
       begin: const Offset(0, 0.06),
       end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: animController, curve: Curves.easeOut),
-    );
+    ).animate(CurvedAnimation(parent: animController, curve: Curves.easeOut));
 
     return FadeTransition(
       opacity: fadeAnim,
@@ -446,7 +435,9 @@ class _SlidePage extends HookWidget {
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 400),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 5),
+                        horizontal: 14,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: slide.accentColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
@@ -592,21 +583,18 @@ class _CircularHeroCard extends StatelessWidget {
     final r = center * 0.78; // radius at which chips orbit
     final positions = [
       Offset(-r * 0.82, -r * 0.55), // top-left
-      Offset(r * 0.55, r * 0.68),   // bottom-right
+      Offset(r * 0.55, r * 0.68), // bottom-right
     ];
 
-    return List.generate(
-      math.min(slide.badges.length, positions.length),
-      (i) {
-        final badge = slide.badges[i];
-        final pos = positions[i];
-        return Positioned(
-          left: center + pos.dx,
-          top: center + pos.dy,
-          child: _BadgeChip(badge: badge),
-        );
-      },
-    );
+    return List.generate(math.min(slide.badges.length, positions.length), (i) {
+      final badge = slide.badges[i];
+      final pos = positions[i];
+      return Positioned(
+        left: center + pos.dx,
+        top: center + pos.dy,
+        child: _BadgeChip(badge: badge),
+      );
+    });
   }
 }
 
@@ -635,10 +623,7 @@ class _BadgeChip extends StatelessWidget {
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(
-          color: badge.color.withValues(alpha: 0.2),
-          width: 1,
-        ),
+        border: Border.all(color: badge.color.withValues(alpha: 0.2), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -787,4 +772,3 @@ class _BottomAction extends StatelessWidget {
     );
   }
 }
-

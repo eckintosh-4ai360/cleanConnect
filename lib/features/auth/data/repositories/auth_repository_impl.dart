@@ -7,6 +7,9 @@ import 'package:hive/hive.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 
+/// Deep link registered in AndroidManifest.xml and ios/Runner/Info.plist.
+const passwordResetRedirectUrl = 'cleanconnect://reset-password';
+
 class AuthRepositoryImpl implements AuthRepository {
   sb.SupabaseClient get _client => sb.Supabase.instance.client;
 
@@ -218,7 +221,13 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> sendPasswordResetEmail(String email) async {
     try {
-      await _client.auth.resetPasswordForEmail(email);
+      // Without redirectTo Supabase falls back to the project's Site URL
+      // (127.0.0.1 in dev), which a phone can't open. The deep link must also
+      // be listed under Auth > URL Configuration > Redirect URLs.
+      await _client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: kIsWeb ? Uri.base.origin : passwordResetRedirectUrl,
+      );
     } on sb.AuthException catch (e) {
       throw Exception(e.message);
     } catch (e) {
