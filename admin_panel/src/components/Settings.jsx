@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../AuthContext';
+import { formatDateTime } from '../timezone';
 
 const BIN_SIZES = ['120L', '240L', '360L'];
 
@@ -774,7 +775,7 @@ export default function Settings() {
                           </div>
                         </td>
                         <td style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                          {ticket.createdAt ? ticket.createdAt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {ticket.createdAt ? formatDateTime(ticket.createdAt) : '—'}
                         </td>
                         <td>
                           <span className={`badge ${ticket.status === 'resolved' ? 'badge-active' : ticket.status === 'pending' ? 'badge-pending' : 'badge-defaulter'}`}>

@@ -164,7 +164,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
     final row = await _db.rpc('schedule_pickup', params: {
       'p_bin_types': binTypes,
-      'p_date': date.toIso8601String(),
+      'p_date': date.toUtc().toIso8601String(),
       'p_time_slot': timeSlot,
       'p_location': location,
       'p_amount_paid': amountPaid,

@@ -222,7 +222,7 @@ export default function Payments() {
 
   const formatDate = (date) => {
     if (!date) return '—';
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Africa/Accra' });
   };
 
   const statusBadge = (status) => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { formatDateTime } from '../timezone';
 
 export default function Collections() {
   const [collections, setCollections] = useState([]);
@@ -39,11 +40,6 @@ export default function Collections() {
     return true;
   });
 
-  const formatDateTime = (date) => {
-    if (!date) return '—';
-    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
-      ' @ ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  };
 
   const completedCount = collections.filter(c => c.status === 'completed').length;
   const totalWeight = collections.reduce((sum, c) => sum + (c.weight_kg ?? 0), 0);

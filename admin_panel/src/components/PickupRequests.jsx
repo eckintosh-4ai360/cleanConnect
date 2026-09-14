@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { formatDateTime, formatDate } from '../timezone';
 
 export default function PickupRequests() {
   const [requests, setRequests] = useState([]);
@@ -52,19 +53,10 @@ export default function PickupRequests() {
   const confirmedCount = requests.filter((r) => r.status === 'confirmed').length;
   const completedCount = requests.filter((r) => r.status === 'completed').length;
 
-  const formatDateTime = (date) => {
-    if (!date) return '—';
-    return (
-      date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
-      ' @ ' +
-      date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    );
-  };
-
   const formatRelative = (date) => {
     if (!date) return '—';
     const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (diff < 60) return `${diff}s ago`;
+    if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
     return `${Math.floor(diff / 86400)}d ago`;
@@ -193,7 +185,7 @@ export default function PickupRequests() {
                       <td style={{ fontWeight: '700', color: 'var(--color-primary)' }}>#{req.id.slice(0, 8).toUpperCase()}</td>
                       <td style={{ fontWeight: '600' }}>{req.customer_name ?? 'Customer'}</td>
                       <td style={{ textTransform: 'capitalize' }}>{Array.isArray(req.bin_types) ? req.bin_types.join(', ') : 'General'}</td>
-                      <td>{req.date ? req.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'}</td>
+                      <td>{formatDate(req.date)}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{req.time_slot ?? '—'}</td>
                       <td><span className={`badge ${statusBadgeClass(req.status)}`}>{req.status?.toUpperCase() ?? 'PENDING'}</span></td>
                       <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{formatRelative(req.createdAt)}</td>
@@ -221,7 +213,7 @@ export default function PickupRequests() {
               {[
                 { label: 'Customer', value: selectedReq.customer_name ?? '—' },
                 { label: 'Bin Types', value: Array.isArray(selectedReq.bin_types) ? selectedReq.bin_types.join(', ') : 'General' },
-                { label: 'Pickup Date', value: selectedReq.date ? selectedReq.date.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '—' },
+                { label: 'Pickup Date', value: formatDate(selectedReq.date, { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) },
                 { label: 'Time Slot', value: selectedReq.time_slot ?? '—' },
                 { label: 'Location', value: selectedReq.location ?? '—' },
                 { label: 'Instructions', value: selectedReq.instructions || 'None provided' },

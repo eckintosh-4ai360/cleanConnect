@@ -293,7 +293,7 @@ class RiderRepositoryImpl implements RiderRepository {
   Future<void> completeRoute(String routeId) async {
     await _db
         .from('routes')
-        .update({'status': 'completed', 'completed_at': DateTime.now().toIso8601String()})
+        .update({'status': 'completed', 'completed_at': DateTime.now().toUtc().toIso8601String()})
         .eq('id', routeId);
   }
 

@@ -58,7 +58,7 @@ export default function Sites() {
   const formatDate = (ts) => {
     if (!ts) return 'Never';
     const d = new Date(ts);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Africa/Accra' });
   };
 
   return (
