@@ -44,6 +44,68 @@ function generateSerialNumber(type = 'bin') {
   return `CCB-${prefix}-${timePart}${randomPart}`;
 }
 
+// Everything an admin might type to find a bin, lower-cased once per bin.
+function binSearchText(bin, customer) {
+  return [
+    bin.serial_number,
+    customer?.fullName,
+    customer?.email,
+    bin.type,
+    bin.size,
+    bin.ownership || 'company',
+    bin.status || 'active',
+    bin.schedule_frequency,
+    bin.gps_location,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+// Every word has to match somewhere, so "benjamin organic" narrows to
+// Benjamin's organic bins instead of every Benjamin bin plus every organic one.
+function matchesSearch(text, query) {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => text.includes(word));
+}
+
+const MAP_RESULT_LIMIT = 8;
+
+const filterSelectStyle = {
+  padding: '8px 10px',
+  borderRadius: 'var(--border-radius-sm)',
+  border: '1px solid var(--border-divider)',
+  background: 'var(--bg-app)',
+  color: 'var(--text-primary)',
+  fontSize: '12.5px',
+  outline: 'none',
+};
+
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2.5" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function ClearSearchButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Clear search"
+      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: 0 }}
+    >
+      ×
+    </button>
+  );
+}
+
 function qrCodeUrl(serialNumber) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(serialNumber)}`;
 }
@@ -70,6 +132,12 @@ export default function Bins() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
+  const [registrySearch, setRegistrySearch] = useState('');
+  const [ownershipFilter, setOwnershipFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [mapSearch, setMapSearch] = useState('');
+  const [showMapResults, setShowMapResults] = useState(false);
+  const [mapFocusBinId, setMapFocusBinId] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [binForm, setBinForm] = useState(initialBinForm);
   const [editForm, setEditForm] = useState({
@@ -151,6 +219,60 @@ export default function Bins() {
         .filter((entry) => entry.position !== null),
     [bins]
   );
+
+  const searchTextById = useMemo(() => {
+    const texts = new Map();
+    bins.forEach((bin) => texts.set(bin.id, binSearchText(bin, customerMap.get(bin.customer_id))));
+    return texts;
+  }, [bins, customerMap]);
+
+  const filteredBins = useMemo(
+    () =>
+      bins.filter(
+        (bin) =>
+          (ownershipFilter === 'all' || (bin.ownership || 'company') === ownershipFilter) &&
+          (statusFilter === 'all' || (bin.status || 'active') === statusFilter) &&
+          matchesSearch(searchTextById.get(bin.id) || '', registrySearch)
+      ),
+    [bins, ownershipFilter, statusFilter, registrySearch, searchTextById]
+  );
+  const registryFiltered = registrySearch.trim() !== '' || ownershipFilter !== 'all' || statusFilter !== 'all';
+
+  const isMapSearching = mapSearch.trim() !== '';
+  const mapMatches = useMemo(
+    () =>
+      isMapSearching
+        ? mappableBins.filter(({ bin }) => matchesSearch(searchTextById.get(bin.id) || '', mapSearch))
+        : mappableBins,
+    [isMapSearching, mappableBins, mapSearch, searchTextById]
+  );
+  const mapMatchIds = useMemo(() => new Set(mapMatches.map(({ bin }) => bin.id)), [mapMatches]);
+  const unmappedMatchCount = isMapSearching
+    ? bins.filter(
+        (bin) => !parseGpsLocation(bin.gps_location) && matchesSearch(searchTextById.get(bin.id) || '', mapSearch)
+      ).length
+    : 0;
+  const focusedMapEntry = mappableBins.find(({ bin }) => bin.id === mapFocusBinId) || null;
+
+  const focusBinOnMap = (bin) => {
+    setSelectedBin(bin);
+    setMapFocusBinId(bin.id);
+    setShowMapResults(false);
+  };
+
+  const openMapAtBin = (bin) => {
+    setMapSearch('');
+    focusBinOnMap(bin);
+    setShowMapModal(true);
+  };
+
+  const showBinInRegistry = (bin) => {
+    setSelectedBin(bin);
+    setOwnershipFilter('all');
+    setStatusFilter('all');
+    setRegistrySearch(bin.serial_number || '');
+    setShowMapModal(false);
+  };
 
   const customerName = (customerId, fallback) => {
     const customer = customerMap.get(customerId);
@@ -391,9 +513,48 @@ export default function Bins() {
       <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <h3 style={{ fontSize: '16px' }}>Registered Bin Registry</h3>
-          <button className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }} onClick={() => setShowMapModal(true)}>
+          <button className="btn-outline" style={{ padding: '8px 14px', fontSize: '12px' }} onClick={() => { setMapFocusBinId(null); setShowMapModal(true); }}>
             🗺️ View on Map ({mappableBins.length})
           </button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="header-search" style={{ width: 'min(340px, 100%)' }}>
+            <SearchIcon />
+            <input
+              type="text"
+              placeholder="Search serial, customer, email, type, size…"
+              value={registrySearch}
+              onChange={(e) => setRegistrySearch(e.target.value)}
+              aria-label="Search bins"
+            />
+            {registrySearch && <ClearSearchButton onClick={() => setRegistrySearch('')} />}
+          </div>
+          <select style={filterSelectStyle} value={ownershipFilter} onChange={(e) => setOwnershipFilter(e.target.value)} aria-label="Filter by ownership">
+            <option value="all">All ownership</option>
+            <option value="company">Company</option>
+            <option value="personal">Personal</option>
+          </select>
+          <select style={filterSelectStyle} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status">
+            <option value="all">All statuses</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>{capitalize(status)}</option>
+            ))}
+          </select>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {registryFiltered
+              ? `Showing ${filteredBins.length} of ${bins.length} bins`
+              : `${bins.length} bin${bins.length === 1 ? '' : 's'}`}
+          </span>
+          {registryFiltered && (
+            <button
+              type="button"
+              className="btn-outline"
+              style={{ padding: '6px 10px', fontSize: '11px' }}
+              onClick={() => { setRegistrySearch(''); setOwnershipFilter('all'); setStatusFilter('all'); }}
+            >
+              Clear filters
+            </button>
+          )}
         </div>
         <div className="table-container">
           <table className="custom-table">
@@ -416,8 +577,14 @@ export default function Bins() {
                     No bins registered yet.
                   </td>
                 </tr>
+              ) : filteredBins.length === 0 ? (
+                <tr>
+                  <td colSpan="8" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No bins match your search.
+                  </td>
+                </tr>
               ) : (
-                bins.map((bin) => (
+                filteredBins.map((bin) => (
                   <tr
                     key={bin.id}
                     onClick={() => setSelectedBin(bin)}
@@ -451,6 +618,18 @@ export default function Bins() {
                     <td>{formatDate(bin.registered_at)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="btn-outline"
+                          style={{ padding: '8px 12px', fontSize: '11px' }}
+                          disabled={!parseGpsLocation(bin.gps_location)}
+                          title={parseGpsLocation(bin.gps_location) ? 'Show this bin on the map' : 'No saved location'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openMapAtBin(bin);
+                          }}
+                        >
+                          Map
+                        </button>
                         <button
                           className="btn-outline"
                           style={{ padding: '8px 12px', fontSize: '11px' }}
@@ -631,17 +810,135 @@ export default function Bins() {
                     style={{ width: '100%', height: '100%' }}
                   >
                     <FitBinBounds entries={mappableBins} />
+                    <MapSearchFocus
+                      focused={focusedMapEntry}
+                      matches={mapMatches}
+                      isSearching={isMapSearching}
+                    />
                     {mappableBins.map(({ bin, position }) => (
                       <AdvancedMarker
                         key={bin.id}
                         position={position}
+                        zIndex={bin.id === mapFocusBinId ? 1000 : mapMatchIds.has(bin.id) ? 10 : 1}
                         title={`${bin.serial_number || 'No serial'} — ${customerName(bin.customer_id)}`}
                       >
-                        <BinMapPin bin={bin} onClick={() => { setSelectedBin(bin); }} />
+                        <BinMapPin
+                          bin={bin}
+                          dimmed={isMapSearching && !mapMatchIds.has(bin.id)}
+                          focused={bin.id === mapFocusBinId}
+                          onClick={() => focusBinOnMap(bin)}
+                        />
                       </AdvancedMarker>
                     ))}
                   </GoogleMap>
                 </APIProvider>
+              )}
+
+              {MAPS_API_KEY && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '12px',
+                    left: '12px',
+                    zIndex: 2,
+                    width: 'min(380px, calc(100% - 24px))',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div className="header-search" style={{ width: '100%', background: 'var(--bg-card)', boxShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>
+                    <SearchIcon />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Find a bin: serial, customer, type…"
+                      value={mapSearch}
+                      aria-label="Search bins on the map"
+                      onChange={(e) => {
+                        setMapSearch(e.target.value);
+                        setMapFocusBinId(null);
+                        setShowMapResults(true);
+                      }}
+                      onFocus={() => setShowMapResults(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && mapMatches.length > 0) focusBinOnMap(mapMatches[0].bin);
+                        if (e.key === 'Escape') setShowMapResults(false);
+                      }}
+                    />
+                    {mapSearch && (
+                      <ClearSearchButton
+                        onClick={() => {
+                          setMapSearch('');
+                          setMapFocusBinId(null);
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {isMapSearching && showMapResults && (
+                    <div
+                      style={{
+                        maxHeight: '320px',
+                        overflowY: 'auto',
+                        borderRadius: 'var(--border-radius-sm)',
+                        border: '1px solid var(--border-divider)',
+                        background: 'var(--bg-card)',
+                        boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
+                        fontSize: '12.5px',
+                      }}
+                    >
+                      {mapMatches.length === 0 ? (
+                        <div style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>
+                          No bins on the map match “{mapSearch.trim()}”.
+                        </div>
+                      ) : (
+                        mapMatches.slice(0, MAP_RESULT_LIMIT).map(({ bin }) => (
+                          <button
+                            key={bin.id}
+                            type="button"
+                            onClick={() => focusBinOnMap(bin)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '9px 12px',
+                              background: bin.id === mapFocusBinId ? 'var(--border-divider)' : 'transparent',
+                              border: 'none',
+                              borderBottom: '1px solid var(--border-divider)',
+                              color: 'var(--text-primary)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <strong style={{ display: 'block' }}>{bin.serial_number || 'No serial'}</strong>
+                            <span style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                              {customerName(bin.customer_id)} · {bin.type} ({bin.size}) · {bin.ownership || 'company'}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                      {mapMatches.length > MAP_RESULT_LIMIT && (
+                        <div style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
+                          {mapMatches.length - MAP_RESULT_LIMIT} more on the map — keep typing to narrow down.
+                        </div>
+                      )}
+                      {unmappedMatchCount > 0 && (
+                        <div style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
+                          {unmappedMatchCount} matching bin{unmappedMatchCount === 1 ? ' has' : 's have'} no saved location.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {MAPS_API_KEY && focusedMapEntry && (
+                <FocusedBinCard
+                  bin={focusedMapEntry.bin}
+                  customer={customerName(focusedMapEntry.bin.customer_id)}
+                  onShowInRegistry={() => showBinInRegistry(focusedMapEntry.bin)}
+                  onClose={() => setMapFocusBinId(null)}
+                />
               )}
 
               {MAPS_API_KEY && (
@@ -712,20 +1009,95 @@ function FitBinBounds({ entries }) {
   return null;
 }
 
-function BinMapPin({ bin, onClick }) {
+/**
+ * Moves the camera for the map search: frames every match as the query
+ * narrows, and zooms in on a bin once one is picked. Neither runs while the
+ * admin is simply browsing, so panning by hand is left alone.
+ */
+function MapSearchFocus({ focused, matches, isSearching }) {
+  const map = useMap();
+  const focusedId = focused?.bin.id;
+  const matchKey = isSearching ? matches.map(({ bin }) => bin.id).join(',') : '';
+
+  useEffect(() => {
+    if (!map || !focused) return;
+    map.panTo(focused.position);
+    map.setZoom(Math.max(map.getZoom() ?? 0, 17));
+    // Only when a different bin is picked, not on every data refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, focusedId]);
+
+  useEffect(() => {
+    if (!map || !matchKey || focusedId) return;
+    if (matches.length === 1) {
+      map.panTo(matches[0].position);
+      map.setZoom(16);
+      return;
+    }
+    const bounds = new window.google.maps.LatLngBounds();
+    matches.forEach((entry) => bounds.extend(entry.position));
+    map.fitBounds(bounds, 80);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, matchKey]);
+
+  return null;
+}
+
+function FocusedBinCard({ bin, customer, onShowInRegistry, onClose }) {
+  const status = bin.status || 'active';
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        zIndex: 2,
+        width: 'min(280px, calc(100% - 24px))',
+        padding: '12px 14px',
+        borderRadius: 'var(--border-radius-sm)',
+        border: '1px solid var(--border-divider)',
+        background: 'var(--bg-card)',
+        boxShadow: '0 6px 18px rgba(0,0,0,0.2)',
+        fontSize: '12.5px',
+        color: 'var(--text-primary)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+        <strong style={{ fontSize: '13.5px' }}>{bin.serial_number || 'No serial'}</strong>
+        <ClearSearchButton onClick={onClose} />
+      </div>
+      <span>{customer}</span>
+      <span style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+        {bin.type} ({bin.size}) · {bin.ownership || 'company'} · {status}
+      </span>
+      <span style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>{bin.gps_location}</span>
+      <button className="btn-outline" type="button" style={{ padding: '6px 10px', fontSize: '11px', alignSelf: 'flex-start', marginTop: '4px' }} onClick={onShowInRegistry}>
+        Show in registry
+      </button>
+    </div>
+  );
+}
+
+function BinMapPin({ bin, onClick, dimmed = false, focused = false }) {
   const isPersonal = (bin.ownership || 'company') === 'personal';
   const color = isPersonal ? 'var(--color-info)' : 'var(--color-success)';
+  const size = focused ? 40 : 30;
 
   return (
-    <div onClick={onClick} style={{ cursor: 'pointer' }}>
+    <div onClick={onClick} style={{ cursor: 'pointer', opacity: dimmed ? 0.3 : 1, transition: 'opacity 120ms' }}>
       <div
         style={{
-          width: '30px',
-          height: '30px',
+          width: `${size}px`,
+          height: `${size}px`,
           borderRadius: '50%',
           background: color,
           border: '3px solid #fff',
-          boxShadow: '0 3px 10px rgba(0,0,0,0.28)',
+          boxShadow: focused
+            ? '0 0 0 4px var(--color-primary), 0 3px 12px rgba(0,0,0,0.35)'
+            : '0 3px 10px rgba(0,0,0,0.28)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
