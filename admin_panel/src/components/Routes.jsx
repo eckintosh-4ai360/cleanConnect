@@ -47,24 +47,6 @@ function parseCoords(str) {
   return { lat, lng };
 }
 
-function hashId(id) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(hash);
-}
-
-// Stable fallback destination near a rider when no real pickup coordinate is
-// available yet, so markers don't jump around between renders.
-function fallbackTarget(rider) {
-  const seed = hashId(rider.id);
-  const latOffset = ((seed % 100) / 100 - 0.5) * 0.035;
-  const lngOffset = (((seed >> 8) % 100) / 100 - 0.5) * 0.035;
-  return {
-    lat: (rider.currentLat ?? FALLBACK_CENTER.lat) + latOffset,
-    lng: (rider.currentLng ?? FALLBACK_CENTER.lng) + lngOffset,
-  };
-}
-
 function trafficForSpeed(speedKmh) {
   if (speedKmh == null || speedKmh <= 1) {
     return { label: 'Stopped', color: 'var(--color-danger)', hex: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', crawlKmh: 4 };
@@ -86,23 +68,28 @@ function findAssignedPickup(riderId, pickupRequests) {
   );
 }
 
+// The route line only exists for a rider on a pickup with a known location.
+// It used to fall back to a made-up point beside the rider (the request's
+// saved coordinates were never read), so the line followed the rider around
+// instead of pointing at a customer.
 function tripEstimate(rider, pickupRequests) {
-  const lat = rider.currentLat ?? FALLBACK_CENTER.lat;
-  const lng = rider.currentLng ?? FALLBACK_CENTER.lng;
+  if (rider.currentLat == null || rider.currentLng == null) return null;
+  const lat = rider.currentLat;
+  const lng = rider.currentLng;
   const pickup = findAssignedPickup(rider.id, pickupRequests);
+  if (!pickup) return null;
   const targetCoord =
-    parseCoords(pickup?.location) ||
-    parseCoords(rider.targetCustomer) ||
-    fallbackTarget(rider);
-  const targetLabel =
-    pickup?.customerName ||
-    (rider.targetCustomer ? rider.targetCustomer.split(' (')[0] : 'Customer Site');
+    pickup.locationLat != null && pickup.locationLng != null
+      ? { lat: pickup.locationLat, lng: pickup.locationLng }
+      : parseCoords(pickup.location);
+  if (!targetCoord) return null;
+  const targetLabel = pickup.customerName || 'Customer';
 
   const distanceKm = haversineKm(lat, lng, targetCoord.lat, targetCoord.lng);
   const traffic = trafficForSpeed(rider.speed);
   const etaMins = Math.max(1, Math.round((distanceKm / traffic.crawlKmh) * 60));
 
-  return { targetCoord, targetLabel, distanceKm, etaMins, traffic };
+  return { targetCoord, targetLabel, distanceKm, etaMins, traffic, pickupId: pickup.id };
 }
 
 export default function Routes() {
@@ -129,50 +116,6 @@ export default function Routes() {
     };
   }, [isMapExpanded]);
 
-  // Fallback initial riders if Supabase returns nothing (e.g. dev DB with no
-  // riders yet) so the page still demonstrates the layout.
-  const mockRiders = useMemo(
-    () => [
-      {
-        id: 'rider-01',
-        fullName: 'Kofi Mensah',
-        status: 'active',
-        currentLat: 5.305,
-        currentLng: -1.991,
-        speed: 32.4,
-        heading: 45,
-        targetCustomer: 'Sarah Jenkins (123 Green St)',
-        vehicleType: 'Pickup Truck',
-        totalCollections: 14,
-      },
-      {
-        id: 'rider-02',
-        fullName: 'Ama Osei',
-        status: 'active',
-        currentLat: 5.308,
-        currentLng: -1.988,
-        speed: 12.0,
-        heading: 120,
-        targetCustomer: 'Michael Scott (45 Corporate Way)',
-        vehicleType: 'Pickup Truck',
-        totalCollections: 22,
-      },
-      {
-        id: 'rider-03',
-        fullName: 'Kwame Antwi',
-        status: 'active',
-        currentLat: 5.298,
-        currentLng: -1.995,
-        speed: 0.0,
-        heading: 0,
-        targetCustomer: 'Standby / Idle',
-        vehicleType: 'Pickup Truck',
-        totalCollections: 9,
-      },
-    ],
-    []
-  );
-
   // Live Postgres tracking for riders + pickup requests
   useEffect(() => {
     let mounted = true;
@@ -181,9 +124,9 @@ export default function Routes() {
       id: r.id,
       fullName: r.profiles?.full_name || 'Rider',
       status: r.status || 'active',
-      currentLat: r.current_lat ?? 5.3018,
-      currentLng: r.current_lng ?? -1.9930,
-      speed: r.speed ?? 25.0,
+      currentLat: r.current_lat ?? null,
+      currentLng: r.current_lng ?? null,
+      speed: r.speed == null ? 0 : Number(r.speed),
       heading: r.heading ?? 0,
       vehicleType: r.vehicle_type || 'Pickup Truck',
       phoneNumber: r.profiles?.phone_number,
@@ -198,15 +141,13 @@ export default function Routes() {
       if (!mounted) return;
       if (error) {
         console.warn('Riders live tracking fetch error:', error);
-        setRiders(mockRiders);
-        setSelectedRider((prev) => prev || mockRiders[0]);
         setLoading(false);
         return;
       }
-      const mergedRiders = data.length > 0 ? data.map(mapRiderRow) : mockRiders;
+      const mergedRiders = data.map(mapRiderRow);
       setRiders(mergedRiders);
       setSelectedRider((prev) =>
-        prev ? mergedRiders.find((r) => r.id === prev.id) || mergedRiders[0] : mergedRiders[0]
+        prev ? mergedRiders.find((r) => r.id === prev.id) || mergedRiders[0] || null : mergedRiders[0] || null
       );
       setLoading(false);
     };
@@ -221,6 +162,8 @@ export default function Routes() {
       assignedRiderId: p.assigned_rider_id,
       status: p.status,
       location: p.location,
+      locationLat: p.location_lat,
+      locationLng: p.location_lng,
       customerName: p.customer_name,
     });
 
@@ -240,7 +183,7 @@ export default function Routes() {
       supabase.removeChannel(ridersChannel);
       supabase.removeChannel(requestsChannel);
     };
-  }, [mockRiders]);
+  }, []);
 
   const activeRiders = riders.filter((r) => r.status === 'active');
   const activePickups = pickupRequests.filter((p) => p.status === 'accepted' || p.status === 'confirmed');
@@ -261,9 +204,10 @@ export default function Routes() {
 
   const selectedTrip = selectedRider ? riderTrips[selectedRider.id] : null;
 
-  const selectedOrigin = selectedRider
-    ? { lat: selectedRider.currentLat ?? FALLBACK_CENTER.lat, lng: selectedRider.currentLng ?? FALLBACK_CENTER.lng }
-    : null;
+  const selectedOrigin =
+    selectedRider && selectedRider.currentLat != null && selectedRider.currentLng != null
+      ? { lat: selectedRider.currentLat, lng: selectedRider.currentLng }
+      : null;
   const selectedDestination = selectedTrip?.targetCoord ?? null;
 
   // Populated by RouteOverlay, which calls useMapsLibrary('routes') — that
@@ -407,11 +351,7 @@ export default function Routes() {
               <APIProvider apiKey={MAPS_API_KEY}>
                 <Map
                   mapId={MAP_ID}
-                  defaultCenter={
-                    riders.length > 0
-                      ? { lat: riders[0].currentLat ?? FALLBACK_CENTER.lat, lng: riders[0].currentLng ?? FALLBACK_CENTER.lng }
-                      : FALLBACK_CENTER
-                  }
+                  defaultCenter={FALLBACK_CENTER}
                   defaultZoom={13}
                   gestureHandling="greedy"
                   disableDefaultUI={false}
@@ -434,10 +374,10 @@ export default function Routes() {
                     />
                   )}
 
-                  {riders.map((r) => (
+                  {riders.filter((r) => r.currentLat != null && r.currentLng != null).map((r) => (
                     <AdvancedMarker
                       key={r.id}
-                      position={{ lat: r.currentLat ?? FALLBACK_CENTER.lat, lng: r.currentLng ?? FALLBACK_CENTER.lng }}
+                      position={{ lat: r.currentLat, lng: r.currentLng }}
                       onClick={() => setSelectedRider(r)}
                       title={r.fullName}
                     >
@@ -530,7 +470,7 @@ export default function Routes() {
                 <div>
                   <h4 style={{ fontSize: '16px', fontWeight: '800' }}>{selectedRider.fullName}</h4>
                   <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {selectedRider.vehicleType} • {selectedRider.phoneNumber || '+233 24 000 0000'}
+                    {selectedRider.vehicleType}{selectedRider.phoneNumber ? ` • ${selectedRider.phoneNumber}` : ''}
                   </p>
                 </div>
               </div>
@@ -569,12 +509,14 @@ export default function Routes() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
                 <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>Live GPS Coordinates</span>
                 <p style={{ fontWeight: '600', fontFamily: 'monospace' }}>
-                  Lat: {selectedRider.currentLat?.toFixed(4) || '5.3018'} • Lng: {selectedRider.currentLng?.toFixed(4) || '-1.9930'}
+                  {selectedRider.currentLat != null
+                    ? `Lat: ${selectedRider.currentLat.toFixed(4)} • Lng: ${selectedRider.currentLng.toFixed(4)}`
+                    : 'No location reported yet'}
                 </p>
 
                 <span style={{ color: 'var(--text-muted)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', marginTop: '6px' }}>Target Customer</span>
                 <p style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                  {selectedTrip?.targetLabel || selectedRider.targetCustomer || 'Sarah Jenkins (123 Green St, Tarkwa)'}
+                  {selectedTrip?.targetLabel || 'No active pickup'}
                 </p>
               </div>
 
@@ -784,17 +726,18 @@ function FitBounds({ riders }) {
   const hasFitted = useRef(false);
 
   useEffect(() => {
-    if (!map || riders.length === 0 || hasFitted.current) return;
+    const located = riders.filter((r) => r.currentLat != null && r.currentLng != null);
+    if (!map || located.length === 0 || hasFitted.current) return;
     hasFitted.current = true;
 
-    if (riders.length === 1) {
-      map.setCenter({ lat: riders[0].currentLat ?? FALLBACK_CENTER.lat, lng: riders[0].currentLng ?? FALLBACK_CENTER.lng });
+    if (located.length === 1) {
+      map.setCenter({ lat: located[0].currentLat, lng: located[0].currentLng });
       map.setZoom(14);
       return;
     }
 
     const bounds = new window.google.maps.LatLngBounds();
-    riders.forEach((r) => bounds.extend({ lat: r.currentLat ?? FALLBACK_CENTER.lat, lng: r.currentLng ?? FALLBACK_CENTER.lng }));
+    located.forEach((r) => bounds.extend({ lat: r.currentLat, lng: r.currentLng }));
     map.fitBounds(bounds, 64);
   }, [map, riders]);
 
