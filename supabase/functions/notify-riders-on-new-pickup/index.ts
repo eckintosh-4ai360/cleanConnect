@@ -13,6 +13,12 @@
 // stored in both Supabase Vault (for the trigger) and this function's
 // PICKUP_WEBHOOK_SECRET secret. Never called directly by the Flutter app.
 //
+// Also used by dispatch_scheduled_pickup_alerts (pg_cron) for scheduled
+// pickups: `type` selects how the app presents the push
+// (scheduled_pickup_due rings like an incoming request,
+// scheduled_pickup_reminder is an ordinary notification), and `riderIds`
+// limits it to specific riders instead of the whole fleet.
+//
 // SETUP: store the Firebase service account JSON (Firebase Console -> Project
 // Settings -> Service Accounts -> Generate new private key) via:
 //   supabase secrets set FIREBASE_SERVICE_ACCOUNT_JSON="$(cat service-account.json)"
@@ -21,7 +27,11 @@ import { createClient } from "@supabase/supabase-js";
 import { GoogleAuth } from "google-auth-library";
 
 interface PickupPayload {
-  requestId: string;
+  type?: string;
+  riderIds?: string[];
+  title?: string;
+  body?: string;
+  requestId?: string;
   customerId?: string;
   customerName?: string;
   location?: string;
@@ -68,10 +78,17 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const { data: riders, error: ridersError } = await supabase
+  const riderIds = Array.isArray(payload.riderIds)
+    ? payload.riderIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : null;
+
+  let ridersQuery = supabase
     .from("riders")
     .select("fcm_token")
     .not("fcm_token", "is", null);
+  if (riderIds) ridersQuery = ridersQuery.in("id", riderIds);
+
+  const { data: riders, error: ridersError } = await ridersQuery;
 
   if (ridersError) {
     console.error("[notify-riders] failed to load rider tokens:", ridersError);
@@ -108,7 +125,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const data = {
-    type: "new_pickup_request",
+    type: typeof payload.type === "string" && payload.type ? payload.type : "new_pickup_request",
+    title: payload.title ?? "",
+    body: payload.body ?? "",
     requestId: payload.requestId ?? "",
     customerId: payload.customerId ?? "",
     customerName: payload.customerName ?? "Customer",

@@ -10,6 +10,9 @@
 // dashboard sees it. This is the only place that can do it: payments is
 // admin-only under RLS, so the paying customer cannot insert their own row.
 //
+// A subscription charge buys a period of cover (grant_subscription_period),
+// which is what makes the customer's scheduled pickups appear.
+//
 // A pay-as-you-go charge additionally becomes one row in
 // public.payg_pickup_credits, which schedule_pickup consumes when the customer
 // requests the pickup they paid for. Customers cannot write that table either.
@@ -226,6 +229,48 @@ async function grantPickupCredit(
   return true;
 }
 
+/**
+ * Turns a verified subscription charge into a paid period of cover.
+ * Idempotent on the Paystack reference. Returns whether cover was granted.
+ */
+async function grantSubscription(
+  // deno-lint-ignore no-explicit-any
+  data: any,
+  userId: string,
+): Promise<boolean> {
+  const meta = (data.metadata ?? {}) as Record<string, unknown>;
+  if (meta.type !== "subscription" || typeof meta.plan !== "string") return false;
+
+  if (meta.user_uid !== userId) {
+    console.warn(`[Paystack] Subscription reference ${data.reference} belongs to another user — not granted to uid ${userId}.`);
+    return false;
+  }
+
+  const admin = adminClient();
+  if (!admin) {
+    console.error(`[Paystack] SUPABASE_SERVICE_ROLE_KEY is not set — no subscription cover for ${data.reference}.`);
+    return false;
+  }
+
+  const charged = Number(data.amount) / 100;
+  const net = Math.min(numberOr(meta.net_total, charged), charged);
+
+  const { error } = await admin.rpc("grant_subscription_period", {
+    p_customer_id: userId,
+    p_plan_name: meta.plan,
+    p_amount: Math.round(net * 100) / 100,
+    p_reference: data.reference,
+    p_paid_at: data.paid_at ?? new Date().toISOString(),
+  });
+
+  if (error) {
+    console.error(`[Paystack] Failed to grant subscription for ${data.reference}: ${error.message}`);
+    return false;
+  }
+  console.log(`[Paystack] Subscription cover granted for ${data.reference} (uid ${userId}, ${meta.plan}).`);
+  return true;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -311,6 +356,7 @@ Deno.serve(async (req: Request) => {
 
     const verified = chargeSucceeded && amountMatches && currencyMatches;
     let pickupCredit = false;
+    let subscriptionGranted = false;
 
     if (!verified) {
       console.warn(
@@ -321,6 +367,7 @@ Deno.serve(async (req: Request) => {
       console.log(`[Paystack] Verify: reference ${reference} confirmed — uid: ${user.id}`);
       // The credit first: it is what lets the customer use what they paid for.
       pickupCredit = await grantPickupCredit(data, user.id);
+      subscriptionGranted = await grantSubscription(data, user.id);
       await recordPayment(data, user.id);
     }
 
@@ -331,6 +378,7 @@ Deno.serve(async (req: Request) => {
       currency: data.currency,
       reference: data.reference,
       pickup_credit: pickupCredit,
+      subscription_granted: subscriptionGranted,
     });
   } catch (err) {
     console.error("[Paystack] Verify API error:", err);
