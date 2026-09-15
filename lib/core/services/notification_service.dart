@@ -19,6 +19,19 @@ const String pickupRequestsChannelId = 'pickup_requests_channel';
 const String pickupRequestsChannelName = 'New Pickup Requests';
 const List<int> _pickupVibrationPatternRaw = [0, 1000, 500, 1000, 500, 1000];
 
+const String scheduledPickupsChannelId = 'scheduled_pickups_channel';
+const String scheduledPickupsChannelName = 'Scheduled Pickups';
+
+// Push types sent by notify-riders-on-new-pickup.
+const String _pushNewRequest = 'new_pickup_request';
+const String _pushScheduledDue = 'scheduled_pickup_due';
+const String _pushScheduledReminder = 'scheduled_pickup_reminder';
+const Set<String> _riderPushTypes = {_pushNewRequest, _pushScheduledDue, _pushScheduledReminder};
+
+/// Notification payloads starting with this open a route instead of a request.
+const String _routePayloadPrefix = 'route:';
+const String _upcomingPickupsRoute = '/rider/pickups';
+
 const String _riderPushEnabledKey = 'rider_push_alerts_enabled';
 
 // SharedPreferences is used here so both background and main isolates can read it
@@ -46,10 +59,23 @@ Future<void> _setRiderPushEnabled(bool enabled) async {
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  if (message.data['type'] != 'new_pickup_request') return;
+  final type = message.data['type'];
+  if (!_riderPushTypes.contains(type)) return;
   if (!await _riderPushEnabled()) return;
   await _ensureLocalNotifications();
-  await _showIncomingPickupNotification(message.data);
+  await _showRiderPush(message.data);
+}
+
+/// Shows the right notification for any rider push type.
+Future<void> _showRiderPush(Map<String, dynamic> data) async {
+  switch (data['type']) {
+    case _pushScheduledDue:
+      await _showScheduledDueNotification(data);
+    case _pushScheduledReminder:
+      await _showScheduledReminderNotification(data);
+    default:
+      await _showIncomingPickupNotification(data);
+  }
 }
 
 // Setup local notification channel for pickup requests
@@ -76,10 +102,18 @@ Future<void> _ensureLocalNotifications({
     vibrationPattern: Int64List.fromList(_pickupVibrationPatternRaw),
   );
 
-  await _localNotificationsPlugin
-      .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(channel);
+  final android = _localNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  await android?.createNotificationChannel(channel);
+  await android?.createNotificationChannel(
+    const AndroidNotificationChannel(
+      scheduledPickupsChannelId,
+      scheduledPickupsChannelName,
+      description: 'Reminders about scheduled subscription pickups.',
+      importance: Importance.high,
+      playSound: true,
+    ),
+  );
 
   _localNotificationsReady = true;
 }
@@ -119,6 +153,70 @@ Future<void> _showIncomingPickupNotification(Map<String, dynamic> data) async {
   );
 }
 
+/// The slot of a claimed scheduled pickup has started: ring like an incoming
+/// request so it is not missed on a bike.
+Future<void> _showScheduledDueNotification(Map<String, dynamic> data) async {
+  final androidDetails = AndroidNotificationDetails(
+    pickupRequestsChannelId,
+    pickupRequestsChannelName,
+    channelDescription: 'Alerts riders when a new pickup request comes in.',
+    importance: Importance.max,
+    priority: Priority.max,
+    fullScreenIntent: true,
+    category: AndroidNotificationCategory.alarm,
+    autoCancel: true,
+    playSound: true,
+    enableVibration: true,
+    vibrationPattern: Int64List.fromList(_pickupVibrationPatternRaw),
+    visibility: NotificationVisibility.public,
+  );
+  const iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+    interruptionLevel: InterruptionLevel.timeSensitive,
+  );
+
+  final requestId = data['requestId'] as String? ?? '';
+  final title = (data['title'] as String?)?.trim();
+  final body = (data['body'] as String?)?.trim();
+
+  await _localNotificationsPlugin.show(
+    id: requestId.hashCode,
+    title: title == null || title.isEmpty ? 'Scheduled pickup starts now' : title,
+    body: body == null || body.isEmpty ? (data['customerName'] as String? ?? '') : body,
+    notificationDetails: NotificationDetails(android: androidDetails, iOS: iosDetails),
+    payload: '$_routePayloadPrefix$_upcomingPickupsRoute',
+  );
+}
+
+Future<void> _showScheduledReminderNotification(Map<String, dynamic> data) async {
+  const androidDetails = AndroidNotificationDetails(
+    scheduledPickupsChannelId,
+    scheduledPickupsChannelName,
+    channelDescription: 'Reminders about scheduled subscription pickups.',
+    importance: Importance.high,
+    priority: Priority.high,
+    playSound: true,
+  );
+  const iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+  );
+
+  final title = (data['title'] as String?)?.trim();
+  final body = (data['body'] as String?)?.trim();
+
+  await _localNotificationsPlugin.show(
+    id: 'reminder-${title ?? ''}'.hashCode,
+    title: title == null || title.isEmpty ? 'Scheduled pickups tomorrow' : title,
+    body: body ?? '',
+    notificationDetails: const NotificationDetails(android: androidDetails, iOS: iosDetails),
+    payload: '$_routePayloadPrefix$_upcomingPickupsRoute',
+  );
+}
+
 /// Manages FCM push alerts, local notifications, and vibration for rider pickup requests.
 class NotificationService {
   NotificationService._();
@@ -147,7 +245,7 @@ class NotificationService {
       sound: true,
     );
 
-    await _ensureLocalNotifications(onTap: _navigateToRequestId);
+    await _ensureLocalNotifications(onTap: _handleNotificationPayload);
 
     _onMessageSub =
         FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
@@ -165,16 +263,15 @@ class NotificationService {
     // Handle cold start from terminated push tap
     final initialMessage =
         await FirebaseMessaging.instance.getInitialMessage();
-    if (initialMessage != null &&
-        initialMessage.data['type'] == 'new_pickup_request') {
-      _navigateToRequestId(initialMessage.data['requestId'] as String?);
+    if (initialMessage != null) {
+      _handleOpenedMessage(initialMessage);
     }
 
     // Handle cold start from local notification tap
     final launchDetails =
         await _localNotificationsPlugin.getNotificationAppLaunchDetails();
     if (launchDetails?.didNotificationLaunchApp == true) {
-      _navigateToRequestId(launchDetails?.notificationResponse?.payload);
+      _handleNotificationPayload(launchDetails?.notificationResponse?.payload);
     }
   }
 
@@ -204,18 +301,48 @@ class NotificationService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    if (message.data['type'] != 'new_pickup_request') return;
+    final type = message.data['type'];
+    if (!_riderPushTypes.contains(type)) return;
     if (!_isSignedInAsRider) {
       unawaited(_releaseStaleDeviceToken());
       return;
     }
-    unawaited(startIncomingPickupAlert());
-    _navigateToRequestId(message.data['requestId'] as String?);
+    switch (type) {
+      case _pushScheduledDue:
+        unawaited(startIncomingPickupAlert());
+        unawaited(_showScheduledDueNotification(message.data));
+        _navigateToRoute(_upcomingPickupsRoute);
+      case _pushScheduledReminder:
+        unawaited(_showScheduledReminderNotification(message.data));
+      default:
+        unawaited(startIncomingPickupAlert());
+        _navigateToRequestId(message.data['requestId'] as String?);
+    }
   }
 
   void _handleOpenedMessage(RemoteMessage message) {
-    if (message.data['type'] != 'new_pickup_request') return;
-    _navigateToRequestId(message.data['requestId'] as String?);
+    switch (message.data['type']) {
+      case _pushNewRequest:
+        _navigateToRequestId(message.data['requestId'] as String?);
+      case _pushScheduledDue:
+      case _pushScheduledReminder:
+        _navigateToRoute(_upcomingPickupsRoute);
+    }
+  }
+
+  void _handleNotificationPayload(String? payload) {
+    if (payload != null && payload.startsWith(_routePayloadPrefix)) {
+      _navigateToRoute(payload.substring(_routePayloadPrefix.length));
+      return;
+    }
+    _navigateToRequestId(payload);
+  }
+
+  void _navigateToRoute(String route) {
+    final container = _container;
+    if (container == null) return;
+    if (container.read(currentUserRoleProvider) != UserRole.rider) return;
+    container.read(routerProvider).push(route);
   }
 
   bool get _isSignedInAsRider =>

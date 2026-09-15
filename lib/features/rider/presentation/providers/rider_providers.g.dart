@@ -331,7 +331,7 @@ final class AvailablePickupsProvider
   AvailablePickups create() => AvailablePickups();
 }
 
-String _$availablePickupsHash() => r'30b6f32ff22ee3452249d1f577a955bab50bf206';
+String _$availablePickupsHash() => r'85a3f2e9abc38a20bf622fdf37cc1c9609e7a324';
 
 abstract class _$AvailablePickups
     extends $StreamNotifier<List<PickupRequestEntity>> {

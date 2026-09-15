@@ -134,6 +134,10 @@ class AvailablePickups extends _$AvailablePickups {
         );
   }
 
+  Future<void> release(String requestId) async {
+    await ref.read(riderRepositoryProvider).releasePickup(requestId);
+  }
+
   Future<void> reject(String requestId, String customerId) async {
     await ref.read(riderRepositoryProvider).rejectPickup(
           requestId: requestId,

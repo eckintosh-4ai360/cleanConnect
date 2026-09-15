@@ -1,110 +1,214 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/rider_nav_bar.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 
-class AvailablePickupsScreen extends ConsumerWidget {
+/// Pickups a rider can take.
+///
+/// "Now" holds on-demand requests and scheduled pickups whose slot is about to
+/// start (or has), plus the rider's own claimed scheduled pickups that are due.
+/// "Upcoming" holds the next few days of scheduled subscription pickups: open
+/// ones to claim ahead of time, and the ones this rider already claimed.
+class AvailablePickupsScreen extends HookConsumerWidget {
   const AvailablePickupsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pickupsAsync = ref.watch(availablePickupsProvider);
+    final acceptedAsync = ref.watch(riderAcceptedPickupsProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      bottomNavigationBar: const RiderBottomNavBar(currentIndex: 1),
-      appBar: AppBar(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Text(
-          'Available Pickups',
-          style: theme.textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w900),
-        ),
-        actions: const [ThemeToggleButton(), SizedBox(width: 8)],
-      ),
-      body: pickupsAsync.when(
-        data: (pickups) {
-          if (pickups.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.grey.shade800
-                          : Colors.grey.shade100,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.local_shipping_outlined,
-                      size: 52,
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'No Pending Pickups',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'New customer pickup requests\nwill appear here.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade500,
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
+    // Opened from a "scheduled pickup starts now" alarm: the rider is here, so
+    // the ringing can stop.
+    useEffect(() {
+      NotificationService.instance.stopIncomingPickupAlert();
+      return null;
+    }, const []);
 
-          return RefreshIndicator(
-            color: theme.colorScheme.primary,
-            onRefresh: () async =>
-                ref.invalidate(availablePickupsProvider),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: pickups.length,
-              itemBuilder: (context, index) {
-                final pickup = pickups[index];
-                return _PickupCard(
-                  pickup: pickup,
-                  isDark: isDark,
-                  theme: theme,
-                  onAccept: () => _onAccept(context, ref, pickup),
-                  onReject: () => _onReject(context, ref, pickup),
-                );
-              },
+    final pending = pickupsAsync.value ?? const <PickupRequestEntity>[];
+    final mine = acceptedAsync.value ?? const <PickupRequestEntity>[];
+
+    final nowOpen = pending.where((p) => !p.isUpcoming).toList()
+      ..sort(_bySlotThenCreated);
+    final myDueScheduled = mine.where((p) => p.isScheduled && !p.isUpcoming).toList()
+      ..sort(_bySlotThenCreated);
+    final upcomingOpen = pending.where((p) => p.isUpcoming).toList()..sort(_bySlotThenCreated);
+    final myUpcoming = mine.where((p) => p.isUpcoming).toList()..sort(_bySlotThenCreated);
+
+    Widget body(Widget Function() content) => pickupsAsync.when(
+          data: (_) => content(),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(
+            child: Text(
+              'Failed to load pickups.\n$e',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
             ),
-          );
-        },
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Text(
-            'Failed to load pickups.\n$e',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
           ),
+        );
+
+    Future<void> refresh() async {
+      ref.invalidate(availablePickupsProvider);
+      ref.invalidate(riderAcceptedPickupsProvider);
+    }
+
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        bottomNavigationBar: const RiderBottomNavBar(currentIndex: 1),
+        appBar: AppBar(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          title: Text(
+            'Pickups',
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          actions: const [ThemeToggleButton(), SizedBox(width: 8)],
+          bottom: TabBar(
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            tabs: [
+              Tab(text: 'Now (${nowOpen.length + myDueScheduled.length})'),
+              Tab(text: 'Upcoming (${upcomingOpen.length + myUpcoming.length})'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            body(() {
+              if (nowOpen.isEmpty && myDueScheduled.isEmpty) {
+                return _EmptyState(
+                  isDark: isDark,
+                  title: 'No Pending Pickups',
+                  message: 'New customer pickup requests\nwill appear here.',
+                  onRefresh: refresh,
+                );
+              }
+              return RefreshIndicator(
+                color: theme.colorScheme.primary,
+                onRefresh: refresh,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (myDueScheduled.isNotEmpty) ...[
+                      const _SectionHeader('Your scheduled pickups — due now'),
+                      ...myDueScheduled.map(
+                        (pickup) => _PickupCard(
+                          pickup: pickup,
+                          isDark: isDark,
+                          theme: theme,
+                          primaryLabel: 'Start Navigation',
+                          primaryIcon: Icons.navigation_outlined,
+                          onPrimary: () => context.push('/rider/navigation', extra: pickup),
+                        ),
+                      ),
+                    ],
+                    if (nowOpen.isNotEmpty && myDueScheduled.isNotEmpty)
+                      const _SectionHeader('Open requests'),
+                    ...nowOpen.map(
+                      (pickup) => _PickupCard(
+                        pickup: pickup,
+                        isDark: isDark,
+                        theme: theme,
+                        primaryLabel: 'Accept Pickup',
+                        primaryIcon: Icons.check_circle_outline,
+                        onPrimary: () => _onAccept(context, ref, pickup),
+                        secondaryLabel: 'Pass',
+                        onSecondary: () => _onReject(context, ref, pickup),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            body(() {
+              if (upcomingOpen.isEmpty && myUpcoming.isEmpty) {
+                return _EmptyState(
+                  isDark: isDark,
+                  title: 'Nothing Scheduled Yet',
+                  message:
+                      'Subscription pickups for the next 3 days\nappear here for you to claim.',
+                  onRefresh: refresh,
+                );
+              }
+              return RefreshIndicator(
+                color: theme.colorScheme.primary,
+                onRefresh: refresh,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (myUpcoming.isNotEmpty) ...[
+                      const _SectionHeader('Claimed by you'),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          'You get a reminder the evening before and an alarm when each slot starts.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ),
+                      ...myUpcoming.map(
+                        (pickup) => _PickupCard(
+                          pickup: pickup,
+                          isDark: isDark,
+                          theme: theme,
+                          claimedByMe: true,
+                          primaryLabel: 'Claimed',
+                          primaryIcon: Icons.event_available_outlined,
+                          onPrimary: null,
+                          secondaryLabel: 'Release',
+                          onSecondary: () => _onRelease(context, ref, pickup),
+                        ),
+                      ),
+                    ],
+                    ..._groupByDay(upcomingOpen).entries.expand(
+                          (entry) => [
+                            _SectionHeader('Open — ${entry.key}'),
+                            ...entry.value.map(
+                              (pickup) => _PickupCard(
+                                pickup: pickup,
+                                isDark: isDark,
+                                theme: theme,
+                                primaryLabel: 'Claim',
+                                primaryIcon: Icons.event_available_outlined,
+                                onPrimary: () => _onAccept(context, ref, pickup),
+                                secondaryLabel: 'Pass',
+                                onSecondary: () => _onReject(context, ref, pickup),
+                              ),
+                            ),
+                          ],
+                        ),
+                  ],
+                ),
+              );
+            }),
+          ],
         ),
       ),
     );
+  }
+
+  static int _bySlotThenCreated(PickupRequestEntity a, PickupRequestEntity b) {
+    final aAt = a.slotStartsAt ?? a.createdAt;
+    final bAt = b.slotStartsAt ?? b.createdAt;
+    return aAt.compareTo(bAt);
+  }
+
+  static Map<String, List<PickupRequestEntity>> _groupByDay(List<PickupRequestEntity> pickups) {
+    final groups = <String, List<PickupRequestEntity>>{};
+    for (final p in pickups) {
+      final at = p.slotStartsAt ?? p.createdAt;
+      groups.putIfAbsent(DateFormat('EEEE d MMM').format(at), () => []).add(p);
+    }
+    return groups;
   }
 
   Future<void> _onAccept(
@@ -112,12 +216,21 @@ class AvailablePickupsScreen extends ConsumerWidget {
     WidgetRef ref,
     PickupRequestEntity pickup,
   ) async {
+    final upcoming = pickup.isUpcoming;
+    final when = pickup.slotStartsAt == null
+        ? ''
+        : ' on ${DateFormat('EEE d MMM').format(pickup.slotStartsAt!)} (${pickup.timeSlot})';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Accept Pickup'),
+        title: Text(upcoming ? 'Claim Scheduled Pickup' : 'Accept Pickup'),
         content: Text(
-          'Accept pickup for ${pickup.customerName} at ${pickup.location}?',
+          upcoming
+              ? 'Claim the pickup for ${pickup.customerName} at ${pickup.location}$when? '
+                  'You will get a reminder the evening before and an alarm when the slot starts. '
+                  'You can release it before then if your plans change.'
+              : 'Accept pickup for ${pickup.customerName} at ${pickup.location}?',
         ),
         actions: [
           TextButton(
@@ -126,40 +239,81 @@ class AvailablePickupsScreen extends ConsumerWidget {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Accept'),
+            child: Text(upcoming ? 'Claim' : 'Accept'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && context.mounted) {
-      try {
-        await ref.read(availablePickupsProvider.notifier).accept(
-              pickup.id,
-              pickup.customerId,
-            );
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('✅ Pickup accepted! Starting Navigation...'),
-              backgroundColor: Colors.green,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(availablePickupsProvider.notifier).accept(
+            pickup.id,
+            pickup.customerId,
           );
-          context.push('/rider/navigation', extra: pickup);
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to accept: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(upcoming
+              ? '✅ Claimed. It is in your Upcoming list.'
+              : '✅ Pickup accepted! Starting Navigation...'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      if (!upcoming) context.push('/rider/navigation', extra: pickup);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to accept: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _onRelease(
+    BuildContext context,
+    WidgetRef ref,
+    PickupRequestEntity pickup,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Release Pickup'),
+        content: Text(
+          'Give the pickup for ${pickup.customerName} back to other riders?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Release'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(availablePickupsProvider.notifier).release(pickup.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Released. Other riders can now claim it.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to release: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -198,19 +352,97 @@ class AvailablePickupsScreen extends ConsumerWidget {
   }
 }
 
+class _SectionHeader extends StatelessWidget {
+  final String text;
+  const _SectionHeader(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool isDark;
+  final String title;
+  final String message;
+  final Future<void> Function() onRefresh;
+
+  const _EmptyState({
+    required this.isDark,
+    required this.title,
+    required this.message,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 120),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.local_shipping_outlined,
+                size: 52,
+                color: Colors.grey.shade400,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PickupCard extends StatelessWidget {
   final PickupRequestEntity pickup;
   final bool isDark;
   final ThemeData theme;
-  final VoidCallback onAccept;
-  final VoidCallback onReject;
+  final String primaryLabel;
+  final IconData primaryIcon;
+  final VoidCallback? onPrimary;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+  final bool claimedByMe;
 
   const _PickupCard({
     required this.pickup,
     required this.isDark,
     required this.theme,
-    required this.onAccept,
-    required this.onReject,
+    required this.primaryLabel,
+    required this.primaryIcon,
+    required this.onPrimary,
+    this.secondaryLabel,
+    this.onSecondary,
+    this.claimedByMe = false,
   });
 
   Color _binColor(String type) {
@@ -241,9 +473,15 @@ class _PickupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeStr = DateFormat('MMM d • h:mm a').format(pickup.createdAt);
+    final timeStr = pickup.isScheduled && pickup.slotStartsAt != null
+        ? 'Scheduled • ${DateFormat('EEE d MMM').format(pickup.slotStartsAt!)}'
+        : DateFormat('MMM d • h:mm a').format(pickup.createdAt);
     final primaryBinType =
         pickup.binTypes.isNotEmpty ? pickup.binTypes.first : 'general';
+    final statusLabel = claimedByMe ? 'Claimed' : (pickup.status == 'accepted' ? 'Yours' : 'Pending');
+    final statusColor = claimedByMe || pickup.status == 'accepted'
+        ? const Color(0xFF1DB954)
+        : const Color(0xFFF0A500);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -257,7 +495,7 @@ class _PickupCard extends StatelessWidget {
             ? []
             : [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -274,7 +512,7 @@ class _PickupCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: _binColor(primaryBinType).withOpacity(0.12),
+                    color: _binColor(primaryBinType).withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -315,15 +553,15 @@ class _PickupCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF0A500).withValues(alpha: 0.12),
+                        color: statusColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text(
-                        'Pending',
+                      child: Text(
+                        statusLabel,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFF0A500),
+                          color: statusColor,
                         ),
                       ),
                     ),
@@ -334,15 +572,15 @@ class _PickupCard extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
+                        color: pickup.isScheduled ? Colors.purple.shade50 : Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
-                        '3-Day Grace Period',
+                      child: Text(
+                        pickup.isScheduled ? 'Subscription' : '3-Day Grace Period',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue,
+                          color: pickup.isScheduled ? Colors.purple : Colors.blue,
                         ),
                       ),
                     ),
@@ -440,10 +678,10 @@ class _PickupCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _binColor(t).withOpacity(0.1),
+                        color: _binColor(t).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: _binColor(t).withOpacity(0.3),
+                          color: _binColor(t).withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -453,7 +691,7 @@ class _PickupCard extends StatelessWidget {
                               size: 12, color: _binColor(t)),
                           const SizedBox(width: 4),
                           Text(
-                            t[0].toUpperCase() + t.substring(1),
+                            t.isEmpty ? t : t[0].toUpperCase() + t.substring(1),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -471,45 +709,49 @@ class _PickupCard extends StatelessWidget {
             // ── Action buttons ────────────────────────────────────────
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onReject,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                if (secondaryLabel != null) ...[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onSecondary,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text(
-                      'Pass',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      child: Text(
+                        secondaryLabel!,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: onAccept,
+                    onPressed: onPrimary,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1DB954),
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFF1DB954).withValues(alpha: 0.35),
+                      disabledForegroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       elevation: 0,
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.check_circle_outline, size: 18),
-                        SizedBox(width: 6),
+                        Icon(primaryIcon, size: 18),
+                        const SizedBox(width: 6),
                         Text(
-                          'Accept Pickup',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                          primaryLabel,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),

@@ -66,6 +66,9 @@ abstract class RiderRepository {
   Future<void> releaseDeviceFcmToken(String token);
 
   /// Accept a pickup request — assigns this rider and sets status to 'accepted'.
+  /// Hands a claimed scheduled pickup back to all riders before its slot starts.
+  Future<void> releasePickup(String requestId);
+
   Future<void> acceptPickup({
     required String requestId,
     required String customerId,

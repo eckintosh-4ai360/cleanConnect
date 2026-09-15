@@ -27,6 +27,12 @@ class PickupRequestEntity {
   /// the customer never uploaded one.
   final String? housePhotoUrl;
 
+  /// 'scheduled' when generated from a customer's subscription, else 'on_demand'.
+  final String source;
+
+  /// When a scheduled pickup's time slot begins.
+  final DateTime? slotStartsAt;
+
   const PickupRequestEntity({
     required this.id,
     required this.customerId,
@@ -44,7 +50,19 @@ class PickupRequestEntity {
     required this.createdAt,
     this.acceptedAt,
     this.housePhotoUrl,
+    this.source = 'on_demand',
+    this.slotStartsAt,
   });
+
+  bool get isScheduled => source == 'scheduled';
+
+  /// A scheduled pickup more than an hour away: claimable ahead of time, and
+  /// not counted against the rider's active-pickup limit (same rule as the
+  /// accept_pickup RPC).
+  bool get isUpcoming =>
+      isScheduled &&
+      slotStartsAt != null &&
+      slotStartsAt!.isAfter(DateTime.now().add(const Duration(hours: 1)));
 
   /// Plottable destination, or null when the request has no coordinates yet.
   LatLng? get destination {

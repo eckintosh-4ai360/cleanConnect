@@ -157,11 +157,16 @@ class RiderRepositoryImpl implements RiderRepository {
           at.day == today.day;
     }
 
+    // A scheduled pickup claimed for later in the week is not part of today.
+    final endOfToday = DateTime(today.year, today.month, today.day).add(const Duration(days: 1));
+    bool dueByToday(PickupRequestEntity p) =>
+        !p.isScheduled || p.slotStartsAt == null || p.slotStartsAt!.isBefore(endOfToday);
+
     final relevant = pickups
-        .where((p) => p.status == 'accepted' || completedToday(p))
+        .where((p) => (p.status == 'accepted' && dueByToday(p)) || completedToday(p))
         .toList()
-      ..sort((a, b) =>
-          (a.acceptedAt ?? a.createdAt).compareTo(b.acceptedAt ?? b.createdAt));
+      ..sort((a, b) => (a.slotStartsAt ?? a.acceptedAt ?? a.createdAt)
+          .compareTo(b.slotStartsAt ?? b.acceptedAt ?? b.createdAt));
     if (relevant.isEmpty) return null;
 
     final stops = <RouteStopEntity>[];
@@ -547,6 +552,11 @@ class RiderRepositoryImpl implements RiderRepository {
   }
 
   @override
+  Future<void> releasePickup(String requestId) async {
+    await _db.rpc('release_pickup', params: {'p_request_id': requestId});
+  }
+
+  @override
   Future<void> rejectPickup({
     required String requestId,
     required String customerId,
@@ -608,6 +618,8 @@ class RiderRepositoryImpl implements RiderRepository {
             ? DateTime.tryParse(r['accepted_at'].toString())
             : null,
         housePhotoUrl: r['house_photo_url'] as String?,
+        source: r['source'] as String? ?? 'on_demand',
+        slotStartsAt: DateTime.tryParse(r['slot_starts_at']?.toString() ?? '')?.toLocal(),
       );
 
   // ── Company bike ─────────────────────────────────────────────────────────
