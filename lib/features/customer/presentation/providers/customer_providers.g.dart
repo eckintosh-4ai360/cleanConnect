@@ -480,6 +480,63 @@ final class CustomerPaygCreditsProvider
 String _$customerPaygCreditsHash() =>
     r'4d923987903ffa24be4d1da9309051258e33e4fe';
 
+@ProviderFor(CustomerAddresses)
+final customerAddressesProvider = CustomerAddressesProvider._();
+
+final class CustomerAddressesProvider
+    extends
+        $StreamNotifierProvider<
+          CustomerAddresses,
+          List<CustomerAddressEntity>
+        > {
+  CustomerAddressesProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'customerAddressesProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$customerAddressesHash();
+
+  @$internal
+  @override
+  CustomerAddresses create() => CustomerAddresses();
+}
+
+String _$customerAddressesHash() => r'f6f1e9e7cb06d42dbe41d99d2c2973857129a160';
+
+abstract class _$CustomerAddresses
+    extends $StreamNotifier<List<CustomerAddressEntity>> {
+  Stream<List<CustomerAddressEntity>> build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref
+            as $Ref<
+              AsyncValue<List<CustomerAddressEntity>>,
+              List<CustomerAddressEntity>
+            >;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<
+                AsyncValue<List<CustomerAddressEntity>>,
+                List<CustomerAddressEntity>
+              >,
+              AsyncValue<List<CustomerAddressEntity>>,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(CustomerHistory)
 final customerHistoryProvider = CustomerHistoryProvider._();
 

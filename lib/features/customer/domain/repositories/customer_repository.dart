@@ -89,6 +89,18 @@ abstract class CustomerRepository {
   /// Prepaid pay-as-you-go pickups that have not been used yet, oldest first.
   Stream<List<PaygPickupCreditEntity>> watchAvailablePaygCredits();
 
+  Stream<List<CustomerAddressEntity>> watchAddresses();
+
+  Future<void> addAddress({
+    required String label,
+    required String address,
+    required double latitude,
+    required double longitude,
+  });
+
+  Future<void> deleteAddress(String addressId);
+
+  Future<void> setDefaultAddress(String addressId);
 
   Future<void> updateHousePhoto({
     required Uint8List bytes,

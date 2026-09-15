@@ -198,6 +198,36 @@ Stream<List<PaygPickupCreditEntity>> customerPaygCredits(Ref ref) {
 }
 
 @riverpod
+class CustomerAddresses extends _$CustomerAddresses {
+  @override
+  Stream<List<CustomerAddressEntity>> build() {
+    return ref.watch(customerRepositoryProvider).watchAddresses();
+  }
+
+  Future<void> add({
+    required String label,
+    required String address,
+    required double latitude,
+    required double longitude,
+  }) async {
+    await ref.read(customerRepositoryProvider).addAddress(
+          label: label,
+          address: address,
+          latitude: latitude,
+          longitude: longitude,
+        );
+  }
+
+  Future<void> delete(String addressId) async {
+    await ref.read(customerRepositoryProvider).deleteAddress(addressId);
+  }
+
+  Future<void> setDefault(String addressId) async {
+    await ref.read(customerRepositoryProvider).setDefaultAddress(addressId);
+  }
+}
+
+@riverpod
 class CustomerHistory extends _$CustomerHistory {
   @override
   Stream<List<ServiceRecordEntity>> build() {

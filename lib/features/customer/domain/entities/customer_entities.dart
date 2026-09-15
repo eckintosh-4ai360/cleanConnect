@@ -220,6 +220,26 @@ class PaygPickupCreditEntity {
   bool get isAvailable => consumedAt == null;
 }
 
+class CustomerAddressEntity {
+  final String id;
+  final String label;
+  final String address;
+  final double? latitude;
+  final double? longitude;
+  final bool isDefault;
+
+  const CustomerAddressEntity({
+    required this.id,
+    required this.label,
+    required this.address,
+    this.latitude,
+    this.longitude,
+    this.isDefault = false,
+  });
+
+  bool get hasCoordinates => latitude != null && longitude != null;
+}
+
 class PricingPlanEntity {
   final String id;
   final String name;

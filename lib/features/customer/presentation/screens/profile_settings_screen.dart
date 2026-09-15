@@ -5,10 +5,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/config/map_config.dart';
 import '../../../../core/services/profile_image_picker_service.dart';
 import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/customer_providers.dart';
+import '../../domain/entities/customer_entities.dart';
+import 'location_picker_screen.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/clean_connect_button.dart';
 import '../../../../core/shared/widgets/clean_connect_text_field.dart';
@@ -31,13 +35,13 @@ class ProfileSettingsScreen extends HookConsumerWidget {
     final phoneController = useTextEditingController(text: user?.phoneNumber ?? '');
     final dobController = useTextEditingController(text: '');
 
-    // Address Management state
-    final addresses = useState<List<Map<String, String>>>([
-      {'label': 'Home', 'details': '123 Green St, Tarkwa, 95210'},
-      {'label': 'Office', 'details': '456 Corporate Way, Tarkwa, 95215'},
-    ]);
+    // Address Management state -- saved in customer_addresses, each with the
+    // map coordinates riders navigate to.
+    final addressesState = ref.watch(customerAddressesProvider);
     final newAddressLabelController = useTextEditingController();
     final newAddressDetailsController = useTextEditingController();
+    final newAddressPosition = useState<LatLng?>(null);
+    final isSavingAddress = useState(false);
 
     // Payment Methods state — starts empty (no hardcoded cards)
     final cardMethods = useState<List<Map<String, String>>>([]);
@@ -68,6 +72,86 @@ class ProfileSettingsScreen extends HookConsumerWidget {
         user?.fullName ?? currentUser?.userMetadata?['full_name'] as String? ?? 'Mark Aggrey';
     final displayEmail = user?.email ?? currentUser?.email ?? 'mark.aggrey@cleanconnect.com';
     final currentPhotoUrl = photoUrlState.value ?? currentPhotoUrlFromAuth;
+
+    Future<void> pickNewAddressOnMap() async {
+      final addresses = addressesState.value ?? const <CustomerAddressEntity>[];
+      final anchor = addresses.where((a) => a.hasCoordinates).firstOrNull;
+      final result = await Navigator.of(context).push<PickedLocation>(
+        MaterialPageRoute(
+          builder: (_) => LocationPickerScreen(
+            initialPosition: newAddressPosition.value ??
+                (anchor != null
+                    ? LatLng(anchor.latitude!, anchor.longitude!)
+                    : MapConfig.fallbackCenter),
+          ),
+        ),
+      );
+      if (result == null) return;
+      newAddressPosition.value = result.position;
+      if (newAddressDetailsController.text.trim().isEmpty &&
+          (result.label?.trim().isNotEmpty ?? false)) {
+        newAddressDetailsController.text = result.label!.trim();
+      }
+    }
+
+    Future<void> saveNewAddress() async {
+      final label = newAddressLabelController.text.trim();
+      final details = newAddressDetailsController.text.trim();
+      final position = newAddressPosition.value;
+
+      String? problem;
+      if (label.isEmpty) {
+        problem = 'Give the address a label, e.g. Home or Work.';
+      } else if (position == null) {
+        problem = 'Pick the address on the map so riders can find it.';
+      } else if (details.isEmpty) {
+        problem = 'Add the address details.';
+      }
+      if (problem != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(problem), backgroundColor: Colors.orange),
+        );
+        return;
+      }
+
+      isSavingAddress.value = true;
+      try {
+        await ref.read(customerAddressesProvider.notifier).add(
+              label: label,
+              address: details,
+              latitude: position!.latitude,
+              longitude: position.longitude,
+            );
+        newAddressLabelController.clear();
+        newAddressDetailsController.clear();
+        newAddressPosition.value = null;
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Address saved.'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not save address: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        isSavingAddress.value = false;
+      }
+    }
+
+    Future<void> runAddressAction(Future<void> Function() action, String failure) async {
+      try {
+        await action();
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$failure: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
 
     void handleLogout() async {
       await ref.read(authStateControllerProvider.notifier).logout();
@@ -354,37 +438,100 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 16),
-                    ...addresses.value.map(
-                      (addr) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: Icon(
-                            addr['label'] == 'Home' ? Icons.home : Icons.work,
-                            color: theme.colorScheme.primary,
-                          ),
-                          title: Text(
-                            addr['label']!,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            addr['details']!,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
-                            ),
-                            onPressed: () {
-                              final list = List<Map<String, String>>.from(
-                                addresses.value,
-                              );
-                              list.remove(addr);
-                              addresses.value = list;
-                            },
-                          ),
+                    ...addressesState.when(
+                      loading: () => const [
+                        Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
                         ),
-                      ),
+                      ],
+                      error: (e, _) => [
+                        Text(
+                          'Could not load your addresses.',
+                          style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+                        ),
+                      ],
+                      data: (addresses) => addresses.isEmpty
+                          ? [
+                              Text(
+                                'No saved addresses yet. Add one below to reuse it when requesting a pickup.',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              ),
+                            ]
+                          : addresses.map(
+                              (addr) => Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  leading: Icon(
+                                    _addressIcon(addr.label),
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          addr.label,
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (addr.isDefault) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade50,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Text(
+                                            'DEFAULT',
+                                            style: TextStyle(
+                                              color: Colors.green,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    addr.hasCoordinates
+                                        ? addr.address
+                                        : '${addr.address}\nNo map pin — add it again to use it for pickups',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  trailing: PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert),
+                                    onSelected: (action) {
+                                      final notifier = ref.read(customerAddressesProvider.notifier);
+                                      if (action == 'default') {
+                                        runAddressAction(
+                                          () => notifier.setDefault(addr.id),
+                                          'Could not set default address',
+                                        );
+                                      } else if (action == 'delete') {
+                                        runAddressAction(
+                                          () => notifier.delete(addr.id),
+                                          'Could not delete address',
+                                        );
+                                      }
+                                    },
+                                    itemBuilder: (_) => [
+                                      if (!addr.isDefault)
+                                        const PopupMenuItem(
+                                          value: 'default',
+                                          child: Text('Set as default'),
+                                        ),
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Delete', style: TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                     ),
                     const SizedBox(height: 16),
                     const Text(
@@ -395,48 +542,43 @@ class ProfileSettingsScreen extends HookConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: newAddressLabelController,
-                            decoration: const InputDecoration(
-                              labelText: 'Label (e.g. Work)',
-                              contentPadding: EdgeInsets.all(12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: newAddressDetailsController,
-                            decoration: const InputDecoration(
-                              labelText: 'Full Address details',
-                              contentPadding: EdgeInsets.all(12),
-                            ),
-                          ),
-                        ),
-                      ],
+                    TextField(
+                      controller: newAddressLabelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Label (e.g. Home, Work)',
+                        contentPadding: EdgeInsets.all(12),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: pickNewAddressOnMap,
+                      icon: Icon(
+                        newAddressPosition.value == null ? Icons.map_outlined : Icons.check_circle,
+                        size: 18,
+                        color: newAddressPosition.value == null ? null : Colors.green,
+                      ),
+                      label: Text(
+                        newAddressPosition.value == null
+                            ? 'Pick Location on Map'
+                            : 'Pinned ${newAddressPosition.value!.latitude.toStringAsFixed(5)}, '
+                                '${newAddressPosition.value!.longitude.toStringAsFixed(5)}',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: newAddressDetailsController,
+                      minLines: 1,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Address details (street, landmark)',
+                        contentPadding: EdgeInsets.all(12),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     CleanConnectButton(
                       text: 'Add Address',
-                      onPressed: () {
-                        if (newAddressLabelController.text.isNotEmpty &&
-                            newAddressDetailsController.text.isNotEmpty) {
-                          final list = List<Map<String, String>>.from(
-                            addresses.value,
-                          );
-                          list.add({
-                            'label': newAddressLabelController.text.trim(),
-                            'details': newAddressDetailsController.text.trim(),
-                          });
-                          addresses.value = list;
-                          newAddressLabelController.clear();
-                          newAddressDetailsController.clear();
-                        }
-                      },
+                      isLoading: isSavingAddress.value,
+                      onPressed: saveNewAddress,
                     ),
                   ],
                 ),
@@ -627,6 +769,13 @@ class ProfileSettingsScreen extends HookConsumerWidget {
       ),
     );
   }
+}
+
+IconData _addressIcon(String label) {
+  final l = label.toLowerCase();
+  if (l.contains('home') || l.contains('house')) return Icons.home;
+  if (l.contains('work') || l.contains('office')) return Icons.work;
+  return Icons.place;
 }
 
 class _SettingsTile extends StatelessWidget {

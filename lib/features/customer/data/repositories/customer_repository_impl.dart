@@ -487,6 +487,70 @@ class CustomerRepositoryImpl implements CustomerRepository {
         consumedAt: DateTime.tryParse(r['consumed_at']?.toString() ?? ''),
       );
 
+  // ── Saved addresses ──────────────────────────────────────────────────────
+
+  @override
+  Stream<List<CustomerAddressEntity>> watchAddresses() {
+    return _db
+        .from('customer_addresses')
+        .stream(primaryKey: ['id'])
+        .eq('customer_id', _uid)
+        .order('created_at', ascending: true)
+        .map((rows) => rows.map(_addressFromRow).toList());
+  }
+
+  CustomerAddressEntity _addressFromRow(Map<String, dynamic> r) => CustomerAddressEntity(
+        id: r['id'] as String,
+        label: r['label'] as String? ?? 'Address',
+        address: r['address'] as String? ?? '',
+        latitude: (r['latitude'] as num?)?.toDouble(),
+        longitude: (r['longitude'] as num?)?.toDouble(),
+        isDefault: r['is_default'] as bool? ?? false,
+      );
+
+  @override
+  Future<void> addAddress({
+    required String label,
+    required String address,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final existing = await _db
+        .from('customer_addresses')
+        .select('id')
+        .eq('customer_id', _uid)
+        .limit(1);
+    await _db.from('customer_addresses').insert({
+      'customer_id': _uid,
+      'label': label,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+      // The first address a customer saves becomes their default.
+      'is_default': (existing as List).isEmpty,
+    });
+  }
+
+  @override
+  Future<void> deleteAddress(String addressId) async {
+    await _db.from('customer_addresses').delete().eq('id', addressId);
+  }
+
+  @override
+  Future<void> setDefaultAddress(String addressId) async {
+    // A unique index allows one default per customer, so the old default has
+    // to be cleared before the new one is set.
+    await _db
+        .from('customer_addresses')
+        .update({'is_default': false})
+        .eq('customer_id', _uid)
+        .eq('is_default', true);
+    await _db
+        .from('customer_addresses')
+        .update({'is_default': true})
+        .eq('id', addressId);
+  }
+
   @override
   Future<void> reportProblem({
     required String category,

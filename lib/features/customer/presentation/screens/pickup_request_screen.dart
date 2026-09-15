@@ -22,6 +22,10 @@ class PickupRequestScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final binsState = ref.watch(customerBinsProvider);
     final subState = ref.watch(customerSubscriptionProvider);
+    final addressesState = ref.watch(customerAddressesProvider);
+    final savedAddresses = (addressesState.value ?? const <CustomerAddressEntity>[])
+        .where((a) => a.hasCoordinates)
+        .toList();
 
     // Pay-as-you-go pickups are paid for up front on the plan screen; each
     // payment is one credit that this request uses up.
@@ -115,6 +119,20 @@ class PickupRequestScreen extends HookConsumerWidget {
       }
       return null;
     }, [binsState.hasValue, subState.hasValue]);
+
+    // Fall back to the customer's default saved address when nothing else
+    // has set a pickup location.
+    useEffect(() {
+      if (selectedLocation.value == null && savedAddresses.isNotEmpty) {
+        final preferred = savedAddresses.firstWhere(
+          (a) => a.isDefault,
+          orElse: () => savedAddresses.first,
+        );
+        selectedLocation.value = LatLng(preferred.latitude!, preferred.longitude!);
+        selectedLocationLabel.value = preferred.address;
+      }
+      return null;
+    }, [addressesState.hasValue, binsState.hasValue]);
 
     Future<void> useCurrentLocation() async {
       isLocating.value = true;
@@ -515,6 +533,38 @@ class PickupRequestScreen extends HookConsumerWidget {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 12),
+
+              if (savedAddresses.isNotEmpty) ...[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: savedAddresses.map((addr) {
+                    final isSelected = selectedLocation.value != null &&
+                        selectedLocation.value!.latitude == addr.latitude &&
+                        selectedLocation.value!.longitude == addr.longitude;
+                    return ChoiceChip(
+                      label: Text(addr.label),
+                      avatar: Icon(
+                        _addressIcon(addr.label),
+                        size: 16,
+                        color: isSelected ? Colors.white : theme.colorScheme.primary,
+                      ),
+                      selected: isSelected,
+                      showCheckmark: false,
+                      selectedColor: theme.colorScheme.primary,
+                      labelStyle: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isSelected ? Colors.white : null,
+                      ),
+                      onSelected: (_) {
+                        selectedLocation.value = LatLng(addr.latitude!, addr.longitude!);
+                        selectedLocationLabel.value = addr.address;
+                      },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Pickup location is set by GPS fix or map pin only -- never by
               // typing an address -- so riders always navigate to a real point.
@@ -917,6 +967,13 @@ class PickupRequestScreen extends HookConsumerWidget {
       ),
     );
   }
+}
+
+IconData _addressIcon(String label) {
+  final l = label.toLowerCase();
+  if (l.contains('home') || l.contains('house')) return Icons.home_outlined;
+  if (l.contains('work') || l.contains('office')) return Icons.work_outline;
+  return Icons.place_outlined;
 }
 
 /// The pay-as-you-go payment this request will use.
