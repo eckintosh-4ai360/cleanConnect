@@ -489,13 +489,20 @@ class _PickupCard extends HookConsumerWidget {
               if (request.amountPaid > 0) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'GHS ${request.amountPaid.toStringAsFixed(2)} already paid for this '
-                  'request will not be automatically refunded.',
+                  'The GHS ${request.amountPaid.toStringAsFixed(2)} you paid stays on your '
+                  'account as a prepaid pickup, ready for your next request.',
                   style: const TextStyle(
-                    color: Colors.red,
+                    color: Colors.green,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
+                ),
+              ],
+              if (request.isScheduled) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'This skips one scheduled collection. Your next ones still go ahead.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ],
@@ -560,7 +567,7 @@ class _PickupCard extends HookConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        binsLabel.isEmpty ? 'Pickup' : '$binsLabel Pickup',
+                        '${binsLabel.isEmpty ? 'Pickup' : '$binsLabel Pickup'}${request.isScheduled ? ' · Scheduled' : ''}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,

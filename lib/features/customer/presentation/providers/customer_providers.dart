@@ -28,6 +28,7 @@ class CustomerBins extends _$CustomerBins {
     required List<String> pickupDays,
     required String gpsLocation,
     String? photoPath,
+    String? timeSlot,
   }) async {
     return ref
         .read(customerRepositoryProvider)
@@ -38,6 +39,7 @@ class CustomerBins extends _$CustomerBins {
           pickupDays: pickupDays,
           gpsLocation: gpsLocation,
           photoPath: photoPath,
+          timeSlot: timeSlot,
         );
   }
 
@@ -59,10 +61,16 @@ class CustomerBins extends _$CustomerBins {
     required String binId,
     required String frequency,
     required List<String> pickupDays,
+    String? timeSlot,
   }) async {
     await ref
         .read(customerRepositoryProvider)
-        .updateBin(binId: binId, frequency: frequency, pickupDays: pickupDays);
+        .updateBin(
+          binId: binId,
+          frequency: frequency,
+          pickupDays: pickupDays,
+          timeSlot: timeSlot,
+        );
   }
 
   Future<void> deleteBin(String binId) async {

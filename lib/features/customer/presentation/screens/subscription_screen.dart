@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../providers/customer_providers.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/payg_pricing.dart';
@@ -249,6 +250,13 @@ class SubscriptionScreen extends HookConsumerWidget {
                             currentSub.currentPlan,
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
+                          if (!currentSub.isPayAsYouGo && currentSub.paidUntil != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Paid until ${DateFormat('EEE d MMM yyyy').format(currentSub.paidUntil!.toLocal())} · pickups come automatically on your bin days',
+                              style: const TextStyle(fontSize: 12, color: Colors.green),
+                            ),
+                          ],
                           if (currentSub.isPayAsYouGo) ...[
                             const SizedBox(height: 2),
                             Text(
@@ -532,7 +540,8 @@ class SubscriptionScreen extends HookConsumerWidget {
             Text('You have successfully selected the $planName.'),
             const SizedBox(height: 8),
             const Text(
-              'Your payment was processed securely via Paystack.',
+              'Your pickups will now be scheduled automatically every week on the day and time '
+              'you chose for your bins — no need to request each one.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],

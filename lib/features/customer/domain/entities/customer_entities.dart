@@ -1,3 +1,9 @@
+/// Collection slots a customer can choose for their scheduled pickups.
+const kPickupTimeSlots = ['08:00 AM - 12:00 PM', '12:00 PM - 04:00 PM'];
+
+String pickupTimeSlotLabel(String slot) =>
+    slot.startsWith('12') ? 'Afternoon (12–4 PM)' : 'Morning (8 AM–12 PM)';
+
 class BinEntity {
   final String id;
   final String serialNumber;
@@ -10,6 +16,8 @@ class BinEntity {
   final String? verificationPhotoUrl;
   final DateTime registeredDate;
   final String ownership; // 'personal' or 'company'
+  /// Slot scheduled pickups for this bin happen in; see [kPickupTimeSlots].
+  final String pickupTimeSlot;
 
   const BinEntity({
     required this.id,
@@ -23,6 +31,7 @@ class BinEntity {
     this.verificationPhotoUrl,
     required this.registeredDate,
     this.ownership = 'personal',
+    this.pickupTimeSlot = '08:00 AM - 12:00 PM',
   });
 
   bool get isPersonal => ownership == 'personal';
@@ -39,6 +48,7 @@ class BinEntity {
     String? verificationPhotoUrl,
     DateTime? registeredDate,
     String? ownership,
+    String? pickupTimeSlot,
   }) {
     return BinEntity(
       id: id ?? this.id,
@@ -52,6 +62,7 @@ class BinEntity {
       verificationPhotoUrl: verificationPhotoUrl ?? this.verificationPhotoUrl,
       registeredDate: registeredDate ?? this.registeredDate,
       ownership: ownership ?? this.ownership,
+      pickupTimeSlot: pickupTimeSlot ?? this.pickupTimeSlot,
     );
   }
 }
@@ -68,6 +79,8 @@ class PickupRequestEntity {
   final double originalAmount;
   final double discountAppliedPercentage; // e.g. 10.0 for 10% discount
   final double surchargeAppliedPercentage; // e.g. 10.0 for 10% late-payment surcharge
+  /// Created automatically from the customer's subscription schedule.
+  final bool isScheduled;
 
   const PickupRequestEntity({
     required this.id,
@@ -81,6 +94,7 @@ class PickupRequestEntity {
     this.originalAmount = 0.0,
     this.discountAppliedPercentage = 0.0,
     this.surchargeAppliedPercentage = 0.0,
+    this.isScheduled = false,
   });
 
   /// True if pickup was not completed on scheduled date
@@ -176,6 +190,9 @@ class SubscriptionEntity {
   /// or missing subscription charges rather than gives the pickup away.
   final bool isPayAsYouGo;
 
+  /// End of the paid subscription period; scheduled pickups stop after it.
+  final DateTime? paidUntil;
+
   const SubscriptionEntity({
     required this.currentPlan,
     required this.fee,
@@ -189,6 +206,7 @@ class SubscriptionEntity {
     this.lastPickupCompletedAt,
     this.housePhotoUrl,
     this.isPayAsYouGo = true,
+    this.paidUntil,
   });
 }
 

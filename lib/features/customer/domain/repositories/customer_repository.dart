@@ -15,6 +15,7 @@ abstract class CustomerRepository {
     required List<String> pickupDays,
     required String gpsLocation,
     String? photoPath,
+    String? timeSlot,
   });
 
   Future<void> requestCompanyBin({
@@ -27,6 +28,7 @@ abstract class CustomerRepository {
     required String binId,
     required String frequency,
     required List<String> pickupDays,
+    String? timeSlot,
   });
 
   Future<void> deleteBin(String binId);

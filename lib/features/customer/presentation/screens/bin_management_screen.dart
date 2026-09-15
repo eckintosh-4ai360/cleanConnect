@@ -319,7 +319,7 @@ class BinManagementScreen extends HookConsumerWidget {
                                         ),
                                         const SizedBox(height: 2),
                                         Text(
-                                          bin.scheduleFrequency ?? 'Weekly',
+                                          '${bin.pickupDays?.isNotEmpty == true ? bin.pickupDays!.first : bin.scheduleFrequency ?? 'Weekly'} · ${pickupTimeSlotLabel(bin.pickupTimeSlot).split(' ').first}',
                                           overflow: TextOverflow.ellipsis,
                                           textAlign: TextAlign.end,
                                           style: const TextStyle(
@@ -452,6 +452,9 @@ class BinManagementScreen extends HookConsumerWidget {
         String day = bin.pickupDays?.isNotEmpty == true
             ? bin.pickupDays!.first
             : 'Monday';
+        String timeSlot = kPickupTimeSlots.contains(bin.pickupTimeSlot)
+            ? bin.pickupTimeSlot
+            : kPickupTimeSlots.first;
         bool isSaving = false;
 
         return StatefulBuilder(
@@ -489,6 +492,20 @@ class BinManagementScreen extends HookConsumerWidget {
                             if (val != null) setState(() => day = val);
                           },
                   ),
+                  const SizedBox(height: 12),
+                  const Text('Pickup Time', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  DropdownButton<String>(
+                    isExpanded: true,
+                    value: timeSlot,
+                    items: kPickupTimeSlots
+                        .map((s) => DropdownMenuItem(value: s, child: Text(pickupTimeSlotLabel(s))))
+                        .toList(),
+                    onChanged: isSaving
+                        ? null
+                        : (val) {
+                            if (val != null) setState(() => timeSlot = val);
+                          },
+                  ),
                 ],
               ),
               actions: [
@@ -506,6 +523,7 @@ class BinManagementScreen extends HookConsumerWidget {
                                   binId: bin.id,
                                   frequency: frequency,
                                   pickupDays: [day],
+                                  timeSlot: timeSlot,
                                 );
                             if (dialogContext.mounted) Navigator.pop(dialogContext);
                           } catch (e) {

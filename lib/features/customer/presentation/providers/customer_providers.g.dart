@@ -81,7 +81,7 @@ final class CustomerBinsProvider
   CustomerBins create() => CustomerBins();
 }
 
-String _$customerBinsHash() => r'b92d0983d999fb7b7b8f61883302087722019f6c';
+String _$customerBinsHash() => r'cdb1a70dcaa7f57790bce9083a12291d468e578f';
 
 abstract class _$CustomerBins extends $StreamNotifier<List<BinEntity>> {
   Stream<List<BinEntity>> build();

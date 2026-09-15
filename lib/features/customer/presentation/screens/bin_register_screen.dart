@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/shared/widgets/clean_connect_button.dart';
 import '../../../../core/shared/widgets/clean_connect_text_field.dart';
+import '../../domain/entities/customer_entities.dart';
 import '../providers/customer_providers.dart';
 
 enum _BinRegistrationMode { requestCompanyBin, personalBin }
@@ -33,6 +34,7 @@ class BinRegisterScreen extends HookConsumerWidget {
 
     final selectedFrequency = useState('Weekly');
     final preferredDays = useState<List<String>>(['Monday']);
+    final pickupTimeSlot = useState(kPickupTimeSlots.first);
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
 
@@ -114,6 +116,7 @@ class BinRegisterScreen extends HookConsumerWidget {
       photoBytes.value = null;
       selectedFrequency.value = 'Weekly';
       preferredDays.value = ['Monday'];
+      pickupTimeSlot.value = kPickupTimeSlots.first;
     }
 
     void handleNextStep() {
@@ -176,6 +179,7 @@ class BinRegisterScreen extends HookConsumerWidget {
                   pickupDays: preferredDays.value,
                   gpsLocation: gpsLocation.value,
                   photoPath: photoPath.value,
+                  timeSlot: pickupTimeSlot.value,
                 );
             serialNumbers.add(bin.serialNumber);
           }
@@ -264,6 +268,7 @@ class BinRegisterScreen extends HookConsumerWidget {
                         photoBytes: photoBytes,
                         selectedFrequency: selectedFrequency,
                         preferredDays: preferredDays,
+                        pickupTimeSlot: pickupTimeSlot,
                         isDark: isDark,
                         theme: theme,
                         detectLocation: detectLocation,
@@ -290,6 +295,7 @@ class BinRegisterScreen extends HookConsumerWidget {
     required ValueNotifier<Uint8List?> photoBytes,
     required ValueNotifier<String> selectedFrequency,
     required ValueNotifier<List<String>> preferredDays,
+    required ValueNotifier<String> pickupTimeSlot,
     required bool isDark,
     required ThemeData theme,
     required Future<void> Function() detectLocation,
@@ -327,6 +333,7 @@ class BinRegisterScreen extends HookConsumerWidget {
         theme: theme,
         selectedFrequency: selectedFrequency,
         preferredDays: preferredDays,
+        pickupTimeSlot: pickupTimeSlot,
         handleNextStep: handleNextStep,
       );
     }
@@ -339,6 +346,7 @@ class BinRegisterScreen extends HookConsumerWidget {
       photoBytes: photoBytes,
       selectedFrequency: selectedFrequency,
       preferredDays: preferredDays,
+      pickupTimeSlot: pickupTimeSlot,
       isDark: isDark,
       theme: theme,
       handleConfirm: handleConfirm,
@@ -559,12 +567,14 @@ class _ScheduleStep extends StatelessWidget {
   final ThemeData theme;
   final ValueNotifier<String> selectedFrequency;
   final ValueNotifier<List<String>> preferredDays;
+  final ValueNotifier<String> pickupTimeSlot;
   final VoidCallback handleNextStep;
 
   const _ScheduleStep({
     required this.theme,
     required this.selectedFrequency,
     required this.preferredDays,
+    required this.pickupTimeSlot,
     required this.handleNextStep,
   });
 
@@ -669,6 +679,28 @@ class _ScheduleStep extends StatelessWidget {
             );
           }).toList(),
         ),
+        const SizedBox(height: 24),
+        const Text(
+          'Pickup Time',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'With an active subscription, a rider comes every week on your day in this slot — no need to request each pickup.',
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: kPickupTimeSlots.map((slot) {
+            return ChoiceChip(
+              label: Text(pickupTimeSlotLabel(slot)),
+              selected: pickupTimeSlot.value == slot,
+              onSelected: (_) => pickupTimeSlot.value = slot,
+            );
+          }).toList(),
+        ),
         const SizedBox(height: 32),
         CleanConnectButton(text: 'Next', onPressed: handleNextStep),
         const SizedBox(height: 20),
@@ -748,6 +780,7 @@ class _PersonalReviewStep extends StatelessWidget {
   final ValueNotifier<Uint8List?> photoBytes;
   final ValueNotifier<String> selectedFrequency;
   final ValueNotifier<List<String>> preferredDays;
+  final ValueNotifier<String> pickupTimeSlot;
   final bool isDark;
   final ThemeData theme;
   final Future<void> Function() handleConfirm;
@@ -760,6 +793,7 @@ class _PersonalReviewStep extends StatelessWidget {
     required this.photoBytes,
     required this.selectedFrequency,
     required this.preferredDays,
+    required this.pickupTimeSlot,
     required this.isDark,
     required this.theme,
     required this.handleConfirm,
@@ -807,7 +841,7 @@ class _PersonalReviewStep extends StatelessWidget {
               icon: Icons.calendar_today_outlined,
               label: 'Collection Schedule',
               value:
-                  '${selectedFrequency.value} (${preferredDays.value.first})',
+                  '${selectedFrequency.value} (${preferredDays.value.first}, ${pickupTimeSlotLabel(pickupTimeSlot.value)})',
             ),
             if (photoPath.value != null) ...[
               const Divider(height: 24),

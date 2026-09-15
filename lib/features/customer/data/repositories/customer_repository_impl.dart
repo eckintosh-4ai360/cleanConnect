@@ -46,6 +46,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required List<String> pickupDays,
     required String gpsLocation,
     String? photoPath,
+    String? timeSlot,
   }) async {
     final serialNumber = _generatePersonalBinSerial(type);
     final row = await _db.rpc('register_bin', params: {
@@ -56,6 +57,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       'p_pickup_days': pickupDays,
       'p_gps_location': gpsLocation,
       'p_photo_path': photoPath,
+      'p_time_slot': ?timeSlot,
     });
     return _binFromRow(row as Map<String, dynamic>);
   }
@@ -100,6 +102,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         registeredDate:
             DateTime.tryParse(r['registered_at']?.toString() ?? '') ?? DateTime.now(),
         ownership: r['ownership'] as String? ?? 'personal',
+        pickupTimeSlot: r['pickup_time_slot'] as String? ?? '08:00 AM - 12:00 PM',
       );
 
   @override
@@ -107,11 +110,13 @@ class CustomerRepositoryImpl implements CustomerRepository {
     required String binId,
     required String frequency,
     required List<String> pickupDays,
+    String? timeSlot,
   }) async {
     final row = await _db.rpc('customer_update_bin', params: {
       'p_bin_id': binId,
       'p_frequency': frequency,
       'p_pickup_days': pickupDays,
+      'p_time_slot': ?timeSlot,
     });
     return _binFromRow(row as Map<String, dynamic>);
   }
@@ -301,6 +306,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
             (r['discount_applied_percentage'] as num?)?.toDouble() ?? 0.0,
         surchargeAppliedPercentage:
             (r['surcharge_applied_percentage'] as num?)?.toDouble() ?? 0.0,
+        isScheduled: r['source'] == 'scheduled',
       );
 
   // ── Service History ──────────────────────────────────────────────────────
@@ -381,6 +387,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         housePhotoUrl: r['house_photo_url'] as String?,
         // Maintained by trg_customers_sync_payg; missing means charge.
         isPayAsYouGo: r['subscription_is_payg'] as bool? ?? true,
+        paidUntil: DateTime.tryParse(r['subscription_paid_until']?.toString() ?? ''),
       );
 
   // No customers row yet (or unreadable): assume nothing is paid for.
