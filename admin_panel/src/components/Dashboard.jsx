@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import TrendChart from './TrendChart';
+import { serverNow } from '../timezone';
 
+// Days, weeks and months are Ghana calendar periods. Africa/Accra is UTC+0
+// with no daylight saving, so the UTC getters give Ghana dates whatever time
+// zone the admin's computer is set to.
 const DAY_MS = 24 * 60 * 60 * 1000;
-const dayKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+const dayKey = (date) => `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
 const weekKey = (date) => {
   const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - d.getDay());
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
   return dayKey(d);
 };
-const monthKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}`;
+const monthKey = (date) => `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}`;
 
 const buildEmptyDailyTrend = (days) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date(serverNow());
+  today.setUTCHours(0, 0, 0, 0);
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(today.getTime() - i * DAY_MS);
@@ -24,9 +28,9 @@ const buildEmptyDailyTrend = (days) => {
 };
 
 const buildEmptyWeeklyTrend = (weeks) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  today.setDate(today.getDate() - today.getDay());
+  const today = new Date(serverNow());
+  today.setUTCHours(0, 0, 0, 0);
+  today.setUTCDate(today.getUTCDate() - today.getUTCDay());
   const out = [];
   for (let i = weeks - 1; i >= 0; i--) {
     const date = new Date(today.getTime() - i * 7 * DAY_MS);
@@ -36,10 +40,10 @@ const buildEmptyWeeklyTrend = (weeks) => {
 };
 
 const buildEmptyMonthlyTrend = (months) => {
-  const today = new Date();
+  const today = new Date(serverNow());
   const out = [];
   for (let i = months - 1; i >= 0; i--) {
-    const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
     out.push({ date, key: monthKey(date) });
   }
   return out;
@@ -83,10 +87,9 @@ export default function Dashboard() {
 
   // ── Today's Activities: pickups scheduled for today ─────────────────────
   useEffect(() => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const startOfTomorrow = new Date(startOfToday);
-    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+    const startOfToday = new Date(serverNow());
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday.getTime() + DAY_MS);
 
     const mapPickupRow = (r) => ({ ...r, date: r.date ? new Date(r.date) : null });
 
@@ -244,7 +247,7 @@ export default function Dashboard() {
   // ── Format helpers ──────────────────────────────────────────────────────
   const formatTime = (date) => {
     if (!date) return '—';
-    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    const diff = Math.floor((serverNow() - date.getTime()) / 1000);
     if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;

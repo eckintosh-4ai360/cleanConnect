@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { serverNow } from '../timezone';
 
 export default function Payments() {
   const [invoices, setInvoices] = useState([]);
@@ -189,13 +190,14 @@ export default function Payments() {
 
   const handleGenerateBatch = async () => {
     setActionLoading(true);
-    const now = new Date();
+    // Billing months are Ghana months (UTC+0), taken from the server clock.
+    const now = new Date(serverNow());
     const cycleDate =
       billingCycle === 'previous'
-        ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
-        : new Date(now.getFullYear(), now.getMonth(), 1);
-    const cycleKey = `${cycleDate.getFullYear()}-${String(cycleDate.getMonth() + 1).padStart(2, '0')}`;
-    const cycleLabel = cycleDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+        : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const cycleKey = `${cycleDate.getUTCFullYear()}-${String(cycleDate.getUTCMonth() + 1).padStart(2, '0')}`;
+    const cycleLabel = cycleDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
     const { data: count, error } = await supabase.rpc('admin_generate_batch_invoices', {
       p_billing_cycle: cycleKey,

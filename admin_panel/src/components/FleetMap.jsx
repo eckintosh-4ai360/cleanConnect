@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
 import { supabase } from '../supabase';
+import { serverNow, formatDate } from '../timezone';
 
 const MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
@@ -101,7 +102,7 @@ export default function FleetMap() {
   }, []);
 
   const isStale = useCallback(
-    (rider) => !rider.lastUpdate || Date.now() - rider.lastUpdate.getTime() > STALE_AFTER_MS,
+    (rider) => !rider.lastUpdate || serverNow() - rider.lastUpdate.getTime() > STALE_AFTER_MS,
     []
   );
 
@@ -425,13 +426,13 @@ function MissingKeyNotice() {
 
 function formatAgo(date) {
   if (!date) return '—';
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  const seconds = Math.floor((serverNow() - date.getTime()) / 1000);
   if (seconds < 60) return 'Just now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
-  return date.toLocaleDateString();
+  return formatDate(date);
 }
 
 const styles = {

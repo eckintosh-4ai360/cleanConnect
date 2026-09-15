@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
 import TrendChart from './TrendChart';
+import { serverNow } from '../timezone';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TREND_DAYS = 14;
 
+// Ghana calendar days: Africa/Accra is UTC+0 with no daylight saving.
 const dayKey = (date) =>
-  `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
 
 const buildEmptyTrend = (days) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date(serverNow());
+  today.setUTCHours(0, 0, 0, 0);
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
     out.push({ date: new Date(today.getTime() - i * DAY_MS), weightKg: 0 });

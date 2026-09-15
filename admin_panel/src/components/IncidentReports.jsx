@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { formatDateTime } from '../timezone';
+import { formatDateTime, formatRelative } from '../timezone';
 
 export default function IncidentReports() {
   const [reports, setReports] = useState([]);
@@ -76,15 +76,6 @@ export default function IncidentReports() {
   const assignedCount = reports.filter((r) => r.status === 'assigned' || r.status === 'in_progress').length;
   const resolvedCount = reports.filter((r) => r.status === 'resolved').length;
 
-
-  const formatRelative = (date) => {
-    if (!date) return '—';
-    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
 
   const statusBadgeClass = (status) => {
     if (status === 'pending') return 'badge-pending';

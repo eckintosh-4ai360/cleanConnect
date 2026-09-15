@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { formatDateTime, formatDate } from '../timezone';
+import { formatDateTime, formatDate, formatRelative } from '../timezone';
 
 export default function PickupRequests() {
   const [requests, setRequests] = useState([]);
@@ -52,15 +52,6 @@ export default function PickupRequests() {
   const pendingCount = requests.filter((r) => r.status === 'pending').length;
   const confirmedCount = requests.filter((r) => r.status === 'confirmed').length;
   const completedCount = requests.filter((r) => r.status === 'completed').length;
-
-  const formatRelative = (date) => {
-    if (!date) return '—';
-    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
 
   const statusBadgeClass = (status) => {
     if (status === 'pending') return 'badge-pending';

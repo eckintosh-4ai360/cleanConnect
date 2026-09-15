@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabase';
+import { formatDate, getClockOffsetMs, onClockOffsetChange, serverNow, syncServerClock } from './timezone';
 import { useAuth } from './AuthContext';
 import Login from './components/Login';
 import SetPassword from './components/SetPassword';
@@ -58,6 +59,20 @@ function AdminShell({ profile }) {
   const [notifications, setNotifications] = useState([]);
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Correct for a wrong computer clock. Re-rendering on a change refreshes
+  // every "x ago" label on the page; re-checking hourly catches the clock
+  // being fixed (or broken) while the panel stays open.
+  const [clockOffsetMs, setClockOffsetMs] = useState(getClockOffsetMs);
+  useEffect(() => {
+    const unsubscribe = onClockOffsetChange(setClockOffsetMs);
+    syncServerClock();
+    const id = setInterval(syncServerClock, 60 * 60 * 1000);
+    return () => {
+      unsubscribe();
+      clearInterval(id);
+    };
+  }, []);
 
   const adminName = profile?.full_name || 'Admin';
   const adminPhoto = profile?.profile_picture_url || null;
@@ -172,11 +187,11 @@ function AdminShell({ profile }) {
 
   const formatNotifTime = (date) => {
     if (!date) return 'Just now';
-    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    const diff = Math.max(0, Math.floor((serverNow() - date.getTime()) / 1000));
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return date.toLocaleDateString();
+    return formatDate(date);
   };
 
   // Sidebar Menu Items with Inline Custom Vector Paths
@@ -613,9 +628,42 @@ function AdminShell({ profile }) {
           </div>
         </header>
 
+        {/* Times on the panel are already corrected; this tells the admin why
+            their taskbar and the panel might disagree, and how to fix it. */}
+        {Math.abs(clockOffsetMs) >= 2 * 60 * 1000 && (
+          <div
+            role="status"
+            style={{
+              margin: '0 0 16px',
+              padding: '10px 14px',
+              borderRadius: 'var(--border-radius-sm)',
+              border: '1px solid var(--color-warning, #d99a00)',
+              background: 'var(--bg-card-hover)',
+              color: 'var(--text-primary)',
+              fontSize: '12.5px',
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>This computer&apos;s clock is {formatClockDrift(clockOffsetMs)} {clockOffsetMs < 0 ? 'ahead of' : 'behind'} the real time.</strong>{' '}
+            Times on this panel have been corrected automatically. To fix the computer, open Windows Settings → Time &amp; language → Date &amp; time,
+            turn on &quot;Set time automatically&quot; and set the time zone to (UTC+00:00) Monrovia, Reykjavik — or &quot;Set time zone automatically&quot;.
+          </div>
+        )}
+
         {/* Dynamic page contents */}
         {renderActiveScreen()}
       </main>
     </div>
   );
+}
+
+/** "7 hours", "45 minutes", "1 hour 30 minutes" for the clock warning. */
+function formatClockDrift(offsetMs) {
+  const totalMinutes = Math.round(Math.abs(offsetMs) / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (minutes) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  return parts.join(' ') || 'a few seconds';
 }

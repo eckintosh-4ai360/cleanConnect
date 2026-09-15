@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { APP_TIMEZONE } from '../timezone';
 
 // ── Reusable trend chart: single-series line + area with a hover crosshair
 // and tooltip, driven entirely by real Postgres data (no fixtures). ───────
@@ -41,7 +42,7 @@ export default function TrendChart({ points, color, height = 240, showArea = tru
     setHoverIndex(Math.round(fraction * (n - 1)));
   };
 
-  const fmtShortDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmtShortDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: APP_TIMEZONE });
   const hoverX = hoverIndex != null ? (hoverIndex / Math.max(1, n - 1)) * 100 : null;
   const hoverY = hoverIndex != null && coords[hoverIndex] ? (coords[hoverIndex].y / 200) * 100 : null;
 
