@@ -191,6 +191,12 @@ class CustomerSubscription extends _$CustomerSubscription {
   }
 }
 
+/// Prepaid pay-as-you-go pickups not yet used, oldest first.
+@riverpod
+Stream<List<PaygPickupCreditEntity>> customerPaygCredits(Ref ref) {
+  return ref.watch(customerRepositoryProvider).watchAvailablePaygCredits();
+}
+
 @riverpod
 class CustomerHistory extends _$CustomerHistory {
   @override

@@ -4,6 +4,8 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/customer_providers.dart';
+import '../../domain/entities/customer_entities.dart';
+import '../../domain/payg_pricing.dart';
 import '../widgets/customer_nav_bar.dart';
 import '../../../../core/shared/widgets/clean_connect_button.dart';
 import '../../../../core/services/paystack_service.dart';
@@ -24,6 +26,8 @@ class SubscriptionScreen extends HookConsumerWidget {
     final subState = ref.watch(customerSubscriptionProvider);
     final binsState = ref.watch(customerBinsProvider);
     final pricingPlansState = ref.watch(customerPricingPlansProvider);
+    final creditsState = ref.watch(customerPaygCreditsProvider);
+    final requestsState = ref.watch(customerPickupRequestsProvider);
 
     final selectedPlan = useState('Weekly Plan');
     final selectedPaymentMethod = useState('Mobile Money');
@@ -77,20 +81,39 @@ class SubscriptionScreen extends HookConsumerWidget {
     final matchingPlans = plans.where((p) => p.title == selectedPlan.value);
     final selectedPlanData = matchingPlans.isEmpty ? null : matchingPlans.first;
     final isPaygSelected = selectedPlanData?.isPayg ?? _looksPayg(selectedPlan.value);
-    final selectedPlanFee = isPaygSelected ? 0.0 : (selectedPlanData?.price ?? 0.0);
-    final selectedCharge = selectedPlanFee > 0
-        ? PaystackFees.chargeForAmount(selectedPlanFee)
+
+    // Pay-as-you-go is paid one pickup at a time, before the pickup can be
+    // requested. A pickup already paid for but not yet requested is used
+    // first, so the customer is never charged twice for the same pickup.
+    final availableCredits =
+        creditsState.value ?? const <PaygPickupCreditEntity>[];
+    final prepaidPickup = availableCredits.isEmpty ? null : availableCredits.first;
+    final paygQuote = PaygQuote.forCustomer(
+      plans: pricingPlansState.value ?? const [],
+      binSize: userBinSize,
+      delayBonusEligible: isDelayBonusEligible(
+        requestsState.value ?? const [],
+        subState.value,
+      ),
+      overduePayment: hasOverduePayment(subState.value),
+    );
+
+    final selectedAmount = isPaygSelected
+        ? (prepaidPickup != null ? 0.0 : paygQuote.total)
+        : (selectedPlanData?.price ?? 0.0);
+    final selectedCharge = selectedAmount > 0
+        ? PaystackFees.chargeForAmount(selectedAmount)
         : null;
 
     Future<void> handleSubscribe() async {
       if (isProcessing.value) return;
 
       final isPAYG = isPaygSelected;
-      final fee = selectedPlanFee;
+      final amount = selectedAmount;
       String? paymentReference;
 
-      // Pay-As-You-Go plans have no upfront fee — skip payment
-      if (!isPAYG && fee > 0) {
+      // Nothing to charge only when a prepaid pickup is already waiting.
+      if (amount > 0) {
         isProcessing.value = true;
 
         final currentUser = Supabase.instance.client.auth.currentUser;
@@ -107,8 +130,8 @@ class SubscriptionScreen extends HookConsumerWidget {
           return;
         }
 
-        // Charge the grossed-up amount so the plan fee survives Paystack's cut
-        final charge = PaystackFees.chargeForAmount(fee);
+        // Charge the grossed-up amount so the fee survives Paystack's cut
+        final charge = PaystackFees.chargeForAmount(amount);
 
         final result = await PaystackService.instance.initiatePayment(
           context: context,
@@ -118,7 +141,14 @@ class SubscriptionScreen extends HookConsumerWidget {
           metadata: {
             'plan': selectedPlan.value,
             'payment_method': selectedPaymentMethod.value,
-            'type': 'subscription',
+            // verify-paystack-transaction turns a payg_pickup_credit charge
+            // into the one pickup it pays for.
+            'type': isPAYG ? 'payg_pickup_credit' : 'subscription',
+            if (isPAYG) ...{
+              'original_total': paygQuote.originalTotal,
+              'discount_percentage': paygQuote.discountPercentage,
+              'surcharge_percentage': paygQuote.surchargePercentage,
+            },
             'net_total': charge.netAmount,
             'paystack_fee': charge.feeAmount,
             'amount_charged': charge.totalAmount,
@@ -152,16 +182,24 @@ class SubscriptionScreen extends HookConsumerWidget {
         paymentReference = result.reference;
       }
 
-      // Payment succeeded (or PAYG) — update the subscription in Firestore
+      // Payment succeeded (or a prepaid pickup already exists) — save the plan
       try {
         await ref.read(customerSubscriptionProvider.notifier).changePlan(
               newPlan: selectedPlan.value,
-              fee: fee,
+              fee: isPAYG ? 0.0 : amount,
               paymentMethod: selectedPaymentMethod.value,
               paymentReference: paymentReference,
             );
         if (!context.mounted) return;
-        _showSuccessDialog(context, selectedPlan.value);
+        if (isPAYG) {
+          _showPrepaidPickupDialog(
+            context,
+            charged: paymentReference != null,
+            amount: amount > 0 ? amount : prepaidPickup?.amount,
+          );
+        } else {
+          _showSuccessDialog(context, selectedPlan.value);
+        }
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -211,6 +249,18 @@ class SubscriptionScreen extends HookConsumerWidget {
                             currentSub.currentPlan,
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
+                          if (currentSub.isPayAsYouGo) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              prepaidPickup != null
+                                  ? '1 prepaid pickup ready to request'
+                                  : 'No prepaid pickup — pay before requesting',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: prepaidPickup != null ? Colors.green : Colors.orange.shade800,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       Container(
@@ -320,6 +370,25 @@ class SubscriptionScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
+                if (isPaygSelected && prepaidPickup != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey.shade900 : const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Text(
+                      'You already paid GHS ${prepaidPickup.amount.toStringAsFixed(2)} for a pickup '
+                      'you have not requested yet. Request it first — you can pay for '
+                      'another one after that pickup.',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // What Paystack will actually charge for the selected plan
                 if (selectedCharge != null) ...[
                   Row(
@@ -327,16 +396,48 @@ class SubscriptionScreen extends HookConsumerWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Plan fee',
+                          isPaygSelected ? 'Pickup fee (1 pickup)' : 'Plan fee',
                           style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                         ),
                       ),
                       Text(
-                        'GHS ${selectedCharge.netAmount.toStringAsFixed(2)}',
+                        'GHS ${(isPaygSelected ? paygQuote.originalTotal : selectedCharge.netAmount).toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                       ),
                     ],
                   ),
+                  if (isPaygSelected && paygQuote.discountPercentage > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Delay bonus (-${paygQuote.discountPercentage.toStringAsFixed(0)}%)',
+                          style: TextStyle(fontSize: 13, color: Colors.green.shade700),
+                        ),
+                        Text(
+                          '- GHS ${paygQuote.discountAmount.toStringAsFixed(2)}',
+                          style: TextStyle(fontSize: 13, color: Colors.green.shade700),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (isPaygSelected && paygQuote.surchargePercentage > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Late payment surcharge (+${paygQuote.surchargePercentage.toStringAsFixed(0)}%)',
+                          style: TextStyle(fontSize: 13, color: Colors.red.shade700),
+                        ),
+                        Text(
+                          '+ GHS ${paygQuote.surchargeAmount.toStringAsFixed(2)}',
+                          style: TextStyle(fontSize: 13, color: Colors.red.shade700),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -388,9 +489,13 @@ class SubscriptionScreen extends HookConsumerWidget {
                 isProcessing.value
                     ? const Center(child: CircularProgressIndicator())
                     : CleanConnectButton(
-                        text: selectedCharge == null
-                            ? 'Confirm & Subscribe via Paystack'
-                            : 'Pay GHS ${selectedCharge.totalAmount.toStringAsFixed(2)} & Subscribe',
+                        text: isPaygSelected
+                            ? (selectedCharge == null
+                                ? 'Use My Prepaid Pickup'
+                                : 'Pay GHS ${selectedCharge.totalAmount.toStringAsFixed(2)} for 1 Pickup')
+                            : (selectedCharge == null
+                                ? 'Confirm & Subscribe via Paystack'
+                                : 'Pay GHS ${selectedCharge.totalAmount.toStringAsFixed(2)} & Subscribe'),
                         onPressed: handleSubscribe,
                       ),
               ],
@@ -404,19 +509,18 @@ class SubscriptionScreen extends HookConsumerWidget {
   }
 
   void _showSuccessDialog(BuildContext context, String planName) {
-    final isPAYG = _looksPayg(planName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 28),
-            const SizedBox(width: 8),
+            Icon(Icons.check_circle, color: Colors.green, size: 28),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
-                isPAYG ? 'Plan Activated!' : 'Payment Successful!',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                'Payment Successful!',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -427,11 +531,9 @@ class SubscriptionScreen extends HookConsumerWidget {
           children: [
             Text('You have successfully selected the $planName.'),
             const SizedBox(height: 8),
-            Text(
-              isPAYG
-                  ? 'Paystack payment will be required whenever you request a pickup.'
-                  : 'Your payment was processed securely via Paystack.',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            const Text(
+              'Your payment was processed securely via Paystack.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),
@@ -447,6 +549,63 @@ class SubscriptionScreen extends HookConsumerWidget {
       ),
     );
   }
+}
+
+/// Pay-as-you-go confirmation: the payment is for one pickup, so point the
+/// customer straight at requesting it.
+void _showPrepaidPickupDialog(
+  BuildContext context, {
+  required bool charged,
+  double? amount,
+}) {
+  final amountText = amount == null ? '' : ' (GHS ${amount.toStringAsFixed(2)})';
+  showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 28),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              charged ? 'Payment Successful!' : 'Prepaid Pickup Ready',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('You have paid for one pickup$amountText. Request it now.'),
+          const SizedBox(height: 8),
+          const Text(
+            'Pay As You Go covers one pickup per payment. After this pickup, '
+            'come back here and pay again before your next request.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            context.go('/dashboard');
+          },
+          child: const Text('Later'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.pop(dialogContext);
+            context.go('/customer/request-pickup');
+          },
+          child: const Text('Request Pickup'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _PlanData {

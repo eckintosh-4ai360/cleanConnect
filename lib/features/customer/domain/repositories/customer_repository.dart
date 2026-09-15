@@ -86,6 +86,10 @@ abstract class CustomerRepository {
 
   Future<void> payOutstandingBalance();
 
+  /// Prepaid pay-as-you-go pickups that have not been used yet, oldest first.
+  Stream<List<PaygPickupCreditEntity>> watchAvailablePaygCredits();
+
+
   Future<void> updateHousePhoto({
     required Uint8List bytes,
     required String fileName,

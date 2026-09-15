@@ -458,6 +458,35 @@ class CustomerRepositoryImpl implements CustomerRepository {
     await _db.rpc('pay_outstanding_balance', params: {'p_receipt_number': receiptNumber});
   }
 
+  // ── Pay-as-you-go credits ────────────────────────────────────────────────
+
+  @override
+  Stream<List<PaygPickupCreditEntity>> watchAvailablePaygCredits() {
+    return _db
+        .from('payg_pickup_credits')
+        .stream(primaryKey: ['id'])
+        .eq('customer_id', _uid)
+        .order('paid_at', ascending: true)
+        .map((rows) => rows
+            .map(_paygCreditFromRow)
+            .where((c) => c.isAvailable)
+            .toList());
+  }
+
+  PaygPickupCreditEntity _paygCreditFromRow(Map<String, dynamic> r) => PaygPickupCreditEntity(
+        id: r['id'] as String,
+        paymentReference: r['payment_reference'] as String? ?? '',
+        amount: (r['amount'] as num?)?.toDouble() ?? 0.0,
+        amountCharged: (r['amount_charged'] as num?)?.toDouble(),
+        discountAppliedPercentage:
+            (r['discount_applied_percentage'] as num?)?.toDouble() ?? 0.0,
+        surchargeAppliedPercentage:
+            (r['surcharge_applied_percentage'] as num?)?.toDouble() ?? 0.0,
+        paymentMethod: r['payment_method'] as String?,
+        paidAt: DateTime.tryParse(r['paid_at']?.toString() ?? '') ?? DateTime.now(),
+        consumedAt: DateTime.tryParse(r['consumed_at']?.toString() ?? ''),
+      );
+
   @override
   Future<void> reportProblem({
     required String category,

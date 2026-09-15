@@ -433,6 +433,53 @@ abstract class _$CustomerSubscription
   }
 }
 
+/// Prepaid pay-as-you-go pickups not yet used, oldest first.
+
+@ProviderFor(customerPaygCredits)
+final customerPaygCreditsProvider = CustomerPaygCreditsProvider._();
+
+/// Prepaid pay-as-you-go pickups not yet used, oldest first.
+
+final class CustomerPaygCreditsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<PaygPickupCreditEntity>>,
+          List<PaygPickupCreditEntity>,
+          Stream<List<PaygPickupCreditEntity>>
+        >
+    with
+        $FutureModifier<List<PaygPickupCreditEntity>>,
+        $StreamProvider<List<PaygPickupCreditEntity>> {
+  /// Prepaid pay-as-you-go pickups not yet used, oldest first.
+  CustomerPaygCreditsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'customerPaygCreditsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$customerPaygCreditsHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<List<PaygPickupCreditEntity>> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<List<PaygPickupCreditEntity>> create(Ref ref) {
+    return customerPaygCredits(ref);
+  }
+}
+
+String _$customerPaygCreditsHash() =>
+    r'4d923987903ffa24be4d1da9309051258e33e4fe';
+
 @ProviderFor(CustomerHistory)
 final customerHistoryProvider = CustomerHistoryProvider._();
 

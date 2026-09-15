@@ -192,6 +192,34 @@ class SubscriptionEntity {
   });
 }
 
+/// One prepaid pay-as-you-go pickup. Created server-side once Paystack confirms
+/// the charge, and used up by the next pickup request.
+class PaygPickupCreditEntity {
+  final String id;
+  final String paymentReference;
+  final double amount; // what the pickup is worth, after Paystack's fee
+  final double? amountCharged; // what the customer paid, fee included
+  final double discountAppliedPercentage;
+  final double surchargeAppliedPercentage;
+  final String? paymentMethod;
+  final DateTime paidAt;
+  final DateTime? consumedAt;
+
+  const PaygPickupCreditEntity({
+    required this.id,
+    required this.paymentReference,
+    required this.amount,
+    this.amountCharged,
+    this.discountAppliedPercentage = 0.0,
+    this.surchargeAppliedPercentage = 0.0,
+    this.paymentMethod,
+    required this.paidAt,
+    this.consumedAt,
+  });
+
+  bool get isAvailable => consumedAt == null;
+}
+
 class PricingPlanEntity {
   final String id;
   final String name;

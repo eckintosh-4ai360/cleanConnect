@@ -1,4 +1,3 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -6,11 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../providers/customer_providers.dart';
+import '../../domain/entities/customer_entities.dart';
+import '../../domain/payg_pricing.dart';
 import '../../../../core/shared/widgets/clean_connect_button.dart';
 import '../../../../core/config/map_config.dart';
 import '../../../../core/services/directions_service.dart';
 import '../../../../core/services/location_service.dart';
-import '../../../../core/services/paystack_service.dart';
 import '../../../../core/utils/geo_utils.dart';
 import '../../../../core/utils/paystack_fees.dart';
 import 'location_picker_screen.dart';
@@ -22,6 +22,13 @@ class PickupRequestScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final binsState = ref.watch(customerBinsProvider);
     final subState = ref.watch(customerSubscriptionProvider);
+
+    // Pay-as-you-go pickups are paid for up front on the plan screen; each
+    // payment is one credit that this request uses up.
+    final paygCreditsState = ref.watch(customerPaygCreditsProvider);
+    final prepaidPickup = (paygCreditsState.value ?? const []).isEmpty
+        ? null
+        : paygCreditsState.value!.first;
 
     // State of requested pickup details (default to recycling)
     final selectedBins = useState<List<String>>(['recycling']);
@@ -41,11 +48,6 @@ class PickupRequestScreen extends HookConsumerWidget {
     final selectedLocation = useState<LatLng?>(null);
     final selectedLocationLabel = useState<String?>(null);
     final isLocating = useState(false);
-
-    // Dynamic payment method initialized from customer subscription profile
-    final selectedPaymentMethod = useState(
-      subState.value?.paymentMethod ?? 'Mobile Money',
-    );
 
     final isSubmitting = useState(false);
     final isInitialized = useState(false);
@@ -70,12 +72,6 @@ class PickupRequestScreen extends HookConsumerWidget {
 
     // Auto-populate dynamic defaults from customer's profile, bin registration, and subscription
     useEffect(() {
-      if (subState.hasValue && subState.value?.paymentMethod != null) {
-        if (selectedPaymentMethod.value.isEmpty || selectedPaymentMethod.value == 'Mobile Money') {
-          selectedPaymentMethod.value = subState.value!.paymentMethod;
-        }
-      }
-
       if (!isInitialized.value && binsState.hasValue) {
         final bins = binsState.value ?? [];
 
@@ -197,14 +193,9 @@ class PickupRequestScreen extends HookConsumerWidget {
 
     final requestsState = ref.watch(customerPickupRequestsProvider);
 
-    // Auto-detect if customer has any pickup request delayed past 3 days grace period
-    final hasOverdueDelayBonus = useMemoized(() {
-      final requests = requestsState.value ?? [];
-      return requests.any((r) => r.isOverdueBeyondGracePeriod);
-    }, [requestsState.value]);
-
     final isBonusEligible =
-        hasOverdueDelayBonus || (subState.value?.delayBonusAvailable ?? false);
+        isDelayBonusEligible(requestsState.value ?? const [], subState.value);
+    final overduePayment = hasOverduePayment(subState.value);
 
     final timeSlots = [
       '08:00 AM - 12:00 PM', // Morning
@@ -219,49 +210,18 @@ class PickupRequestScreen extends HookConsumerWidget {
 
     final pricingPlansState = ref.watch(customerPricingPlansProvider);
 
-    // Dynamic Pay-As-You-Go per-bin fee (Weekly Price + 30% of Weekly Price)
-    final pickupFeePerBin = useMemoized(() {
-      final plans = pricingPlansState.value ?? [];
+    // What the customer would pay on the plan screen if they have no prepaid
+    // pickup yet -- shown so they know the price before leaving this form.
+    final paygQuote = PaygQuote.forCustomer(
+      plans: pricingPlansState.value ?? const [],
+      binSize: userBinSize,
+      delayBonusEligible: isBonusEligible,
+      overduePayment: overduePayment,
+    );
+    final paygCharge = PaystackFees.chargeForAmount(paygQuote.total);
+    final needsPayment = isPayAsYouGo && prepaidPickup == null;
 
-      // 1. Check if admin configured a PAYG plan directly in Firestore
-      for (final plan in plans) {
-        if (plan.isPayg) {
-          final p = plan.getPriceForSize(userBinSize);
-          if (p > 0) return p;
-        }
-      }
-
-      // 2. Otherwise calculate as Weekly Price + 30% of Weekly Price (130%)
-      for (final plan in plans) {
-        if (plan.frequency.toLowerCase() == 'weekly') {
-          final wPrice = plan.getPriceForSize(userBinSize);
-          if (wPrice > 0) return (wPrice * 1.30);
-        }
-      }
-
-      return 65.0; // fallback (GHS 50.00 weekly + 30% = GHS 65.00)
-    }, [pricingPlansState.value, userBinSize]);
-
-    // Customer still owes money more than 3 days after their last completed
-    // pickup: their next request carries a 10% surcharge for the company.
-    final hasOverduePayment = useMemoized(() {
-      final sub = subState.value;
-      if (sub == null || sub.outstandingBalance <= 0) return false;
-      final completedAt = sub.lastPickupCompletedAt;
-      if (completedAt == null) return false;
-      return DateTime.now().difference(completedAt).inDays > 3;
-    }, [subState.value]);
-
-    final originalTotal = selectedBins.value.length * pickupFeePerBin;
-    final discountPercentage = isBonusEligible ? 10.0 : 0.0;
-    final discountAmount = isBonusEligible ? (originalTotal * 0.10) : 0.0;
-    final surchargePercentage = hasOverduePayment ? 10.0 : 0.0;
-    final surchargeAmount = hasOverduePayment ? (originalTotal * 0.10) : 0.0;
-    final pickupTotal = originalTotal - discountAmount + surchargeAmount;
-
-    // Paystack deducts its fee from whatever is charged, so the customer is
-    // charged the grossed-up amount and the company still settles pickupTotal.
-    final charge = PaystackFees.chargeForAmount(pickupTotal);
+    void goPayForPickup() => context.push('/customer/subscription');
 
     Future<void> handleConfirmPickup() async {
       if (selectedBins.value.isEmpty) {
@@ -288,84 +248,31 @@ class PickupRequestScreen extends HookConsumerWidget {
         return;
       }
 
+      final credit = prepaidPickup;
+      if (isPayAsYouGo && credit == null) {
+        goPayForPickup();
+        return;
+      }
+
       isSubmitting.value = true;
 
       try {
         String paymentMethodToSave = 'Covered by $currentPlan';
         double finalAmountPaid = 0.0;
+        double originalAmount = 0.0;
+        double discountPercentage = 0.0;
+        double surchargePercentage = 0.0;
         String? paymentReference;
 
-        // ── Step 1: Process Paystack payment if user is on Pay-As-You-Go ────
-        if (isPayAsYouGo) {
-          final currentUser = Supabase.instance.client.auth.currentUser;
-          final email = currentUser?.email ?? '';
-
-          if (email.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Could not retrieve your account email. Please sign in again.',
-                ),
-                backgroundColor: Colors.red,
-              ),
-            );
-            isSubmitting.value = false;
-            return;
-          }
-
-          final paymentResult = await PaystackService.instance.initiatePayment(
-            context: context,
-            email: email,
-            amountInSmallest: charge.total,
-            currency: 'GHS',
-            metadata: {
-              'type': 'pickup_request_pay_as_you_go',
-              'bin_types': selectedBins.value.join(', '),
-              'pickup_date': DateFormat(
-                'yyyy-MM-dd',
-              ).format(selectedDate.value),
-              'time_slot': selectedTimeSlot.value,
-              'discount_percentage': discountPercentage,
-              'surcharge_percentage': surchargePercentage,
-              'original_total': originalTotal,
-              'net_total': charge.netAmount,
-              'paystack_fee': charge.feeAmount,
-              'amount_charged': charge.totalAmount,
-            },
-          );
-
-          if (!context.mounted) return;
-
-          if (paymentResult.status == PaymentStatus.cancelled) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Payment cancelled. Your pickup was not scheduled.',
-                ),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            isSubmitting.value = false;
-            return;
-          }
-
-          if (!paymentResult.isSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  paymentResult.errorMessage ??
-                      'Payment failed. Please try again.',
-                ),
-                backgroundColor: Colors.red,
-              ),
-            );
-            isSubmitting.value = false;
-            return;
-          }
-
-          paymentMethodToSave = 'Paystack (${selectedPaymentMethod.value})';
-          finalAmountPaid = pickupTotal;
-          paymentReference = paymentResult.reference;
+        // The server takes these from the credit it consumes; they are sent
+        // so the request is consistent with what the customer saw.
+        if (isPayAsYouGo && credit != null) {
+          paymentMethodToSave = credit.paymentMethod ?? 'Paystack';
+          finalAmountPaid = credit.amount;
+          originalAmount = credit.amount;
+          discountPercentage = credit.discountAppliedPercentage;
+          surchargePercentage = credit.surchargeAppliedPercentage;
+          paymentReference = credit.paymentReference;
         }
 
         final destination = selectedLocation.value!;
@@ -384,7 +291,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               amountPaid: finalAmountPaid,
               paymentMethod: paymentMethodToSave,
               instructions: driverNotesController.text,
-              originalAmount: originalTotal,
+              originalAmount: originalAmount,
               discountAppliedPercentage: discountPercentage,
               surchargeAppliedPercentage: surchargePercentage,
               locationLat: destination.latitude,
@@ -692,7 +599,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                       fontSize: 16,
                     ),
                   ),
-                  if (isBonusEligible)
+                  if (isBonusEligible && needsPayment)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -727,7 +634,7 @@ class PickupRequestScreen extends HookConsumerWidget {
               const SizedBox(height: 12),
 
               // 🎁 Rider Delay Compensation Banner (if 10% bonus active)
-              if (isBonusEligible)
+              if (isBonusEligible && needsPayment)
                 Container(
                   margin: const EdgeInsets.only(bottom: 14),
                   padding: const EdgeInsets.all(14),
@@ -808,7 +715,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Riders failed to pick up after 3 days grace period. 10% discount applied to your next pickup!',
+                              'Riders failed to pick up after 3 days grace period. 10% off will be applied when you pay for your next pickup!',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: isDark
@@ -825,7 +732,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                 ),
 
               // ⚠️ Late Payment Surcharge Banner (if 10% surcharge active)
-              if (hasOverduePayment)
+              if (overduePayment && needsPayment)
                 Container(
                   margin: const EdgeInsets.only(bottom: 14),
                   padding: const EdgeInsets.all(14),
@@ -869,7 +776,7 @@ class PickupRequestScreen extends HookConsumerWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'An outstanding balance was not settled within 3 days of your last completed pickup. A 10% surcharge has been added to this request.',
+                              'An outstanding balance was not settled within 3 days of your last completed pickup. A 10% surcharge will be added when you pay for your next pickup.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: isDark
@@ -885,7 +792,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                   ),
                 ),
 
-              if (isPayAsYouGo)
+              if (isPayAsYouGo && prepaidPickup != null)
+                _PrepaidPickupCard(credit: prepaidPickup, isDark: isDark)
+              else if (isPayAsYouGo)
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -893,196 +802,41 @@ class PickupRequestScreen extends HookConsumerWidget {
                         ? Colors.grey.shade900
                         : const Color(0xFFFFF8E1),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isBonusEligible
-                          ? Colors.green.shade400
-                          : (hasOverduePayment
-                              ? Colors.red.shade300
-                              : Colors.amber.shade200),
-                    ),
+                    border: Border.all(color: Colors.amber.shade300),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'Pickup Charge',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          Icon(Icons.lock_clock_outlined, color: Colors.amber.shade800),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Payment required first',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
                           ),
-                          Row(
-                            children: [
-                              if (isBonusEligible || hasOverduePayment) ...[
-                                Text(
-                                  'GHS ${originalTotal.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade500,
-                                    decoration: TextDecoration.lineThrough,
-                                    decorationColor: Colors.red,
-                                    decorationThickness: 2,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              Text(
-                                'GHS ${pickupTotal.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 18,
-                                  color: isBonusEligible
-                                      ? Colors.green.shade700
-                                      : (hasOverduePayment
-                                          ? Colors.red.shade700
-                                          : null),
-                                ),
-                              ),
-                            ],
+                          Text(
+                            'GHS ${paygCharge.totalAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Text(
-                        '${selectedBins.value.length} bin${selectedBins.value.length == 1 ? '' : 's'} x GHS ${pickupFeePerBin.toStringAsFixed(2)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        'You are on Pay As You Go. Pay for this pickup on the plan '
+                        'screen, then come back to request it. Each payment covers '
+                        'one pickup.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                       ),
-                      if (isBonusEligible) ...[
+                      if (paygCharge.hasFee) ...[
                         const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Delay Bonus (-10%)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade800,
-                              ),
-                            ),
-                            Text(
-                              '- GHS ${discountAmount.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade800,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Includes ${PaystackFees.label}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                         ),
                       ],
-                      if (hasOverduePayment) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Late Payment Surcharge (+10%)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
-                              ),
-                            ),
-                            Text(
-                              '+ GHS ${surchargeAmount.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (charge.hasFee) ...[
-                        const SizedBox(height: 10),
-                        Divider(
-                          height: 1,
-                          color: isDark
-                              ? Colors.grey.shade700
-                              : Colors.amber.shade200,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                PaystackFees.label,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '+ GHS ${charge.feeAmount.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Total to pay',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              'GHS ${charge.totalAmount.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      if (!isBonusEligible && !hasOverduePayment) ...[
-                        const SizedBox(height: 4),
-                        const Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            'Paystack payment required',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFC78200),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _PaymentMethodTile(
-                              label: 'Mobile Money',
-                              icon: Icons.phone_android_outlined,
-                              isSelected:
-                                  selectedPaymentMethod.value == 'Mobile Money',
-                              onTap: () =>
-                                  selectedPaymentMethod.value = 'Mobile Money',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _PaymentMethodTile(
-                              label: 'Card',
-                              icon: Icons.credit_card_outlined,
-                              isSelected: selectedPaymentMethod.value == 'Card',
-                              onTap: () => selectedPaymentMethod.value = 'Card',
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 )
@@ -1149,10 +903,12 @@ class PickupRequestScreen extends HookConsumerWidget {
 
               const SizedBox(height: 32),
               CleanConnectButton(
-                text: isPayAsYouGo
-                    ? 'Pay GHS ${charge.totalAmount.toStringAsFixed(2)} & Confirm Pickup'
-                    : 'Confirm Pickup',
-                onPressed: handleConfirmPickup,
+                text: needsPayment
+                    ? 'Pay for a Pickup First'
+                    : isPayAsYouGo
+                        ? 'Confirm Prepaid Pickup'
+                        : 'Confirm Pickup',
+                onPressed: needsPayment ? goPayForPickup : handleConfirmPickup,
                 isLoading: isSubmitting.value,
               ),
             ],
@@ -1163,61 +919,57 @@ class PickupRequestScreen extends HookConsumerWidget {
   }
 }
 
-class _PaymentMethodTile extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
+/// The pay-as-you-go payment this request will use.
+class _PrepaidPickupCard extends StatelessWidget {
+  final PaygPickupCreditEntity credit;
+  final bool isDark;
 
-  const _PaymentMethodTile({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _PrepaidPickupCard({required this.credit, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? theme.colorScheme.primaryContainer : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? theme.colorScheme.primary
-                : Colors.grey.shade300,
-            width: 1.4,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isSelected ? theme.colorScheme.primary : Colors.grey,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: isSelected
-                      ? theme.colorScheme.primary
-                      : Colors.grey.shade700,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.green.shade300),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.verified_outlined, color: Colors.green, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Prepaid pickup — GHS ${credit.amount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 2),
+                Text(
+                  '${credit.paymentMethod ?? 'Paystack'} · paid ${DateFormat('d MMM, h:mm a').format(credit.paidAt.toLocal())}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                if (credit.discountAppliedPercentage > 0)
+                  Text(
+                    '${credit.discountAppliedPercentage.toStringAsFixed(0)}% delay bonus applied',
+                    style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                  ),
+                const SizedBox(height: 4),
+                const Text(
+                  'This payment covers this one pickup. Your next pickup needs a new payment.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
