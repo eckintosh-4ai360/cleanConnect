@@ -14,6 +14,18 @@ enum LocationAccess {
   serviceDisabled,
 }
 
+/// Why the GPS stream has to keep running with the app in the background.
+enum BackgroundTracking {
+  /// Foreground only.
+  none,
+
+  /// The rider is on an active pickup.
+  job,
+
+  /// The rider holds a company bike, which is tracked even while off duty.
+  bike,
+}
+
 /// Geolocator wrapper managing permissions and rider tracking streams
 class LocationService {
   LocationService._();
@@ -138,23 +150,30 @@ class LocationService {
     return null;
   }
 
-  // Live GPS position stream (uses foreground service during active jobs)
+  // Live GPS position stream. Anything but [BackgroundTracking.none] runs as a
+  // foreground service (Android) / background location session (iOS), so it
+  // survives the phone being locked or the rider switching apps.
   Stream<Position> positionStream({
-    bool forJob = false,
+    BackgroundTracking background = BackgroundTracking.none,
+    String? bikeLabel,
     int distanceFilterMeters = MapConfig.riderDistanceFilterMeters,
   }) {
     return Geolocator.getPositionStream(
       locationSettings: _settingsFor(
-        forJob: forJob,
+        background: background,
+        bikeLabel: bikeLabel,
         distanceFilterMeters: distanceFilterMeters,
       ),
     );
   }
 
   LocationSettings _settingsFor({
-    required bool forJob,
+    required BackgroundTracking background,
+    required String? bikeLabel,
     required int distanceFilterMeters,
   }) {
+    final inBackground = background != BackgroundTracking.none;
+
     if (kIsWeb) {
       return LocationSettings(
         accuracy: LocationAccuracy.high,
@@ -168,16 +187,26 @@ class LocationService {
         distanceFilter: distanceFilterMeters,
         intervalDuration: const Duration(seconds: 5),
         forceLocationManager: false,
-        foregroundNotificationConfig: forJob
-            ? const ForegroundNotificationConfig(
-                notificationTitle: 'CleanConnect — on an active pickup',
-                notificationText:
-                    'Sharing your location with dispatch and the customer.',
-                notificationChannelName: 'Live pickup tracking',
-                enableWakeLock: true,
-                setOngoing: true,
-              )
-            : null,
+        foregroundNotificationConfig: switch (background) {
+          BackgroundTracking.none => null,
+          BackgroundTracking.job => const ForegroundNotificationConfig(
+              notificationTitle: 'CleanConnect — on an active pickup',
+              notificationText:
+                  'Sharing your location with dispatch and the customer.',
+              notificationChannelName: 'Live pickup tracking',
+              enableWakeLock: true,
+              setOngoing: true,
+            ),
+          // Riders are told, every time, that a company bike is being tracked.
+          BackgroundTracking.bike => ForegroundNotificationConfig(
+              notificationTitle: 'CleanConnect — company bike tracking',
+              notificationText:
+                  'Your location is shared with dispatch while ${bikeLabel ?? 'a company bike'} is assigned to you.',
+              notificationChannelName: 'Company bike tracking',
+              enableWakeLock: true,
+              setOngoing: true,
+            ),
+        },
       );
     }
 
@@ -186,8 +215,8 @@ class LocationService {
         accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: distanceFilterMeters,
         activityType: ActivityType.automotiveNavigation,
-        allowBackgroundLocationUpdates: forJob,
-        showBackgroundLocationIndicator: forJob,
+        allowBackgroundLocationUpdates: inBackground,
+        showBackgroundLocationIndicator: inBackground,
         pauseLocationUpdatesAutomatically: false,
       );
     }

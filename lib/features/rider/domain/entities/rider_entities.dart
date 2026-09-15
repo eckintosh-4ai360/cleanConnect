@@ -1,5 +1,25 @@
 import 'pickup_request_entity.dart';
 
+/// The company bike an admin has assigned to this rider.
+class AssignedBikeEntity {
+  final String id;
+  final String name;
+  final String? plateNumber;
+  final String? type;
+
+  const AssignedBikeEntity({
+    required this.id,
+    required this.name,
+    this.plateNumber,
+    this.type,
+  });
+
+  /// "Honda Ace · M-24-GR 1001", or just the name when there is no plate.
+  String get label => (plateNumber == null || plateNumber!.trim().isEmpty)
+      ? name
+      : '$name · ${plateNumber!.trim()}';
+}
+
 class RiderEntity {
   final String id;
   final String fullName;

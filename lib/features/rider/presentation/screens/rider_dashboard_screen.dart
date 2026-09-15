@@ -4,6 +4,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../providers/rider_providers.dart';
+import '../providers/rider_tracking_provider.dart';
+import '../../../../core/services/location_service.dart';
 import '../widgets/rider_nav_bar.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
 
@@ -155,6 +157,9 @@ class RiderDashboardScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
+
+                // ── Company bike tracking notice ─────────────────────────
+                const _CompanyBikeCard(),
 
                 // ── Active Route Card ────────────────────────────────────
                 routeAsync.when(
@@ -400,6 +405,71 @@ class _TodayStatsSkeleton extends StatelessWidget {
         SizedBox(width: 12),
         Expanded(child: SizedBox(height: 92)),
       ],
+    );
+  }
+}
+
+/// Tells the rider which company bike they hold and that it is tracked, and
+/// makes a blocked location permission impossible to miss.
+class _CompanyBikeCard extends ConsumerWidget {
+  const _CompanyBikeCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tracking = ref.watch(riderTrackingProvider);
+    final bike = tracking.bike;
+    if (bike == null) return const SizedBox.shrink();
+
+    final blocked = tracking.isPermissionBlocked;
+    final color = blocked ? Colors.red : Colors.green;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.two_wheeler, color: color.shade700, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Company bike: ${bike.label}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  blocked
+                      ? 'Location is turned off. Company bikes must stay visible to dispatch — turn location on for CleanConnect.'
+                      : 'This bike\'s location is shared with dispatch at all times while it is assigned to you, including when you are offline.',
+                  style: TextStyle(fontSize: 12, color: blocked ? Colors.red.shade700 : Colors.grey.shade700),
+                ),
+                if (blocked) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () async {
+                      final access = await ref.read(riderTrackingProvider.notifier).retryPermission();
+                      if (access == LocationAccess.deniedForever) {
+                        await LocationService.instance.openAppSettings();
+                      } else if (access == LocationAccess.serviceDisabled) {
+                        await LocationService.instance.openLocationSettings();
+                      }
+                    },
+                    child: const Text('Turn on location'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

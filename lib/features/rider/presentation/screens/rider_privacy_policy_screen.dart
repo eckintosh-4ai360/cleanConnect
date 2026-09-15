@@ -83,7 +83,7 @@ class RiderPrivacyPolicyScreen extends StatelessWidget {
             const _PolicySection(
               title: 'Location information',
               body:
-                  'Location may be used while you are on duty to show relevant pickups, help with routes, and confirm collection activity. You can manage location permission in your device settings, although some rider features may then be unavailable.',
+                  'Location may be used while you are on duty to show relevant pickups, help with routes, and confirm collection activity. While a company bike is assigned to you, its location is recorded at all times, including when you are offline, so the company can see where its bikes are and which trips were for pickups. A notification shows whenever this tracking is running, and the location history is kept for 30 days. You can manage location permission in your device settings, although some rider features may then be unavailable.',
             ),
             const _PolicySection(
               title: 'Sharing and protection',

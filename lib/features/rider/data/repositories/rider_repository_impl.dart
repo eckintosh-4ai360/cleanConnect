@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/utils/geo_utils.dart';
@@ -606,6 +608,64 @@ class RiderRepositoryImpl implements RiderRepository {
             ? DateTime.tryParse(r['accepted_at'].toString())
             : null,
         housePhotoUrl: r['house_photo_url'] as String?,
+      );
+
+  // ── Company bike ─────────────────────────────────────────────────────────
+
+  /// How often the assignment is re-read. Realtime announces a new bike, but
+  /// once an admin takes it back the row is no longer visible to this rider
+  /// under RLS, so that change never arrives as an event.
+  static const Duration _bikeRecheckInterval = Duration(minutes: 1);
+
+  @override
+  Stream<AssignedBikeEntity?> watchAssignedBike() {
+    late final StreamController<AssignedBikeEntity?> controller;
+    StreamSubscription<List<Map<String, dynamic>>>? realtime;
+    Timer? recheck;
+    String? lastId = '';
+
+    void emit(AssignedBikeEntity? bike) {
+      if (controller.isClosed || bike?.id == lastId) return;
+      lastId = bike?.id;
+      controller.add(bike);
+    }
+
+    Future<void> fetch() async {
+      try {
+        final row = await _db
+            .from('vehicles')
+            .select('id, name, plate_number, type')
+            .eq('assigned_rider_id', _uid)
+            .maybeSingle();
+        emit(row == null ? null : _bikeFromRow(row));
+      } catch (e) {
+        if (!controller.isClosed) controller.addError(e);
+      }
+    }
+
+    controller = StreamController<AssignedBikeEntity?>(
+      onListen: () {
+        fetch();
+        realtime = _db
+            .from('vehicles')
+            .stream(primaryKey: ['id'])
+            .eq('assigned_rider_id', _uid)
+            .listen((_) => fetch(), onError: (_) {});
+        recheck = Timer.periodic(_bikeRecheckInterval, (_) => fetch());
+      },
+      onCancel: () async {
+        recheck?.cancel();
+        await realtime?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+
+  AssignedBikeEntity _bikeFromRow(Map<String, dynamic> r) => AssignedBikeEntity(
+        id: r['id'] as String,
+        name: r['name'] as String? ?? 'Company bike',
+        plateNumber: r['plate_number'] as String?,
+        type: r['type'] as String?,
       );
 
   @override

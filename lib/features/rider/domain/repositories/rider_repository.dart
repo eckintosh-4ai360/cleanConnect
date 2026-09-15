@@ -101,6 +101,10 @@ abstract class RiderRepository {
     String? notes,
   });
 
+  /// The company bike assigned to this rider, or null. Updates when an admin
+  /// assigns or takes back a bike.
+  Stream<AssignedBikeEntity?> watchAssignedBike();
+
   /// Update live GPS position of rider in Firestore for admin live tracking.
   Future<void> updateRiderLocation({
     required double latitude,

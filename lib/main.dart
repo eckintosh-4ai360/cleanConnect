@@ -10,6 +10,7 @@ import 'core/config/router.dart';
 import 'core/config/theme.dart';
 import 'core/config/theme_provider.dart';
 import 'core/services/notification_service.dart';
+import 'features/rider/presentation/providers/rider_tracking_provider.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -64,6 +65,8 @@ class CleanConnectApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeControllerProvider);
     final router = ref.watch(routerProvider);
+    // Keeps a rider's company bike tracked whichever screen they are on.
+    ref.watch(bikeTrackingSupervisorProvider);
 
     return MaterialApp.router(
       title: 'CleanConnect',
