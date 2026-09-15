@@ -295,8 +295,6 @@ class RiderDashboardScreen extends ConsumerWidget {
 
 // ── Helper Widgets ────────────────────────────────────────────────────────────
 
-const double _riderEarningsPerKg = 0.15;
-
 class _TodayStats {
   final int collections;
   final double weightKg;
@@ -326,7 +324,11 @@ class _TodayStats {
     return _TodayStats(
       collections: todayLogs.length,
       weightKg: weightKg,
-      earnings: weightKg * _riderEarningsPerKg,
+      // Commission recorded on each collection by complete_pickup.
+      earnings: todayLogs.fold<double>(
+        0,
+        (sum, log) => sum + (log.riderEarning as double),
+      ),
     );
   }
 

@@ -329,16 +329,15 @@ class RiderRepositoryImpl implements RiderRepository {
         status: r['status'] as String? ?? 'verified',
         notes: r['notes'] as String?,
         qrCodeData: r['qr_verified'] == true ? 'QR-VERIFIED' : null,
+        riderEarning: (r['rider_earning'] as num?)?.toDouble() ?? 0.0,
       );
 
   // ── Performance Stats ────────────────────────────────────────────────────
   // Weekly/monthly figures are derived client-side from collection_events and
   // route_stops (RLS already scopes both to the signed-in rider) rather than
   // stored precomputed, since there's no historical daily-snapshot table.
-  // earningsPerKg matches the rate the mark_stop_collected/complete_pickup
-  // RPCs use to increment riders.earnings_this_month.
-
-  static const double _earningsPerKg = 0.15;
+  // Earnings are the commission complete_pickup records on each collection
+  // (collection_events.rider_earning), not a rate applied here.
 
   @override
   Stream<RiderPerformanceEntity> watchPerformanceStats() {
@@ -364,7 +363,7 @@ class RiderRepositoryImpl implements RiderRepository {
 
     final eventRows = ((await _db
             .from('collection_events')
-            .select('weight_kg, customer_id, address, collected_at')
+            .select('weight_kg, rider_earning, customer_id, address, collected_at')
             .eq('rider_id', _uid)
             .gte('collected_at', windowStart.toIso8601String())) as List)
         .cast<Map<String, dynamic>>();
@@ -388,6 +387,9 @@ class RiderRepositoryImpl implements RiderRepository {
     double weightOf(Iterable<Map<String, dynamic>> rows) =>
         rows.fold(0.0, (sum, e) => sum + ((e['weight_kg'] as num?)?.toDouble() ?? 0.0));
 
+    double earningsOf(Iterable<Map<String, dynamic>> rows) =>
+        rows.fold(0.0, (sum, e) => sum + ((e['rider_earning'] as num?)?.toDouble() ?? 0.0));
+
     int countStatus(Iterable<Map<String, dynamic>> rows, String status) =>
         rows.where((s) => s['status'] == status).length;
 
@@ -395,7 +397,7 @@ class RiderRepositoryImpl implements RiderRepository {
     final monthEvents = eventRows.where((e) => onOrAfter(startOfMonth, e['collected_at'])).toList();
 
     final weightThisWeek = weightOf(weekEvents);
-    final earningsThisWeek = weightThisWeek * _earningsPerKg;
+    final earningsThisWeek = earningsOf(weekEvents);
 
     final topLocationsThisMonth = monthEvents
         .map((e) => (e['customer_id'] as String?) ?? (e['address'] as String? ?? ''))
@@ -421,9 +423,8 @@ class RiderRepositoryImpl implements RiderRepository {
       return resolved == 0 ? null : (collected / resolved) * 100;
     });
 
-    final monthWeight = weightOf(monthEvents);
     final avgEarningsPerCollection =
-        monthEvents.isEmpty ? 0.0 : (monthWeight * _earningsPerKg) / monthEvents.length;
+        monthEvents.isEmpty ? 0.0 : earningsOf(monthEvents) / monthEvents.length;
 
     return RiderPerformanceEntity(
       efficiencyScore: fallbackScore,

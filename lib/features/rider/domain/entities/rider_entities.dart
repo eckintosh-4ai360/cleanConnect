@@ -173,6 +173,8 @@ class CollectionLogEntity {
   final String? photoUrl;
   final String? qrCodeData;
   final String? notes;
+  /// Commission the rider earned on this collection (GHS).
+  final double riderEarning;
 
   const CollectionLogEntity({
     required this.id,
@@ -185,6 +187,7 @@ class CollectionLogEntity {
     this.photoUrl,
     this.qrCodeData,
     this.notes,
+    this.riderEarning = 0.0,
   });
 }
 

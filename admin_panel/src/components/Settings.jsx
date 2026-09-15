@@ -317,6 +317,53 @@ export default function Settings() {
     setMaxPickupsSaving(false);
   };
 
+  // ── Rider commission: share of each pickup's value paid to the rider ────────
+  const [commissionForm, setCommissionForm] = useState('70');
+  const [commissionLoading, setCommissionLoading] = useState(false);
+  const [commissionSaving, setCommissionSaving] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchCommission = async () => {
+      setCommissionLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('rider_commission_percentage')
+        .eq('id', true)
+        .maybeSingle();
+      if (mounted && !error && data?.rider_commission_percentage != null) {
+        setCommissionForm(String(Number(data.rider_commission_percentage)));
+      }
+      if (error) console.warn('app_settings (rider commission) fetch:', error);
+      if (mounted) setCommissionLoading(false);
+    };
+    fetchCommission();
+    return () => { mounted = false; };
+  }, []);
+
+  const parsedCommission = parseFloat(commissionForm);
+  const commissionIsValid =
+    Number.isFinite(parsedCommission) && parsedCommission >= 0 && parsedCommission <= 100;
+
+  const handleSaveCommission = async (e) => {
+    e.preventDefault();
+    if (!commissionIsValid) {
+      alert('Enter a percentage between 0 and 100.');
+      return;
+    }
+    setCommissionSaving(true);
+    const { error } = await supabase.from('app_settings').upsert({
+      id: true,
+      rider_commission_percentage: Math.round(parsedCommission * 100) / 100,
+    }, { onConflict: 'id' });
+    if (error) {
+      alert('Failed to save rider commission: ' + error.message);
+    } else {
+      alert('Rider commission saved. It applies to pickups completed from now on.');
+    }
+    setCommissionSaving(false);
+  };
+
   // ── Admin profile helpers ────────────────────────────────────────────────
   const handleAdminPhotoUpload = (e) => {
     const file = e.target.files?.[0];
@@ -564,6 +611,54 @@ export default function Settings() {
             <div>
               <button className="btn-primary" type="submit" disabled={maxPickupsSaving || maxPickupsLoading} style={{ padding: '8px 16px', fontSize: '12px' }}>
                 {maxPickupsSaving ? 'Saving…' : 'Save Rider Pickup Limit'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* ── Rider Commission ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px' }}>Rider Commission</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Riders are paid a share of each pickup they complete, not by weight. A pay-as-you-go
+              pickup is worth what the customer paid; a subscription pickup is worth the plan fee
+              divided by its pickups per month. Changes apply to pickups completed after saving —
+              earnings already recorded keep the rate they were earned at.
+            </p>
+          </div>
+          <form onSubmit={handleSaveCommission} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ maxWidth: '220px' }}>
+                <label>Rider share (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={commissionForm}
+                  onChange={(e) => setCommissionForm(e.target.value)}
+                  placeholder={commissionLoading ? 'Loading…' : 'e.g. 70'}
+                />
+              </div>
+              <div className="form-group" style={{ maxWidth: '220px' }}>
+                <label>Company share (%)</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={commissionIsValid ? String(Math.round((100 - parsedCommission) * 100) / 100) : '—'}
+                />
+              </div>
+            </div>
+            {commissionIsValid && (
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Example: on a GHS 100.00 pickup the rider earns GHS {parsedCommission.toFixed(2)} and the
+                company keeps GHS {(100 - parsedCommission).toFixed(2)}.
+              </p>
+            )}
+            <div>
+              <button className="btn-primary" type="submit" disabled={commissionSaving || commissionLoading || !commissionIsValid} style={{ padding: '8px 16px', fontSize: '12px' }}>
+                {commissionSaving ? 'Saving…' : 'Save Rider Commission'}
               </button>
             </div>
           </form>
