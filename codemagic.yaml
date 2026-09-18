@@ -1,0 +1,33 @@
+# Codemagic configuration for the Flutter iOS app.
+#
+# Runner uses Flutter 3.44's Swift Package Manager integration. The generated
+# package is intentionally ignored by Git, so `flutter pub get` must run before
+# any Xcode or code-signing command reads the project.
+workflows:
+  ios-release:
+    name: CleanConnect iOS release
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      flutter: "3.44.0"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ecowaste.cleanconnect.cleanConnect
+    scripts:
+      - name: Generate Flutter iOS project files
+        script: |
+          flutter pub get
+          test -f ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift
+      - name: Verify the shared Runner scheme
+        script: |
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -showBuildSettings >/dev/null
+      - name: Configure iOS code signing
+        script: |
+          xcode-project use-profiles --project ios/Runner.xcodeproj
+      - name: Build signed IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
