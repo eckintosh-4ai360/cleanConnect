@@ -57,7 +57,9 @@ class BinRegisterScreen extends HookConsumerWidget {
             gpsLocation.value = '';
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Could not get your current location. Try again.'),
+                content: Text(
+                  'Could not get your current location. Try again.',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -77,7 +79,9 @@ class BinRegisterScreen extends HookConsumerWidget {
           gpsLocation.value = '';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Location permission is blocked for CleanConnect.'),
+              content: const Text(
+                'Location permission is blocked for CleanConnect.',
+              ),
               action: SnackBarAction(
                 label: 'Open settings',
                 onPressed: LocationService.instance.openAppSettings,
@@ -87,7 +91,9 @@ class BinRegisterScreen extends HookConsumerWidget {
         case LocationAccess.denied:
           gpsLocation.value = '';
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission was not granted.')),
+            const SnackBar(
+              content: Text('Location permission was not granted.'),
+            ),
           );
       }
     }
@@ -155,7 +161,9 @@ class BinRegisterScreen extends HookConsumerWidget {
       try {
         if (selectedMode.value == _BinRegistrationMode.requestCompanyBin) {
           for (final size in selectedSizes.value) {
-            await ref.read(customerBinsProvider.notifier).requestCompanyBin(
+            await ref
+                .read(customerBinsProvider.notifier)
+                .requestCompanyBin(
                   type: selectedType.value,
                   size: size,
                   gpsLocation: gpsLocation.value,
@@ -172,7 +180,9 @@ class BinRegisterScreen extends HookConsumerWidget {
         } else {
           final serialNumbers = <String>[];
           for (final size in selectedSizes.value) {
-            final bin = await ref.read(customerBinsProvider.notifier).registerNewBin(
+            final bin = await ref
+                .read(customerBinsProvider.notifier)
+                .registerNewBin(
                   type: selectedType.value,
                   size: size,
                   frequency: selectedFrequency.value,
@@ -366,9 +376,9 @@ class _RegistrationChoiceView extends StatelessWidget {
       children: [
         Text(
           'Choose Registration Type',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 8),
         const Text(
@@ -378,7 +388,8 @@ class _RegistrationChoiceView extends StatelessWidget {
         const SizedBox(height: 24),
         _RegistrationModeCard(
           title: 'Request for Bin',
-          subtitle: 'Ask admin to assign a company-owned bin with a serial number.',
+          subtitle:
+              'Ask admin to assign a company-owned bin with a serial number.',
           icon: Icons.inventory_2_outlined,
           iconColor: Colors.blue,
           onTap: () => onSelect(_BinRegistrationMode.requestCompanyBin),
@@ -386,7 +397,8 @@ class _RegistrationChoiceView extends StatelessWidget {
         const SizedBox(height: 16),
         _RegistrationModeCard(
           title: 'Register Personal Bin',
-          subtitle: 'Register your own bin. A serial number will be generated after submission.',
+          subtitle:
+              'Register your own bin. A serial number will be generated after submission.',
           icon: Icons.delete_outline,
           iconColor: Colors.green,
           onTap: () => onSelect(_BinRegistrationMode.personalBin),
@@ -468,26 +480,27 @@ class _BinDetailsStep extends StatelessWidget {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: const [
-              ('120L', '120L Small'),
-              ('240L', '240L Large'),
-              ('360L', '360L Extra Large'),
-            ].map((option) {
-              final isSelected = selectedSizes.value.contains(option.$1);
-              return _CapacityChip(
-                label: option.$2,
-                isSelected: isSelected,
-                onTap: () {
-                  final current = List<String>.from(selectedSizes.value);
-                  if (isSelected) {
-                    if (current.length > 1) current.remove(option.$1);
-                  } else {
-                    current.add(option.$1);
-                  }
-                  selectedSizes.value = current;
-                },
-              );
-            }).toList(),
+            children:
+                const [
+                  ('120L', '120L Small'),
+                  ('240L', '240L Large'),
+                  ('360L', '360L Extra Large'),
+                ].map((option) {
+                  final isSelected = selectedSizes.value.contains(option.$1);
+                  return _CapacityChip(
+                    label: option.$2,
+                    isSelected: isSelected,
+                    onTap: () {
+                      final current = List<String>.from(selectedSizes.value);
+                      if (isSelected) {
+                        if (current.length > 1) current.remove(option.$1);
+                      } else {
+                        current.add(option.$1);
+                      }
+                      selectedSizes.value = current;
+                    },
+                  );
+                }).toList(),
           ),
           const SizedBox(height: 16),
           CleanConnectTextField(
@@ -628,7 +641,7 @@ class _ScheduleStep extends StatelessWidget {
         ),
         _FrequencyTile(
           title: 'Monthly',
-          subtitle: 'Low volume waste',
+          subtitle: 'One pickup on a date you choose',
           isSelected: selectedFrequency.value == 'Monthly',
           onTap: () {
             selectedFrequency.value = 'Monthly';
@@ -641,9 +654,11 @@ class _ScheduleStep extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Select the day that works best for your schedule.',
-          style: TextStyle(color: Colors.grey, fontSize: 12),
+        Text(
+          selectedFrequency.value == 'Monthly'
+              ? 'This preselects a preferred date; you choose the actual pickup date in Request Pickup.'
+              : 'Select the day that works best for your schedule.',
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
         ),
         const SizedBox(height: 12),
         Row(
@@ -685,9 +700,11 @@ class _ScheduleStep extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'With an active subscription, a rider comes every week on your day in this slot — no need to request each pickup.',
-          style: TextStyle(color: Colors.grey, fontSize: 12),
+        Text(
+          selectedFrequency.value == 'Monthly'
+              ? 'Your Monthly plan includes one pickup. Choose its date in Request Pickup after payment.'
+              : 'With an active subscription, a rider comes every week on your day in this slot — no need to request each pickup.',
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -765,7 +782,10 @@ class _RequestReviewStep extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 32),
-        CleanConnectButton(text: 'Submit Bin Request', onPressed: handleConfirm),
+        CleanConnectButton(
+          text: 'Submit Bin Request',
+          onPressed: handleConfirm,
+        ),
         const SizedBox(height: 20),
       ],
     );

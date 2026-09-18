@@ -15,6 +15,9 @@ import '../../../../core/utils/geo_utils.dart';
 import '../../../../core/utils/paystack_fees.dart';
 import 'location_picker_screen.dart';
 
+bool _isMonthlyPlan(String planName) =>
+    planName.toLowerCase().contains('monthly');
+
 class PickupRequestScreen extends HookConsumerWidget {
   const PickupRequestScreen({super.key});
 
@@ -23,9 +26,10 @@ class PickupRequestScreen extends HookConsumerWidget {
     final binsState = ref.watch(customerBinsProvider);
     final subState = ref.watch(customerSubscriptionProvider);
     final addressesState = ref.watch(customerAddressesProvider);
-    final savedAddresses = (addressesState.value ?? const <CustomerAddressEntity>[])
-        .where((a) => a.hasCoordinates)
-        .toList();
+    final savedAddresses =
+        (addressesState.value ?? const <CustomerAddressEntity>[])
+            .where((a) => a.hasCoordinates)
+            .toList();
 
     // Pay-as-you-go pickups are paid for up front on the plan screen; each
     // payment is one credit that this request uses up.
@@ -63,6 +67,7 @@ class PickupRequestScreen extends HookConsumerWidget {
     // means charge.
     final currentPlan = subState.value?.currentPlan ?? 'Pay As You Go';
     final isPayAsYouGo = subState.value?.isPayAsYouGo ?? true;
+    final isMonthlySubscription = !isPayAsYouGo && _isMonthlyPlan(currentPlan);
 
     // List of date options (next 7 days). Pay-as-you-go pickups are paid for
     // immediately at booking time, so those customers can also book same-day.
@@ -128,7 +133,10 @@ class PickupRequestScreen extends HookConsumerWidget {
           (a) => a.isDefault,
           orElse: () => savedAddresses.first,
         );
-        selectedLocation.value = LatLng(preferred.latitude!, preferred.longitude!);
+        selectedLocation.value = LatLng(
+          preferred.latitude!,
+          preferred.longitude!,
+        );
         selectedLocationLabel.value = preferred.address;
       }
       return null;
@@ -147,13 +155,18 @@ class PickupRequestScreen extends HookConsumerWidget {
         case LocationAccess.granted:
           final position = await LocationService.instance.currentPosition();
           if (position != null) {
-            selectedLocation.value = LatLng(position.latitude, position.longitude);
+            selectedLocation.value = LatLng(
+              position.latitude,
+              position.longitude,
+            );
             selectedLocationLabel.value = await DirectionsService.instance
                 .reverseGeocode(selectedLocation.value!);
           } else if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Could not get your current location. Try again.'),
+                content: Text(
+                  'Could not get your current location. Try again.',
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -171,7 +184,9 @@ class PickupRequestScreen extends HookConsumerWidget {
         case LocationAccess.deniedForever:
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Location permission is blocked for CleanConnect.'),
+              content: const Text(
+                'Location permission is blocked for CleanConnect.',
+              ),
               action: SnackBarAction(
                 label: 'Open settings',
                 onPressed: LocationService.instance.openAppSettings,
@@ -180,7 +195,9 @@ class PickupRequestScreen extends HookConsumerWidget {
           );
         case LocationAccess.denied:
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Location permission was not granted.')),
+            const SnackBar(
+              content: Text('Location permission was not granted.'),
+            ),
           );
       }
 
@@ -211,8 +228,10 @@ class PickupRequestScreen extends HookConsumerWidget {
 
     final requestsState = ref.watch(customerPickupRequestsProvider);
 
-    final isBonusEligible =
-        isDelayBonusEligible(requestsState.value ?? const [], subState.value);
+    final isBonusEligible = isDelayBonusEligible(
+      requestsState.value ?? const [],
+      subState.value,
+    );
     final overduePayment = hasOverduePayment(subState.value);
 
     final timeSlots = [
@@ -294,9 +313,13 @@ class PickupRequestScreen extends HookConsumerWidget {
         }
 
         final destination = selectedLocation.value!;
-        final finalLocation = selectedLocationLabel.value?.trim().isNotEmpty == true
+        final finalLocation =
+            selectedLocationLabel.value?.trim().isNotEmpty == true
             ? selectedLocationLabel.value!.trim()
-            : GeoUtils.formatCoordinates(destination.latitude, destination.longitude);
+            : GeoUtils.formatCoordinates(
+                destination.latitude,
+                destination.longitude,
+              );
 
         // ── Step 2: Save pickup request
         await ref
@@ -320,11 +343,15 @@ class PickupRequestScreen extends HookConsumerWidget {
         if (!context.mounted) return;
         context.go('/customer/pickup-confirmed');
       } catch (e) {
+        final errorText = e.toString().toLowerCase();
+        final message =
+            errorText.contains(
+              'monthly subscription already has its one pickup request',
+            )
+            ? 'Your monthly pickup has already been requested. Renew your plan to request another pickup.'
+            : 'Failed to request pickup: $e';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to request pickup: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(message), backgroundColor: Colors.red),
         );
       } finally {
         isSubmitting.value = false;
@@ -539,7 +566,8 @@ class PickupRequestScreen extends HookConsumerWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: savedAddresses.map((addr) {
-                    final isSelected = selectedLocation.value != null &&
+                    final isSelected =
+                        selectedLocation.value != null &&
                         selectedLocation.value!.latitude == addr.latitude &&
                         selectedLocation.value!.longitude == addr.longitude;
                     return ChoiceChip(
@@ -547,7 +575,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                       avatar: Icon(
                         _addressIcon(addr.label),
                         size: 16,
-                        color: isSelected ? Colors.white : theme.colorScheme.primary,
+                        color: isSelected
+                            ? Colors.white
+                            : theme.colorScheme.primary,
                       ),
                       selected: isSelected,
                       showCheckmark: false,
@@ -557,7 +587,10 @@ class PickupRequestScreen extends HookConsumerWidget {
                         color: isSelected ? Colors.white : null,
                       ),
                       onSelected: (_) {
-                        selectedLocation.value = LatLng(addr.latitude!, addr.longitude!);
+                        selectedLocation.value = LatLng(
+                          addr.latitude!,
+                          addr.longitude!,
+                        );
                         selectedLocationLabel.value = addr.address;
                       },
                     );
@@ -598,7 +631,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                               selectedLocationLabel.value ??
                                   '${selectedLocation.value!.latitude.toStringAsFixed(6)}, '
                                       '${selectedLocation.value!.longitude.toStringAsFixed(6)}',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -859,17 +894,26 @@ class PickupRequestScreen extends HookConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.lock_clock_outlined, color: Colors.amber.shade800),
+                          Icon(
+                            Icons.lock_clock_outlined,
+                            color: Colors.amber.shade800,
+                          ),
                           const SizedBox(width: 10),
                           const Expanded(
                             child: Text(
                               'Payment required first',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           Text(
                             'GHS ${paygCharge.totalAmount.toStringAsFixed(2)}',
-                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                            ),
                           ),
                         ],
                       ),
@@ -878,13 +922,19 @@ class PickupRequestScreen extends HookConsumerWidget {
                         'You are on Pay As You Go. Pay for this pickup on the plan '
                         'screen, then come back to request it. Each payment covers '
                         'one pickup.',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
                       if (paygCharge.hasFee) ...[
                         const SizedBox(height: 4),
                         Text(
                           'Includes ${PaystackFees.label}',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ],
                     ],
@@ -913,7 +963,9 @@ class PickupRequestScreen extends HookConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Covered by $currentPlan',
+                              isMonthlySubscription
+                                  ? 'One pickup covered by $currentPlan'
+                                  : 'Covered by $currentPlan',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.green,
@@ -921,9 +973,11 @@ class PickupRequestScreen extends HookConsumerWidget {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            const Text(
-                              'No additional per-pickup charge required.',
-                              style: TextStyle(
+                            Text(
+                              isMonthlySubscription
+                                  ? 'Choose the date now. This paid month includes one pickup request only.'
+                                  : 'No additional per-pickup charge required.',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
                               ),
@@ -956,8 +1010,10 @@ class PickupRequestScreen extends HookConsumerWidget {
                 text: needsPayment
                     ? 'Pay for a Pickup First'
                     : isPayAsYouGo
-                        ? 'Confirm Prepaid Pickup'
-                        : 'Confirm Pickup',
+                    ? 'Confirm Prepaid Pickup'
+                    : isMonthlySubscription
+                    ? 'Confirm Monthly Pickup'
+                    : 'Confirm Pickup',
                 onPressed: needsPayment ? goPayForPickup : handleConfirmPickup,
                 isLoading: isSubmitting.value,
               ),
@@ -1016,7 +1072,10 @@ class _PrepaidPickupCard extends StatelessWidget {
                 if (credit.discountAppliedPercentage > 0)
                   Text(
                     '${credit.discountAppliedPercentage.toStringAsFixed(0)}% delay bonus applied',
-                    style: TextStyle(fontSize: 12, color: Colors.green.shade800),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.green.shade800,
+                    ),
                   ),
                 const SizedBox(height: 4),
                 const Text(
