@@ -219,35 +219,50 @@ class RiderDashboardScreen extends ConsumerWidget {
                     _QuickActionCard(
                       title: 'Scan Collection',
                       tag: 'Scan',
-                      gradientColors: const [Color(0xFF7FE9DC), Color(0xFF23B39F)],
+                      gradientColors: const [
+                        Color(0xFF7FE9DC),
+                        Color(0xFF23B39F),
+                      ],
                       accentColor: const Color(0xFF0E7A6C),
                       onTap: () => context.push('/rider/collection'),
                     ),
                     _QuickActionCard(
                       title: 'Pickups',
                       tag: 'Routes',
-                      gradientColors: const [Color(0xFF8EE6B0), Color(0xFF35B073)],
+                      gradientColors: const [
+                        Color(0xFF8EE6B0),
+                        Color(0xFF35B073),
+                      ],
                       accentColor: const Color(0xFF1B7A43),
                       onTap: () => context.push('/rider/pickups'),
                     ),
                     _QuickActionCard(
                       title: 'Performance',
                       tag: 'Stats',
-                      gradientColors: const [Color(0xFFFFD98A), Color(0xFFF3AE1D)],
+                      gradientColors: const [
+                        Color(0xFFFFD98A),
+                        Color(0xFFF3AE1D),
+                      ],
                       accentColor: const Color(0xFFC78200),
                       onTap: () => context.push('/rider/performance'),
                     ),
                     _QuickActionCard(
                       title: 'Notifications',
                       tag: 'Alerts',
-                      gradientColors: const [Color(0xFFE3CDB3), Color(0xFFB79A7A)],
+                      gradientColors: const [
+                        Color(0xFFE3CDB3),
+                        Color(0xFFB79A7A),
+                      ],
                       accentColor: const Color(0xFF6E5636),
                       onTap: () => context.push('/rider/notifications'),
                     ),
                     _QuickActionCard(
                       title: 'Assigned Reports',
                       tag: 'Reports',
-                      gradientColors: const [Color(0xFFFFAB91), Color(0xFFEF6C4D)],
+                      gradientColors: const [
+                        Color(0xFFFFAB91),
+                        Color(0xFFEF6C4D),
+                      ],
                       accentColor: const Color(0xFFC1401F),
                       onTap: () => context.push('/rider/incident-reports'),
                     ),
@@ -442,20 +457,28 @@ class _CompanyBikeCard extends ConsumerWidget {
               children: [
                 Text(
                   'Company bike: ${bike.label}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   blocked
                       ? 'Location is turned off. Company bikes must stay visible to dispatch — turn location on for CleanConnect.'
                       : 'This bike\'s location is shared with dispatch at all times while it is assigned to you, including when you are offline.',
-                  style: TextStyle(fontSize: 12, color: blocked ? Colors.red.shade700 : Colors.grey.shade700),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: blocked ? Colors.red.shade700 : Colors.grey.shade700,
+                  ),
                 ),
                 if (blocked) ...[
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: () async {
-                      final access = await ref.read(riderTrackingProvider.notifier).retryPermission();
+                      final access = await ref
+                          .read(riderTrackingProvider.notifier)
+                          .retryPermission();
                       if (access == LocationAccess.deniedForever) {
                         await LocationService.instance.openAppSettings();
                       } else if (access == LocationAccess.serviceDisabled) {

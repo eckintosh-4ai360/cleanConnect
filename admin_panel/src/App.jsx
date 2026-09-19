@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import { formatDate, getClockOffsetMs, onClockOffsetChange, serverNow, syncServerClock } from './timezone';
 import { useAuth } from './AuthContext';
@@ -21,6 +21,14 @@ import Reports from './components/Reports';
 import Settings from './components/Settings';
 import UserManagement from './components/UserManagement';
 import { roleLabel, tabsForRole } from './roles';
+import { formatBadgeCount, tabForNotifType, unreadCountsByTab } from './notificationRouting';
+
+/** How many notifications the drawer lists, newest first. */
+const RECENT_NOTIF_LIMIT = 100;
+/** How many unread rows back the badges count, beyond the drawer's window. */
+const UNREAD_NOTIF_LIMIT = 1000;
+/** Ids per mark-read request — they travel in the URL, which has a ceiling. */
+const READ_UPDATE_CHUNK = 100;
 
 export default function App() {
   const { session, profile, loading, needsPasswordSetup, completePasswordSetup } = useAuth();
@@ -110,14 +118,31 @@ function AdminShell({ profile }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase
-      .from('admin_notifications')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (mounted && !error) setNotifications(data.map(mapNotifRow));
-        if (error) console.warn('Notification fetch:', error);
-      });
+    // Two windows, merged. The newest slice fills the drawer; every unread row
+    // feeds the counters. Fetching only the newest slice left any unread row
+    // that had scrolled out of it uncounted — and unreachable, since the
+    // drawer never showed it either.
+    Promise.all([
+      supabase
+        .from('admin_notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(RECENT_NOTIF_LIMIT),
+      supabase
+        .from('admin_notifications')
+        .select('*')
+        .eq('is_read', false)
+        .order('created_at', { ascending: false })
+        .limit(UNREAD_NOTIF_LIMIT),
+    ]).then(([recent, unread]) => {
+      if (!mounted) return;
+      const error = recent.error || unread.error;
+      if (error) {
+        console.warn('Notification fetch:', error);
+        return;
+      }
+      setNotifications(sortNotifs([...(recent.data ?? []), ...(unread.data ?? [])].map(mapNotifRow)));
+    });
 
     const channel = supabase
       .channel('admin_notifications_changes')
@@ -127,7 +152,7 @@ function AdminShell({ profile }) {
         (payload) => {
           setNotifications((prev) => {
             if (payload.eventType === 'INSERT') {
-              return [mapNotifRow(payload.new), ...prev];
+              return sortNotifs([mapNotifRow(payload.new), ...prev]);
             }
             if (payload.eventType === 'UPDATE') {
               return prev.map((n) => (n.id === payload.new.id ? mapNotifRow(payload.new) : n));
@@ -152,37 +177,88 @@ function AdminShell({ profile }) {
   };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadByTab = useMemo(() => unreadCountsByTab(notifications), [notifications]);
 
-  const handleMarkAllRead = async () => {
-    const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
-    if (unreadIds.length === 0) return;
-    const { error } = await supabase
-      .from('admin_notifications')
-      .update({ is_read: true })
-      .in('id', unreadIds);
-    if (error) console.error('Failed to mark all notifications read:', error);
-  };
+  // Every mark-read below writes local state itself rather than waiting for the
+  // realtime channel to echo the change. The channel does carry it, but it
+  // throttles under a bulk update and drops events — which is what left the
+  // bell sitting on a count that never came down.
 
-  const handleNotificationClick = async (n) => {
-    if (!n.isRead) {
-      const { error } = await supabase
+  /** Marks specific notifications read, rolling the badges back if the write fails. */
+  const markNotificationsRead = useCallback(async (ids) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const setRead = (isRead) => setNotifications((prev) => withRead(prev, (n) => idSet.has(n.id), isRead));
+    setRead(true);
+
+    // Chunked: the id list rides in the request URL, and a long enough one
+    // comes back rejected with nothing written.
+    for (let i = 0; i < ids.length; i += READ_UPDATE_CHUNK) {
+      const chunk = ids.slice(i, i + READ_UPDATE_CHUNK);
+      // select() is what makes this verifiable: a write the row policy filters
+      // out succeeds with no error and no rows, and without the returned ids
+      // the badge would clear on screen over a row still unread in the table.
+      const { data, error } = await supabase
         .from('admin_notifications')
         .update({ is_read: true })
-        .eq('id', n.id);
-      if (error) console.warn('Failed to mark notification read:', error);
+        .in('id', chunk)
+        .select('id');
+      if (error || (data?.length ?? 0) < chunk.length) {
+        console.error('Failed to mark notifications read:', error ?? 'write blocked or row missing');
+        setRead(false);
+        return;
+      }
     }
-    if (n.type === 'bin_registered' || n.type === 'bin_requested') {
-      setActiveTab('Bins');
-    } else if (n.type === 'pickup_requested' || n.type === 'customer_registered') {
-      setActiveTab('Customers');
-    } else if (n.type === 'collection_completed') {
-      setActiveTab('Collections');
-    } else if (n.type === 'incident_reported') {
-      setActiveTab('Waste Reports');
-    } else if (n.type === 'support_ticket') {
-      setActiveTab('Settings');
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    const unreadIds = new Set(notifications.filter((n) => !n.isRead).map((n) => n.id));
+    if (unreadIds.size === 0) return;
+    setNotifications((prev) => withRead(prev, (n) => !n.isRead, true));
+
+    // Filtered on is_read rather than on a list of ids, so this also clears any
+    // backlog older than the window loaded above.
+    const { data, error } = await supabase
+      .from('admin_notifications')
+      .update({ is_read: true })
+      .eq('is_read', false)
+      .select('id');
+    if (error || (data?.length ?? 0) === 0) {
+      console.error('Failed to mark all notifications read:', error ?? 'write blocked by row policy');
+      setNotifications((prev) => withRead(prev, (n) => unreadIds.has(n.id), false));
     }
+  };
+
+  /** Opening a page is what clears its badge — that page's alerts count as seen. */
+  const openTab = (tab) => {
+    setActiveTab(tab);
+    markNotificationsRead(
+      notifications.filter((n) => !n.isRead && tabForNotifType(n.type) === tab).map((n) => n.id)
+    );
+  };
+
+  // An alert that lands on the page already open is seen as it arrives, so it
+  // should never raise a badge there. Only alerts newer than this session
+  // qualify: a backlog waiting on the tab a refresh restored has not been seen,
+  // and clearing that silently would be the bug this counter exists to avoid.
+  const sessionStartedAt = useRef(serverNow());
+  useEffect(() => {
+    const justArrived = notifications.filter(
+      (n) => !n.isRead
+        && tabForNotifType(n.type) === activeTab
+        && n.createdAt.getTime() >= sessionStartedAt.current
+    );
+    if (justArrived.length > 0) markNotificationsRead(justArrived.map((n) => n.id));
+  }, [notifications, activeTab, markNotificationsRead]);
+
+  const handleNotificationClick = (n) => {
+    const tab = tabForNotifType(n.type);
     setShowNotifDrawer(false);
+    if (tab && allowedTabs.includes(tab)) {
+      openTab(tab);
+    } else if (!n.isRead) {
+      markNotificationsRead([n.id]);
+    }
   };
 
   const formatNotifTime = (date) => {
@@ -403,17 +479,29 @@ function AdminShell({ profile }) {
         </div>
 
         <nav className="sidebar-menu">
-          {menuItems.filter((item) => allowedTabs.includes(item.name)).map((item) => (
-            <div
-              key={item.name}
-              className={`sidebar-item ${activeTab === item.name ? 'active' : ''}`}
-              onClick={() => setActiveTab(item.name)}
-              title={sidebarCollapsed ? item.name : ''}
-            >
-              {item.icon}
-              {!sidebarCollapsed && item.name}
-            </div>
-          ))}
+          {menuItems.filter((item) => allowedTabs.includes(item.name)).map((item) => {
+            const unread = unreadByTab[item.name] ?? 0;
+            return (
+              <div
+                key={item.name}
+                className={`sidebar-item ${activeTab === item.name ? 'active' : ''}`}
+                onClick={() => openTab(item.name)}
+                title={
+                  unread > 0
+                    ? `${item.name} — ${unread} unopened`
+                    : (sidebarCollapsed ? item.name : '')
+                }
+              >
+                {item.icon}
+                {!sidebarCollapsed && <span className="sidebar-item-label">{item.name}</span>}
+                {unread > 0 && (
+                  <span className="sidebar-badge" aria-label={`${unread} unopened`}>
+                    {formatBadgeCount(unread)}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="sidebar-footer">
@@ -489,16 +577,19 @@ function AdminShell({ profile }) {
                       color: 'white',
                       fontSize: '10px',
                       fontWeight: 'bold',
-                      borderRadius: '50%',
-                      width: '16px',
+                      // A fixed 16px circle clipped "9+" down to a bare "9",
+                      // which read as a counter frozen on nine.
+                      minWidth: '16px',
                       height: '16px',
+                      padding: '0 4px',
+                      borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       boxShadow: '0 0 8px rgba(239, 68, 68, 0.5)',
                     }}
                   >
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {formatBadgeCount(unreadCount)}
                   </span>
                 )}
               </button>
@@ -655,6 +746,18 @@ function AdminShell({ profile }) {
       </main>
     </div>
   );
+}
+
+/** Flips `isRead` on the notifications a predicate picks out. */
+function withRead(list, matches, isRead) {
+  return list.map((n) => (matches(n) ? { ...n, isRead } : n));
+}
+
+/** Newest first, one entry per id — the two fetch windows overlap. */
+function sortNotifs(list) {
+  const byId = new Map();
+  for (const n of list) byId.set(n.id, n);
+  return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** "7 hours", "45 minutes", "1 hour 30 minutes" for the clock warning. */
