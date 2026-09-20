@@ -37,7 +37,16 @@ abstract class RiderRepository {
   Future<void> completeRoute(String routeId);
 
   /// Streams pending pickup requests this rider has not passed.
+  ///
+  /// Not filtered by distance: that is the caller's job, because it depends on
+  /// where the rider is standing right now. See `nearbyPickups` in
+  /// rider_providers.dart.
   Stream<List<PickupRequestEntity>> watchAvailablePickups();
+
+  /// How far from a pickup a rider may be and still be offered it, in km.
+  /// Server-side dispatch uses the same number (app_settings), so the list a
+  /// rider sees matches the requests their phone is rung for.
+  Future<double> getPickupDiscoveryRadiusKm();
 
   /// Streams this rider's own accepted-but-not-yet-completed pickups. Used
   /// to let the rider pick which job a scan is for when the Collection

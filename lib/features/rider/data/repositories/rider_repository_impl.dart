@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/config/map_config.dart';
 import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/rider_entities.dart';
 import '../../domain/entities/pickup_request_entity.dart';
@@ -82,6 +83,11 @@ class RiderRepositoryImpl implements RiderRepository {
       totalWeightKg: (r['total_weight_kg'] as num?)?.toDouble() ?? 0.0,
       earningsThisMonth: (r['earnings_this_month'] as num?)?.toDouble() ?? 0.0,
       efficiencyScore: (r['efficiency_score'] as num?)?.toDouble() ?? 100.0,
+      currentLat: (r['current_lat'] as num?)?.toDouble(),
+      currentLng: (r['current_lng'] as num?)?.toDouble(),
+      lastLocationUpdate: DateTime.tryParse(
+        r['last_location_update']?.toString() ?? '',
+      ),
     );
   }
 
@@ -626,6 +632,24 @@ class RiderRepositoryImpl implements RiderRepository {
     };
 
     return controller.stream;
+  }
+
+  @override
+  Future<double> getPickupDiscoveryRadiusKm() async {
+    try {
+      final row = await _db
+          .from('app_settings')
+          .select('pickup_discovery_radius_km')
+          .eq('id', true)
+          .maybeSingle();
+      final km = (row?['pickup_discovery_radius_km'] as num?)?.toDouble();
+      if (km == null || km <= 0) return MapConfig.defaultPickupDiscoveryRadiusKm;
+      return km;
+    } catch (_) {
+      // Settings are a tuning knob, not a gate: an unreachable row must not
+      // leave the rider staring at an empty list.
+      return MapConfig.defaultPickupDiscoveryRadiusKm;
+    }
   }
 
   @override

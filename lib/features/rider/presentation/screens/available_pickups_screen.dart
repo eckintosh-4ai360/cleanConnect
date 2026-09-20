@@ -3,10 +3,14 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import '../providers/pickup_discovery_provider.dart';
 import '../providers/rider_providers.dart';
+import '../providers/rider_tracking_provider.dart';
 import '../widgets/rider_nav_bar.dart';
+import '../../../../core/services/location_service.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/shared/widgets/theme_toggle_button.dart';
+import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/pickup_request_entity.dart';
 import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 
@@ -16,6 +20,9 @@ import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
 /// start (or has), plus the rider's own claimed scheduled pickups that are due.
 /// "Upcoming" holds the next few days of scheduled subscription pickups: open
 /// ones to claim ahead of time, and the ones this rider already claimed.
+///
+/// Open pickups are scoped to the ones near this rider — see [nearbyPickups].
+/// The rider's own claimed pickups never are: those are already theirs.
 class AvailablePickupsScreen extends HookConsumerWidget {
   const AvailablePickupsScreen({super.key});
 
@@ -23,6 +30,8 @@ class AvailablePickupsScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pickupsAsync = ref.watch(availablePickupsProvider);
     final acceptedAsync = ref.watch(riderAcceptedPickupsProvider);
+    final discovery = ref.watch(nearbyPickupsProvider);
+    final origin = ref.watch(riderOriginProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -33,7 +42,15 @@ class AvailablePickupsScreen extends HookConsumerWidget {
       return null;
     }, const []);
 
-    final pending = pickupsAsync.value ?? const <PickupRequestEntity>[];
+    double? distanceTo(PickupRequestEntity pickup) {
+      final destination = pickup.destination;
+      if (origin == null || destination == null) return null;
+      return GeoUtils.distanceMeters(origin, destination);
+    }
+
+    final pending = <PickupRequestEntity>[
+      for (final n in discovery.pickups) n.pickup,
+    ];
     final mine = acceptedAsync.value ?? const <PickupRequestEntity>[];
 
     final nowOpen = pending.where((p) => !p.isUpcoming).toList()
@@ -58,6 +75,8 @@ class AvailablePickupsScreen extends HookConsumerWidget {
     Future<void> refresh() async {
       ref.invalidate(availablePickupsProvider);
       ref.invalidate(riderAcceptedPickupsProvider);
+      // Picks up a radius an admin has since changed.
+      ref.invalidate(pickupDiscoveryRadiusKmProvider);
     }
 
     return DefaultTabController(
@@ -89,8 +108,14 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                 return _EmptyState(
                   isDark: isDark,
                   title: 'No Pending Pickups',
-                  message: 'New customer pickup requests\nwill appear here.',
+                  message: discovery.outOfRangeCount > 0
+                      ? 'Nothing within ${_km(discovery.radiusKm)} of you.\n'
+                          '${discovery.outOfRangeCount} open request'
+                          '${discovery.outOfRangeCount == 1 ? ' is' : 's are'} '
+                          'further out — riders nearer to them get those first.'
+                      : 'New customer pickup requests\nwithin ${_km(discovery.radiusKm)} of you\nwill appear here.',
                   onRefresh: refresh,
+                  banner: _RangeNotice(discovery: discovery),
                 );
               }
               return RefreshIndicator(
@@ -99,6 +124,7 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _RangeNotice(discovery: discovery),
                     if (myDueScheduled.isNotEmpty) ...[
                       const _SectionHeader('Your scheduled pickups — due now'),
                       ...myDueScheduled.map(
@@ -106,6 +132,7 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                           pickup: pickup,
                           isDark: isDark,
                           theme: theme,
+                          distanceMeters: distanceTo(pickup),
                           primaryLabel: 'Start Navigation',
                           primaryIcon: Icons.navigation_outlined,
                           onPrimary: () => context.push('/rider/navigation', extra: pickup),
@@ -119,6 +146,7 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                         pickup: pickup,
                         isDark: isDark,
                         theme: theme,
+                        distanceMeters: distanceTo(pickup),
                         primaryLabel: 'Accept Pickup',
                         primaryIcon: Icons.check_circle_outline,
                         onPrimary: () => _onAccept(context, ref, pickup),
@@ -136,7 +164,7 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                   isDark: isDark,
                   title: 'Nothing Scheduled Yet',
                   message:
-                      'Subscription pickups for the next 3 days\nappear here for you to claim.',
+                      'Subscription pickups for the next 3 days\nwithin ${_km(discovery.radiusKm)} of you\nappear here for you to claim.',
                   onRefresh: refresh,
                 );
               }
@@ -160,6 +188,7 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                           pickup: pickup,
                           isDark: isDark,
                           theme: theme,
+                          distanceMeters: distanceTo(pickup),
                           claimedByMe: true,
                           primaryLabel: 'Claimed',
                           primaryIcon: Icons.event_available_outlined,
@@ -177,6 +206,7 @@ class AvailablePickupsScreen extends HookConsumerWidget {
                                 pickup: pickup,
                                 isDark: isDark,
                                 theme: theme,
+                                distanceMeters: distanceTo(pickup),
                                 primaryLabel: 'Claim',
                                 primaryIcon: Icons.event_available_outlined,
                                 onPrimary: () => _onAccept(context, ref, pickup),
@@ -195,6 +225,10 @@ class AvailablePickupsScreen extends HookConsumerWidget {
       ),
     );
   }
+
+  /// "4 km" / "3.5 km" — no trailing zero on a whole number of kilometres.
+  static String _km(double km) =>
+      '${km == km.roundToDouble() ? km.toStringAsFixed(0) : km.toStringAsFixed(1)} km';
 
   static int _bySlotThenCreated(PickupRequestEntity a, PickupRequestEntity b) {
     final aAt = a.slotStartsAt ?? a.createdAt;
@@ -374,11 +408,16 @@ class _EmptyState extends StatelessWidget {
   final String message;
   final Future<void> Function() onRefresh;
 
+  /// Shown above the illustration. An empty list is exactly when the reason for
+  /// it matters most, so the range notice belongs here too.
+  final Widget? banner;
+
   const _EmptyState({
     required this.isDark,
     required this.title,
     required this.message,
     required this.onRefresh,
+    this.banner,
   });
 
   @override
@@ -389,6 +428,11 @@ class _EmptyState extends StatelessWidget {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          if (banner != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: banner!,
+            ),
           const SizedBox(height: 120),
           Center(
             child: Container(
@@ -422,10 +466,106 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// Why this list is as short as it is.
+///
+/// Riders used to see every open request in the country, so an unexplained
+/// short list now reads as a bug. This says which of the two things is going on:
+/// the list is scoped to what is near them, or dispatch cannot place them at all
+/// and is therefore not ringing their phone for anything.
+class _RangeNotice extends ConsumerWidget {
+  const _RangeNotice({required this.discovery});
+
+  final PickupDiscovery discovery;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tracking = ref.watch(riderTrackingProvider);
+    final blocked = tracking.isPermissionBlocked;
+    final located = discovery.riderLocated;
+
+    if (located && discovery.outOfRangeCount == 0 && !blocked) {
+      return const SizedBox.shrink();
+    }
+
+    final warn = blocked || !located;
+    final color = warn ? Colors.orange : Colors.blueGrey;
+    final radius = AvailablePickupsScreen._km(discovery.radiusKm);
+
+    final String message;
+    if (blocked) {
+      message = 'Location is off, so dispatch cannot tell which pickups are '
+          'near you — and new requests are only sent to riders within $radius '
+          'of the customer. Turn location on to get your share of the work.';
+    } else if (!located) {
+      message = 'Dispatch has no position for you yet. New requests go to '
+          'riders within $radius of the customer, so this list is showing '
+          'everything until your location comes through.';
+    } else {
+      final n = discovery.outOfRangeCount;
+      message = 'Showing pickups within $radius of you. '
+          '$n other${n == 1 ? '' : 's'} ${n == 1 ? 'is' : 'are'} further out, '
+          'closer to another rider.';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            warn ? Icons.location_off_outlined : Icons.my_location_outlined,
+            size: 18,
+            color: color.shade700,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message,
+                  style: TextStyle(fontSize: 12, color: color.shade800, height: 1.4),
+                ),
+                if (blocked) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () async {
+                      final access = await ref
+                          .read(riderTrackingProvider.notifier)
+                          .retryPermission();
+                      if (access == LocationAccess.deniedForever) {
+                        await LocationService.instance.openAppSettings();
+                      } else if (access == LocationAccess.serviceDisabled) {
+                        await LocationService.instance.openLocationSettings();
+                      }
+                    },
+                    child: const Text('Turn on location'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PickupCard extends StatelessWidget {
   final PickupRequestEntity pickup;
   final bool isDark;
   final ThemeData theme;
+
+  /// Straight-line metres from the rider, or null when either end has no
+  /// coordinates.
+  final double? distanceMeters;
+
   final String primaryLabel;
   final IconData primaryIcon;
   final VoidCallback? onPrimary;
@@ -440,6 +580,7 @@ class _PickupCard extends StatelessWidget {
     required this.primaryLabel,
     required this.primaryIcon,
     required this.onPrimary,
+    this.distanceMeters,
     this.secondaryLabel,
     this.onSecondary,
     this.claimedByMe = false,
@@ -625,6 +766,41 @@ class _PickupCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          // How far the job is, straight-line. The first thing
+                          // a rider weighs before accepting.
+                          if (distanceMeters != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary
+                                    .withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.near_me_outlined,
+                                    size: 12,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    GeoUtils.formatDistance(distanceMeters!),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       if (pickup.housePhotoUrl != null &&

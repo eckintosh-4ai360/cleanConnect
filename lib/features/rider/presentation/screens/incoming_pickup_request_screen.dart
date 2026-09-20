@@ -7,7 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/config/theme.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../../core/shared/widgets/house_photo_thumbnail.dart';
+import '../../../../core/utils/geo_utils.dart';
 import '../../domain/entities/pickup_request_entity.dart';
+import '../providers/pickup_discovery_provider.dart';
 import '../providers/rider_providers.dart';
 import '../widgets/swipe_to_accept_control.dart';
 
@@ -116,6 +118,16 @@ class _IncomingPickupRequestScreenState
     _dismiss();
   }
 
+  /// Straight-line metres from the rider to this pickup, or null when either
+  /// end has no coordinates. The rider has 20 seconds to decide, and how far
+  /// away the job is is the first thing they weigh.
+  double? _distanceTo(PickupRequestEntity pickup) {
+    final origin = ref.watch(riderOriginProvider);
+    final destination = pickup.destination;
+    if (origin == null || destination == null) return null;
+    return GeoUtils.distanceMeters(origin, destination);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pickupAsync = ref.watch(pickupByIdProvider(widget.requestId));
@@ -144,6 +156,7 @@ class _IncomingPickupRequestScreenState
               }
               return _RequestContent(
                 pickup: pickup,
+                distanceMeters: _distanceTo(pickup),
                 secondsLeft: _secondsLeft,
                 processing: _processing,
                 onAccept: () => _onAccept(pickup),
@@ -199,6 +212,7 @@ class _InfoStateState extends State<_InfoState> {
 class _RequestContent extends StatelessWidget {
   const _RequestContent({
     required this.pickup,
+    required this.distanceMeters,
     required this.secondsLeft,
     required this.processing,
     required this.onAccept,
@@ -206,6 +220,7 @@ class _RequestContent extends StatelessWidget {
   });
 
   final PickupRequestEntity pickup;
+  final double? distanceMeters;
   final int secondsLeft;
   final bool processing;
   final VoidCallback onAccept;
@@ -319,6 +334,39 @@ class _RequestContent extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (distanceMeters != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CleanConnectTheme.primaryColor
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.near_me_outlined,
+                              size: 13,
+                              color: CleanConnectTheme.primaryColor,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${GeoUtils.formatDistance(distanceMeters!)} away',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: CleanConnectTheme.primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 // The rider is deciding whether to take this job in 20 seconds,

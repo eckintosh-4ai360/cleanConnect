@@ -1,3 +1,5 @@
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import 'pickup_request_entity.dart';
 
 /// The company bike an admin has assigned to this rider.
@@ -36,6 +38,14 @@ class RiderEntity {
   final double earningsThisMonth;
   final double efficiencyScore; // 0 - 100
 
+  /// Last position this rider reported, as dispatch has it. The live GPS fix in
+  /// RiderTrackingState is better when there is one, but this is already known
+  /// the moment the profile loads, so the pickups list can be scoped by
+  /// distance before the first fix of the session arrives.
+  final double? currentLat;
+  final double? currentLng;
+  final DateTime? lastLocationUpdate;
+
   const RiderEntity({
     required this.id,
     required this.fullName,
@@ -51,7 +61,19 @@ class RiderEntity {
     required this.totalWeightKg,
     required this.earningsThisMonth,
     required this.efficiencyScore,
+    this.currentLat,
+    this.currentLng,
+    this.lastLocationUpdate,
   });
+
+  /// Where dispatch last saw this rider, or null when it has no position for
+  /// them — which is what excludes them from distance-scoped dispatch.
+  LatLng? get lastKnownPosition {
+    final lat = currentLat;
+    final lng = currentLng;
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
+  }
 
   RiderEntity copyWith({
     String? id,
@@ -68,6 +90,9 @@ class RiderEntity {
     double? totalWeightKg,
     double? earningsThisMonth,
     double? efficiencyScore,
+    double? currentLat,
+    double? currentLng,
+    DateTime? lastLocationUpdate,
   }) {
     return RiderEntity(
       id: id ?? this.id,
@@ -84,6 +109,9 @@ class RiderEntity {
       totalWeightKg: totalWeightKg ?? this.totalWeightKg,
       earningsThisMonth: earningsThisMonth ?? this.earningsThisMonth,
       efficiencyScore: efficiencyScore ?? this.efficiencyScore,
+      currentLat: currentLat ?? this.currentLat,
+      currentLng: currentLng ?? this.currentLng,
+      lastLocationUpdate: lastLocationUpdate ?? this.lastLocationUpdate,
     );
   }
 }
