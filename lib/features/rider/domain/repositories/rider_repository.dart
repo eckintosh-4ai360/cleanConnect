@@ -36,7 +36,7 @@ abstract class RiderRepository {
   });
   Future<void> completeRoute(String routeId);
 
-  /// Streams all pickup requests with status 'pending' (not yet accepted).
+  /// Streams pending pickup requests this rider has not passed.
   Stream<List<PickupRequestEntity>> watchAvailablePickups();
 
   /// Streams this rider's own accepted-but-not-yet-completed pickups. Used

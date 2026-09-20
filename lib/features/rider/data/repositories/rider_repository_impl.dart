@@ -89,7 +89,8 @@ class RiderRepositoryImpl implements RiderRepository {
     final authUser = _auth.currentUser;
     return RiderEntity(
       id: _uid,
-      fullName: authUser?.userMetadata?['full_name'] as String? ?? 'Marcus Sterling',
+      fullName:
+          authUser?.userMetadata?['full_name'] as String? ?? 'Marcus Sterling',
       email: authUser?.email ?? 'marcus@cleanconnect.com',
       phoneNumber: '+1 (555) 234-5678',
       profilePhotoUrl:
@@ -115,10 +116,10 @@ class RiderRepositoryImpl implements RiderRepository {
         .stream(primaryKey: ['id'])
         .eq('assigned_rider_id', _uid)
         .asyncMap((rows) async {
-      final dispatched = await _activeRouteRow();
-      if (dispatched != null) return _buildActiveRoute(dispatched);
-      return _routeFromPickups(rows.map(_pickupFromRow).toList());
-    });
+          final dispatched = await _activeRouteRow();
+          if (dispatched != null) return _buildActiveRoute(dispatched);
+          return _routeFromPickups(rows.map(_pickupFromRow).toList());
+        });
   }
 
   @override
@@ -131,7 +132,9 @@ class RiderRepositoryImpl implements RiderRepository {
         .select()
         .eq('assigned_rider_id', _uid);
     return _routeFromPickups(
-      (rows as List).map((r) => _pickupFromRow(r as Map<String, dynamic>)).toList(),
+      (rows as List)
+          .map((r) => _pickupFromRow(r as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -158,32 +161,48 @@ class RiderRepositoryImpl implements RiderRepository {
     }
 
     // A scheduled pickup claimed for later in the week is not part of today.
-    final endOfToday = DateTime(today.year, today.month, today.day).add(const Duration(days: 1));
+    final endOfToday = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).add(const Duration(days: 1));
     bool dueByToday(PickupRequestEntity p) =>
-        !p.isScheduled || p.slotStartsAt == null || p.slotStartsAt!.isBefore(endOfToday);
+        !p.isScheduled ||
+        p.slotStartsAt == null ||
+        p.slotStartsAt!.isBefore(endOfToday);
 
-    final relevant = pickups
-        .where((p) => (p.status == 'accepted' && dueByToday(p)) || completedToday(p))
-        .toList()
-      ..sort((a, b) => (a.slotStartsAt ?? a.acceptedAt ?? a.createdAt)
-          .compareTo(b.slotStartsAt ?? b.acceptedAt ?? b.createdAt));
+    final relevant =
+        pickups
+            .where(
+              (p) =>
+                  (p.status == 'accepted' && dueByToday(p)) ||
+                  completedToday(p),
+            )
+            .toList()
+          ..sort(
+            (a, b) => (a.slotStartsAt ?? a.acceptedAt ?? a.createdAt).compareTo(
+              b.slotStartsAt ?? b.acceptedAt ?? b.createdAt,
+            ),
+          );
     if (relevant.isEmpty) return null;
 
     final stops = <RouteStopEntity>[];
     for (var i = 0; i < relevant.length; i++) {
       final p = relevant[i];
-      stops.add(RouteStopEntity(
-        id: p.id,
-        customerName: p.customerName,
-        address: p.location,
-        binType: p.binTypes.isEmpty ? 'general' : p.binTypes.first,
-        status: p.status == 'completed' ? 'collected' : 'pending',
-        estimatedWeightKg: null,
-        latitude: p.destinationLat ?? 0,
-        longitude: p.destinationLng ?? 0,
-        stopOrder: i + 1,
-        pickupRequest: p,
-      ));
+      stops.add(
+        RouteStopEntity(
+          id: p.id,
+          customerName: p.customerName,
+          address: p.location,
+          binType: p.binTypes.isEmpty ? 'general' : p.binTypes.first,
+          status: p.status == 'completed' ? 'collected' : 'pending',
+          estimatedWeightKg: null,
+          latitude: p.destinationLat ?? 0,
+          longitude: p.destinationLng ?? 0,
+          stopOrder: i + 1,
+          pickupRequest: p,
+        ),
+      );
     }
 
     final pending = stops.where((s) => s.status == 'pending').length;
@@ -200,8 +219,8 @@ class RiderRepositoryImpl implements RiderRepository {
       estimatedEndTime: pending == 0
           ? null
           : DateTime.now()
-              .add(GeoUtils.estimateDuration(distanceKm * 1000))
-              .add(Duration(minutes: 10 * pending)),
+                .add(GeoUtils.estimateDuration(distanceKm * 1000))
+                .add(Duration(minutes: 10 * pending)),
       status: 'active',
       stops: stops,
     );
@@ -236,8 +255,11 @@ class RiderRepositoryImpl implements RiderRepository {
       routeName: r['route_name'] as String? ?? 'Daily Route',
       zone: r['zone'] as String? ?? 'Central District',
       totalDistanceKm: (r['total_distance_km'] as num?)?.toDouble() ?? 12.0,
-      completedDistanceKm: (r['completed_distance_km'] as num?)?.toDouble() ?? 0.0,
-      totalStops: stops.isEmpty ? (r['total_stops'] as num?)?.toInt() ?? 0 : stops.length,
+      completedDistanceKm:
+          (r['completed_distance_km'] as num?)?.toDouble() ?? 0.0,
+      totalStops: stops.isEmpty
+          ? (r['total_stops'] as num?)?.toInt() ?? 0
+          : stops.length,
       completedStops: completedCount,
       startTime: r['start_time'] != null
           ? DateTime.tryParse(r['start_time'].toString()) ?? DateTime.now()
@@ -251,18 +273,18 @@ class RiderRepositoryImpl implements RiderRepository {
   }
 
   RouteStopEntity _stopFromRow(Map<String, dynamic> r) => RouteStopEntity(
-        id: r['id'] as String,
-        customerName: r['customer_name'] as String? ?? 'Customer',
-        address: r['address'] as String? ?? '',
-        binType: r['bin_type'] as String? ?? 'general',
-        status: r['status'] as String? ?? 'pending',
-        estimatedWeightKg: (r['estimated_weight_kg'] as num?)?.toDouble() ?? 15.0,
-        actualWeightKg: (r['actual_weight_kg'] as num?)?.toDouble(),
-        notes: r['notes'] as String?,
-        latitude: (r['latitude'] as num?)?.toDouble() ?? 5.3018,
-        longitude: (r['longitude'] as num?)?.toDouble() ?? -1.9930,
-        stopOrder: (r['stop_order'] as num?)?.toInt() ?? 1,
-      );
+    id: r['id'] as String,
+    customerName: r['customer_name'] as String? ?? 'Customer',
+    address: r['address'] as String? ?? '',
+    binType: r['bin_type'] as String? ?? 'general',
+    status: r['status'] as String? ?? 'pending',
+    estimatedWeightKg: (r['estimated_weight_kg'] as num?)?.toDouble() ?? 15.0,
+    actualWeightKg: (r['actual_weight_kg'] as num?)?.toDouble(),
+    notes: r['notes'] as String?,
+    latitude: (r['latitude'] as num?)?.toDouble() ?? 5.3018,
+    longitude: (r['longitude'] as num?)?.toDouble() ?? -1.9930,
+    stopOrder: (r['stop_order'] as num?)?.toInt() ?? 1,
+  );
 
   @override
   Future<RouteStopEntity> markStopCollected({
@@ -272,12 +294,15 @@ class RiderRepositoryImpl implements RiderRepository {
     String? qrCodeData,
     String? notes,
   }) async {
-    final row = await _db.rpc('mark_stop_collected', params: {
-      'p_stop_id': stopId,
-      'p_weight_kg': weightKg,
-      'p_notes': notes,
-      'p_qr_code_data': qrCodeData,
-    });
+    final row = await _db.rpc(
+      'mark_stop_collected',
+      params: {
+        'p_stop_id': stopId,
+        'p_weight_kg': weightKg,
+        'p_notes': notes,
+        'p_qr_code_data': qrCodeData,
+      },
+    );
     return _stopFromRow(row as Map<String, dynamic>);
   }
 
@@ -300,7 +325,10 @@ class RiderRepositoryImpl implements RiderRepository {
   Future<void> completeRoute(String routeId) async {
     await _db
         .from('routes')
-        .update({'status': 'completed', 'completed_at': DateTime.now().toUtc().toIso8601String()})
+        .update({
+          'status': 'completed',
+          'completed_at': DateTime.now().toUtc().toIso8601String(),
+        })
         .eq('id', routeId);
   }
 
@@ -323,16 +351,21 @@ class RiderRepositoryImpl implements RiderRepository {
         .select()
         .eq('rider_id', _uid)
         .order('collected_at', ascending: false);
-    return (rows as List).map((r) => _collectionFromRow(r as Map<String, dynamic>)).toList();
+    return (rows as List)
+        .map((r) => _collectionFromRow(r as Map<String, dynamic>))
+        .toList();
   }
 
-  CollectionLogEntity _collectionFromRow(Map<String, dynamic> r) => CollectionLogEntity(
+  CollectionLogEntity _collectionFromRow(Map<String, dynamic> r) =>
+      CollectionLogEntity(
         id: r['id'] as String,
         customerName: r['customer_name'] as String? ?? 'Customer',
         address: r['address'] as String? ?? '',
         binType: r['bin_type'] as String? ?? 'general',
         weightKg: (r['weight_kg'] as num?)?.toDouble() ?? 0.0,
-        collectedAt: DateTime.tryParse(r['collected_at']?.toString() ?? '') ?? DateTime.now(),
+        collectedAt:
+            DateTime.tryParse(r['collected_at']?.toString() ?? '') ??
+            DateTime.now(),
         status: r['status'] as String? ?? 'verified',
         notes: r['notes'] as String?,
         qrCodeData: r['qr_verified'] == true ? 'QR-VERIFIED' : null,
@@ -352,7 +385,9 @@ class RiderRepositoryImpl implements RiderRepository {
         .from('riders')
         .stream(primaryKey: ['id'])
         .eq('id', _uid)
-        .asyncMap((rows) => _computePerformanceStats(rows.isEmpty ? {} : rows.first));
+        .asyncMap(
+          (rows) => _computePerformanceStats(rows.isEmpty ? {} : rows.first),
+        );
   }
 
   @override
@@ -361,25 +396,33 @@ class RiderRepositoryImpl implements RiderRepository {
     return _computePerformanceStats(row ?? {});
   }
 
-  Future<RiderPerformanceEntity> _computePerformanceStats(Map<String, dynamic> r) async {
+  Future<RiderPerformanceEntity> _computePerformanceStats(
+    Map<String, dynamic> r,
+  ) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final startOfWeek = today.subtract(Duration(days: now.weekday - 1));
     final startOfMonth = DateTime(now.year, now.month, 1);
     final windowStart = today.subtract(const Duration(days: 34));
 
-    final eventRows = ((await _db
-            .from('collection_events')
-            .select('weight_kg, rider_earning, customer_id, address, collected_at')
-            .eq('rider_id', _uid)
-            .gte('collected_at', windowStart.toIso8601String())) as List)
-        .cast<Map<String, dynamic>>();
+    final eventRows =
+        ((await _db
+                    .from('collection_events')
+                    .select(
+                      'weight_kg, rider_earning, customer_id, address, collected_at',
+                    )
+                    .eq('rider_id', _uid)
+                    .gte('collected_at', windowStart.toIso8601String()))
+                as List)
+            .cast<Map<String, dynamic>>();
 
-    final stopRows = ((await _db
-            .from('route_stops')
-            .select('status, created_at')
-            .gte('created_at', windowStart.toIso8601String())) as List)
-        .cast<Map<String, dynamic>>();
+    final stopRows =
+        ((await _db
+                    .from('route_stops')
+                    .select('status, created_at')
+                    .gte('created_at', windowStart.toIso8601String()))
+                as List)
+            .cast<Map<String, dynamic>>();
 
     bool onOrAfter(DateTime cutoff, dynamic raw) {
       final ts = DateTime.tryParse(raw?.toString() ?? '');
@@ -388,36 +431,56 @@ class RiderRepositoryImpl implements RiderRepository {
 
     bool sameDay(DateTime a, dynamic raw) {
       final ts = DateTime.tryParse(raw?.toString() ?? '');
-      return ts != null && ts.year == a.year && ts.month == a.month && ts.day == a.day;
+      return ts != null &&
+          ts.year == a.year &&
+          ts.month == a.month &&
+          ts.day == a.day;
     }
 
-    double weightOf(Iterable<Map<String, dynamic>> rows) =>
-        rows.fold(0.0, (sum, e) => sum + ((e['weight_kg'] as num?)?.toDouble() ?? 0.0));
+    double weightOf(Iterable<Map<String, dynamic>> rows) => rows.fold(
+      0.0,
+      (sum, e) => sum + ((e['weight_kg'] as num?)?.toDouble() ?? 0.0),
+    );
 
-    double earningsOf(Iterable<Map<String, dynamic>> rows) =>
-        rows.fold(0.0, (sum, e) => sum + ((e['rider_earning'] as num?)?.toDouble() ?? 0.0));
+    double earningsOf(Iterable<Map<String, dynamic>> rows) => rows.fold(
+      0.0,
+      (sum, e) => sum + ((e['rider_earning'] as num?)?.toDouble() ?? 0.0),
+    );
 
     int countStatus(Iterable<Map<String, dynamic>> rows, String status) =>
         rows.where((s) => s['status'] == status).length;
 
-    final weekEvents = eventRows.where((e) => onOrAfter(startOfWeek, e['collected_at'])).toList();
-    final monthEvents = eventRows.where((e) => onOrAfter(startOfMonth, e['collected_at'])).toList();
+    final weekEvents = eventRows
+        .where((e) => onOrAfter(startOfWeek, e['collected_at']))
+        .toList();
+    final monthEvents = eventRows
+        .where((e) => onOrAfter(startOfMonth, e['collected_at']))
+        .toList();
 
     final weightThisWeek = weightOf(weekEvents);
     final earningsThisWeek = earningsOf(weekEvents);
 
     final topLocationsThisMonth = monthEvents
-        .map((e) => (e['customer_id'] as String?) ?? (e['address'] as String? ?? ''))
+        .map(
+          (e) =>
+              (e['customer_id'] as String?) ?? (e['address'] as String? ?? ''),
+        )
         .where((v) => v.isNotEmpty)
         .toSet()
         .length;
 
-    final weekStops = stopRows.where((s) => onOrAfter(startOfWeek, s['created_at'])).toList();
-    final monthStops = stopRows.where((s) => onOrAfter(startOfMonth, s['created_at'])).toList();
+    final weekStops = stopRows
+        .where((s) => onOrAfter(startOfWeek, s['created_at']))
+        .toList();
+    final monthStops = stopRows
+        .where((s) => onOrAfter(startOfMonth, s['created_at']))
+        .toList();
     final monthCollected = countStatus(monthStops, 'collected');
     final monthProblem = countStatus(monthStops, 'problem');
     final monthResolved = monthCollected + monthProblem;
-    final onTimeDeliveryRate = monthResolved == 0 ? 1.0 : monthCollected / monthResolved;
+    final onTimeDeliveryRate = monthResolved == 0
+        ? 1.0
+        : monthCollected / monthResolved;
 
     final fallbackScore = (r['efficiency_score'] as num?)?.toDouble() ?? 100.0;
     // Weekly efficiency scores (null if no stops on that day)
@@ -430,8 +493,9 @@ class RiderRepositoryImpl implements RiderRepository {
       return resolved == 0 ? null : (collected / resolved) * 100;
     });
 
-    final avgEarningsPerCollection =
-        monthEvents.isEmpty ? 0.0 : earningsOf(monthEvents) / monthEvents.length;
+    final avgEarningsPerCollection = monthEvents.isEmpty
+        ? 0.0
+        : earningsOf(monthEvents) / monthEvents.length;
 
     return RiderPerformanceEntity(
       efficiencyScore: fallbackScore,
@@ -470,21 +534,29 @@ class RiderRepositoryImpl implements RiderRepository {
         .select()
         .eq('rider_id', _uid)
         .order('created_at', ascending: false);
-    return (rows as List).map((r) => _notificationFromRow(r as Map<String, dynamic>)).toList();
+    return (rows as List)
+        .map((r) => _notificationFromRow(r as Map<String, dynamic>))
+        .toList();
   }
 
-  RiderNotificationEntity _notificationFromRow(Map<String, dynamic> r) => RiderNotificationEntity(
+  RiderNotificationEntity _notificationFromRow(Map<String, dynamic> r) =>
+      RiderNotificationEntity(
         id: r['id'] as String,
         title: r['title'] as String? ?? 'Notification',
         message: r['message'] as String? ?? '',
         type: r['type'] as String? ?? 'system',
-        receivedAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+        receivedAt:
+            DateTime.tryParse(r['created_at']?.toString() ?? '') ??
+            DateTime.now(),
         isRead: r['is_read'] as bool? ?? false,
       );
 
   @override
   Future<void> markNotificationRead(String notificationId) async {
-    await _db.from('rider_notifications').update({'is_read': true}).eq('id', notificationId);
+    await _db
+        .from('rider_notifications')
+        .update({'is_read': true})
+        .eq('id', notificationId);
   }
 
   @override
@@ -496,11 +568,64 @@ class RiderRepositoryImpl implements RiderRepository {
 
   @override
   Stream<List<PickupRequestEntity>> watchAvailablePickups() {
-    return _db
-        .from('pickup_requests')
-        .stream(primaryKey: ['id'])
-        .eq('status', 'pending')
-        .map((rows) => rows.map(_pickupFromRow).toList());
+    // Passing a pickup does not cancel it: it stays pending for every other
+    // rider. Combine the open-pickup stream with this rider's rejection rows
+    // so an item disappears for the rider who passed it, including after a
+    // refresh or a new sign-in.
+    final controller = StreamController<List<PickupRequestEntity>>();
+    var pendingRows = const <Map<String, dynamic>>[];
+    var passedRequestIds = <String>{};
+    var receivedPendingRows = false;
+    var receivedPassedRows = false;
+
+    late final StreamSubscription<List<Map<String, dynamic>>>
+    pendingSubscription;
+    late final StreamSubscription<List<Map<String, dynamic>>>
+    passedSubscription;
+
+    void emitAvailablePickups() {
+      if (!receivedPendingRows || !receivedPassedRows || controller.isClosed) {
+        return;
+      }
+
+      controller.add(
+        pendingRows
+            .where((row) => !passedRequestIds.contains(row['id']))
+            .map(_pickupFromRow)
+            .toList(),
+      );
+    }
+
+    controller.onListen = () {
+      pendingSubscription = _db
+          .from('pickup_requests')
+          .stream(primaryKey: ['id'])
+          .eq('status', 'pending')
+          .listen((rows) {
+            pendingRows = rows;
+            receivedPendingRows = true;
+            emitAvailablePickups();
+          }, onError: controller.addError);
+
+      passedSubscription = _db
+          .from('pickup_request_rejections')
+          .stream(primaryKey: ['request_id', 'rider_id'])
+          .eq('rider_id', _uid)
+          .listen((rows) {
+            passedRequestIds = rows
+                .map((row) => row['request_id'] as String)
+                .toSet();
+            receivedPassedRows = true;
+            emitAvailablePickups();
+          }, onError: controller.addError);
+    };
+
+    controller.onCancel = () async {
+      await pendingSubscription.cancel();
+      await passedSubscription.cancel();
+    };
+
+    return controller.stream;
   }
 
   @override
@@ -569,10 +694,10 @@ class RiderRepositoryImpl implements RiderRepository {
     required String requestId,
     required String serialNumber,
   }) async {
-    final result = await _db.rpc('verify_pickup_bin', params: {
-      'p_request_id': requestId,
-      'p_serial_number': serialNumber,
-    });
+    final result = await _db.rpc(
+      'verify_pickup_bin',
+      params: {'p_request_id': requestId, 'p_serial_number': serialNumber},
+    );
     final map = result as Map<String, dynamic>;
     return BinVerificationResult(
       verified: map['verified'] as bool? ?? false,
@@ -591,36 +716,44 @@ class RiderRepositoryImpl implements RiderRepository {
     required String qrCodeData,
     String? notes,
   }) async {
-    await _db.rpc('complete_pickup', params: {
-      'p_request_id': requestId,
-      'p_weight_kg': weightKg,
-      'p_qr_code_data': qrCodeData,
-      'p_notes': notes,
-    });
+    await _db.rpc(
+      'complete_pickup',
+      params: {
+        'p_request_id': requestId,
+        'p_weight_kg': weightKg,
+        'p_qr_code_data': qrCodeData,
+        'p_notes': notes,
+      },
+    );
   }
 
-  PickupRequestEntity _pickupFromRow(Map<String, dynamic> r) => PickupRequestEntity(
-        id: r['id'] as String,
-        customerId: r['customer_id'] as String? ?? '',
-        customerName: r['customer_name'] as String? ?? 'Customer',
-        customerEmail: r['customer_email'] as String? ?? '',
-        customerPhone: r['customer_phone'] as String? ?? '',
-        location: r['location'] as String? ?? 'Unknown location',
-        destinationLat: (r['location_lat'] as num?)?.toDouble(),
-        destinationLng: (r['location_lng'] as num?)?.toDouble(),
-        timeSlot: r['time_slot'] as String? ?? '',
-        binTypes: (r['bin_types'] as List<dynamic>?)?.cast<String>() ?? ['general'],
-        status: r['status'] as String? ?? 'pending',
-        assignedRiderId: r['assigned_rider_id'] as String?,
-        assignedRiderName: r['assigned_rider_name'] as String?,
-        createdAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
-        acceptedAt: r['accepted_at'] != null
-            ? DateTime.tryParse(r['accepted_at'].toString())
-            : null,
-        housePhotoUrl: r['house_photo_url'] as String?,
-        source: r['source'] as String? ?? 'on_demand',
-        slotStartsAt: DateTime.tryParse(r['slot_starts_at']?.toString() ?? '')?.toLocal(),
-      );
+  PickupRequestEntity _pickupFromRow(
+    Map<String, dynamic> r,
+  ) => PickupRequestEntity(
+    id: r['id'] as String,
+    customerId: r['customer_id'] as String? ?? '',
+    customerName: r['customer_name'] as String? ?? 'Customer',
+    customerEmail: r['customer_email'] as String? ?? '',
+    customerPhone: r['customer_phone'] as String? ?? '',
+    location: r['location'] as String? ?? 'Unknown location',
+    destinationLat: (r['location_lat'] as num?)?.toDouble(),
+    destinationLng: (r['location_lng'] as num?)?.toDouble(),
+    timeSlot: r['time_slot'] as String? ?? '',
+    binTypes: (r['bin_types'] as List<dynamic>?)?.cast<String>() ?? ['general'],
+    status: r['status'] as String? ?? 'pending',
+    assignedRiderId: r['assigned_rider_id'] as String?,
+    assignedRiderName: r['assigned_rider_name'] as String?,
+    createdAt:
+        DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+    acceptedAt: r['accepted_at'] != null
+        ? DateTime.tryParse(r['accepted_at'].toString())
+        : null,
+    housePhotoUrl: r['house_photo_url'] as String?,
+    source: r['source'] as String? ?? 'on_demand',
+    slotStartsAt: DateTime.tryParse(
+      r['slot_starts_at']?.toString() ?? '',
+    )?.toLocal(),
+  );
 
   // ── Company bike ─────────────────────────────────────────────────────────
 
@@ -674,11 +807,11 @@ class RiderRepositoryImpl implements RiderRepository {
   }
 
   AssignedBikeEntity _bikeFromRow(Map<String, dynamic> r) => AssignedBikeEntity(
-        id: r['id'] as String,
-        name: r['name'] as String? ?? 'Company bike',
-        plateNumber: r['plate_number'] as String?,
-        type: r['type'] as String?,
-      );
+    id: r['id'] as String,
+    name: r['name'] as String? ?? 'Company bike',
+    plateNumber: r['plate_number'] as String?,
+    type: r['type'] as String?,
+  );
 
   @override
   Future<void> updateRiderLocation({
@@ -688,13 +821,16 @@ class RiderRepositoryImpl implements RiderRepository {
     double? speed,
     String? currentJobId,
   }) async {
-    await _db.rpc('update_rider_location', params: {
-      'p_lat': latitude,
-      'p_lng': longitude,
-      'p_heading': heading,
-      'p_speed': speed,
-      'p_current_job_id': currentJobId,
-    });
+    await _db.rpc(
+      'update_rider_location',
+      params: {
+        'p_lat': latitude,
+        'p_lng': longitude,
+        'p_heading': heading,
+        'p_speed': speed,
+        'p_current_job_id': currentJobId,
+      },
+    );
   }
 
   // ── Incident Reports (waste dumps / choked gutters) ──────────────────────
@@ -715,10 +851,14 @@ class RiderRepositoryImpl implements RiderRepository {
     required String reporterId,
     required String status,
   }) async {
-    await _db.from('incident_reports').update({'status': status}).eq('id', reportId);
+    await _db
+        .from('incident_reports')
+        .update({'status': status})
+        .eq('id', reportId);
   }
 
-  IncidentReportEntity _incidentReportFromRow(Map<String, dynamic> r) => IncidentReportEntity(
+  IncidentReportEntity _incidentReportFromRow(Map<String, dynamic> r) =>
+      IncidentReportEntity(
         id: r['id'] as String,
         reporterId: r['reporter_id'] as String? ?? '',
         reporterName: r['reporter_name'] as String? ?? 'Customer',
@@ -730,6 +870,8 @@ class RiderRepositoryImpl implements RiderRepository {
         status: r['status'] as String? ?? 'pending',
         assignedRiderId: r['assigned_rider_id'] as String?,
         assignedRiderName: r['assigned_rider_name'] as String?,
-        createdAt: DateTime.tryParse(r['created_at']?.toString() ?? '') ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse(r['created_at']?.toString() ?? '') ??
+            DateTime.now(),
       );
 }
