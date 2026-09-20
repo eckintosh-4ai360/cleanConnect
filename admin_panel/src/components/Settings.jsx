@@ -317,6 +317,63 @@ export default function Settings() {
     setMaxPickupsSaving(false);
   };
 
+  // ── Pickup discovery: how far a new request travels to find a rider ────────
+  const [discoveryForm, setDiscoveryForm] = useState({ radius: '4', maxRadius: '12', escalation: '3' });
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoverySaving, setDiscoverySaving] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchDiscovery = async () => {
+      setDiscoveryLoading(true);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('pickup_discovery_radius_km, pickup_discovery_max_radius_km, pickup_discovery_escalation_minutes')
+        .eq('id', true)
+        .maybeSingle();
+      if (mounted && !error && data) {
+        setDiscoveryForm({
+          radius: data.pickup_discovery_radius_km != null ? String(Number(data.pickup_discovery_radius_km)) : '4',
+          maxRadius: data.pickup_discovery_max_radius_km != null ? String(Number(data.pickup_discovery_max_radius_km)) : '12',
+          escalation: data.pickup_discovery_escalation_minutes != null ? String(data.pickup_discovery_escalation_minutes) : '3',
+        });
+      }
+      if (error) console.warn('app_settings (pickup discovery) fetch:', error);
+      if (mounted) setDiscoveryLoading(false);
+    };
+    fetchDiscovery();
+    return () => { mounted = false; };
+  }, []);
+
+  const parsedRadius = parseFloat(discoveryForm.radius);
+  const parsedMaxRadius = parseFloat(discoveryForm.maxRadius);
+  const parsedEscalation = parseInt(discoveryForm.escalation, 10);
+  const discoveryIsValid =
+    Number.isFinite(parsedRadius) && parsedRadius > 0 &&
+    Number.isFinite(parsedMaxRadius) && parsedMaxRadius >= parsedRadius &&
+    Number.isFinite(parsedEscalation) && parsedEscalation >= 1;
+
+  const handleSaveDiscovery = async (e) => {
+    e.preventDefault();
+    if (!discoveryIsValid) {
+      alert('Enter a radius above 0, a maximum no smaller than it, and a wait of at least 1 minute.');
+      return;
+    }
+    setDiscoverySaving(true);
+    const { error } = await supabase.from('app_settings').upsert({
+      id: true,
+      pickup_discovery_radius_km: Math.round(parsedRadius * 100) / 100,
+      pickup_discovery_max_radius_km: Math.round(parsedMaxRadius * 100) / 100,
+      pickup_discovery_escalation_minutes: parsedEscalation,
+    }, { onConflict: 'id' });
+    if (error) {
+      alert('Failed to save pickup discovery settings: ' + error.message);
+    } else {
+      alert('Pickup discovery saved. It applies to requests created from now on.');
+    }
+    setDiscoverySaving(false);
+  };
+
   // ── Rider commission: share of each pickup's value paid to the rider ────────
   const [commissionForm, setCommissionForm] = useState('70');
   const [commissionLoading, setCommissionLoading] = useState(false);
@@ -611,6 +668,71 @@ export default function Settings() {
             <div>
               <button className="btn-primary" type="submit" disabled={maxPickupsSaving || maxPickupsLoading} style={{ padding: '8px 16px', fontSize: '12px' }}>
                 {maxPickupsSaving ? 'Saving…' : 'Save Rider Pickup Limit'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* ── Pickup Discovery Radius ── */}
+        <div className="card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px' }}>Pickup Discovery Radius</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              How far a new pickup request travels to find a rider. A request is offered only to
+              riders within the radius of the customer's address, so a job in Tarkwa never rings a
+              phone in Accra. If nobody nearby takes it, the circle doubles every few minutes up to
+              the maximum, alerting only the riders it newly reaches. Set the maximum equal to the
+              radius to switch that off. Straight-line distance, measured from each rider's last
+              reported position.
+            </p>
+          </div>
+          <form onSubmit={handleSaveDiscovery} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ maxWidth: '220px' }}>
+                <label>Radius (km)</label>
+                <input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  value={discoveryForm.radius}
+                  onChange={(e) => setDiscoveryForm({ ...discoveryForm, radius: e.target.value })}
+                  placeholder={discoveryLoading ? 'Loading…' : 'e.g. 4'}
+                />
+              </div>
+              <div className="form-group" style={{ maxWidth: '220px' }}>
+                <label>Widen to at most (km)</label>
+                <input
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  value={discoveryForm.maxRadius}
+                  onChange={(e) => setDiscoveryForm({ ...discoveryForm, maxRadius: e.target.value })}
+                  placeholder={discoveryLoading ? 'Loading…' : 'e.g. 12'}
+                />
+              </div>
+              <div className="form-group" style={{ maxWidth: '220px' }}>
+                <label>Wait before widening (min)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={discoveryForm.escalation}
+                  onChange={(e) => setDiscoveryForm({ ...discoveryForm, escalation: e.target.value })}
+                  placeholder={discoveryLoading ? 'Loading…' : 'e.g. 3'}
+                />
+              </div>
+            </div>
+            {discoveryIsValid && (
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                A new request reaches riders within {parsedRadius} km. Unclaimed after{' '}
+                {parsedEscalation} min it widens to {Math.min(parsedMaxRadius, parsedRadius * 2)} km, and
+                keeps doubling every {parsedEscalation} min until it reaches {parsedMaxRadius} km — the
+                last step also reaches riders whose location is unknown.
+              </p>
+            )}
+            <div>
+              <button className="btn-primary" type="submit" disabled={discoverySaving || discoveryLoading || !discoveryIsValid} style={{ padding: '8px 16px', fontSize: '12px' }}>
+                {discoverySaving ? 'Saving…' : 'Save Pickup Discovery'}
               </button>
             </div>
           </form>
