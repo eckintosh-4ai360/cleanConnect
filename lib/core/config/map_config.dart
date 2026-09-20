@@ -40,6 +40,27 @@ class MapConfig {
   /// predictable for both the DB and Realtime fan-out.
   static const Duration riderUploadInterval = Duration(seconds: 5);
 
+  // ── Presence tracking ────────────────────────────────────────────────────
+  // An on-duty rider with no active job still has to be placeable, or dispatch
+  // cannot tell whether a new request is 2 km away or 200. These settings are
+  // deliberately far coarser than the job/bike ones above: this is "which part
+  // of town is this rider in", not a live trail, and it runs foreground-only.
+
+  /// Metres an idle rider must move before a presence fix is emitted.
+  static const int riderPresenceDistanceFilterMeters = 150;
+
+  /// Floor on how often an idle rider's position is written back.
+  static const Duration riderPresenceUploadInterval = Duration(minutes: 3);
+
+  /// A parked rider emits no GPS events at all, so a fix is re-sent this often
+  /// to keep the stored position fresh enough for dispatch to trust it.
+  static const Duration riderPresenceHeartbeat = Duration(minutes: 10);
+
+  /// Radius within which a rider is offered a new pickup, used until
+  /// app_settings.pickup_discovery_radius_km has been read. Matches that
+  /// column's default so the app and the server agree before the first fetch.
+  static const double defaultPickupDiscoveryRadiusKm = 4.0;
+
   /// How far the rider may drift from the last fetched road route before it is
   /// re-requested. Avoids paying for a Routes call on every small deviation.
   static const double routeRefreshThresholdMeters = 120;

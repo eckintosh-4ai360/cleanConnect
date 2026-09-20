@@ -97,9 +97,11 @@ class RiderTracking extends _$RiderTracking {
   StreamSubscription<Position>? _subscription;
   Timer? _uploadThrottle;
   Timer? _heartbeat;
+  Duration? _heartbeatPeriod;
   Position? _pendingUpload;
   DateTime? _lastUploadAt;
   BackgroundTracking _streamMode = BackgroundTracking.none;
+  bool _onDuty = false;
 
   @override
   RiderTrackingState build() {
@@ -112,6 +114,23 @@ class RiderTracking extends _$RiderTracking {
     if (jobId != null) return BackgroundTracking.job;
     return BackgroundTracking.none;
   }
+
+  /// No job and no company bike: the rider is simply on duty, and the only
+  /// reason to know where they are is so dispatch can decide which pickups are
+  /// close enough to offer them. Coarse, foreground-only, and far cheaper than
+  /// the job/bike modes — see the presence constants in [MapConfig].
+  bool get _isPresence => _streamMode == BackgroundTracking.none;
+
+  int get _distanceFilterMeters => _isPresence
+      ? MapConfig.riderPresenceDistanceFilterMeters
+      : MapConfig.riderDistanceFilterMeters;
+
+  Duration get _uploadInterval => _isPresence
+      ? MapConfig.riderPresenceUploadInterval
+      : MapConfig.riderUploadInterval;
+
+  Duration get _heartbeatInterval =>
+      _isPresence ? MapConfig.riderPresenceHeartbeat : _bikeHeartbeat;
 
   // Starts continuous GPS tracking (with a foreground service for an active
   // job or an assigned company bike)
@@ -130,17 +149,31 @@ class RiderTracking extends _$RiderTracking {
       return;
     }
 
+    // Before the seed fix, so its upload is throttled at the new mode's rate.
+    await _subscription?.cancel();
+    _streamMode = mode;
+
     // Seed initial position fix
-    final initial = await LocationService.instance.currentPosition();
+    final initial = await LocationService.instance.currentPosition(
+      accuracy: _isPresence ? LocationAccuracy.medium : LocationAccuracy.high,
+    );
     if (initial != null) {
       state = state.copyWith(position: initial);
       _queueUpload(initial);
     }
 
-    await _subscription?.cancel();
-    _streamMode = mode;
     _subscription = LocationService.instance
-        .positionStream(background: mode, bikeLabel: state.bike?.label)
+        .positionStream(
+          background: mode,
+          bikeLabel: state.bike?.label,
+          distanceFilterMeters: _distanceFilterMeters,
+          accuracy: _isPresence
+              ? LocationAccuracy.medium
+              : LocationAccuracy.bestForNavigation,
+          interval: _isPresence
+              ? MapConfig.riderPresenceUploadInterval
+              : const Duration(seconds: 5),
+        )
         .listen(
           _onPosition,
           onError: (Object e) {
@@ -160,16 +193,32 @@ class RiderTracking extends _$RiderTracking {
   }
 
   /// Tracks [bike] for as long as it stays assigned; null stops bike tracking.
-  /// Called by [BikeTrackingSupervisor].
+  /// Called by [RiderLocationSupervisor].
   Future<void> setBike(AssignedBikeEntity? bike) async {
     final previous = state.bike;
     if (previous?.id == bike?.id && previous?.label == bike?.label) return;
 
     state = state.copyWith(bike: bike, clearBike: bike == null);
 
-    if (bike != null) {
+    if (bike != null || state.jobId != null || _onDuty) {
       await start(jobId: state.jobId);
-    } else if (state.jobId != null) {
+    } else {
+      await stop();
+    }
+  }
+
+  /// Whether the rider is signed in and not marked offline.
+  ///
+  /// An on-duty rider keeps reporting a coarse position even with no job and no
+  /// company bike, because that position is what decides which pickups they are
+  /// offered: dispatch treats a rider it cannot place as not being anywhere, and
+  /// stops sending them work. Going offline stops it — that, and only that, is
+  /// how a rider turns the reporting off.
+  Future<void> setOnDuty(bool onDuty) async {
+    if (_onDuty == onDuty) return;
+    _onDuty = onDuty;
+
+    if (onDuty || state.bike != null || state.jobId != null) {
       await start(jobId: state.jobId);
     } else {
       await stop();
@@ -185,12 +234,14 @@ class RiderTracking extends _$RiderTracking {
     _uploadThrottle = null;
     _heartbeat?.cancel();
     _heartbeat = null;
+    _heartbeatPeriod = null;
     _pendingUpload = null;
     state = state.copyWith(isBroadcasting: false, clearJobId: true);
   }
 
   /// Signed out, or not a rider: nothing may keep reporting a location.
   Future<void> stopAll() async {
+    _onDuty = false;
     state = state.copyWith(clearBike: true);
     await stop();
   }
@@ -211,21 +262,29 @@ class RiderTracking extends _$RiderTracking {
   }
 
   void _syncHeartbeat() {
-    final wanted = state.isBroadcasting && state.bike != null;
+    // Presence needs one too: a rider waiting at a junction emits no GPS events,
+    // and a position that goes stale is treated by dispatch as unknown, which
+    // would quietly stop offering them work.
+    final wanted = state.isBroadcasting && (state.bike != null || _isPresence);
+    final interval = _heartbeatInterval;
     if (!wanted) {
       _heartbeat?.cancel();
       _heartbeat = null;
       return;
     }
-    _heartbeat ??= Timer.periodic(_bikeHeartbeat, (_) => _beat());
+    if (_heartbeat != null && _heartbeatPeriod == interval) return;
+    _heartbeat?.cancel();
+    _heartbeatPeriod = interval;
+    _heartbeat = Timer.periodic(interval, (_) => _beat());
   }
 
-  /// The position stream only fires on movement, so a parked bike would
-  /// otherwise report nothing for hours.
+  /// The position stream only fires on movement, so a parked bike — or a rider
+  /// waiting on a job — would otherwise report nothing for hours.
   Future<void> _beat() async {
+    final interval = _heartbeatInterval;
     final since =
         _lastUploadAt == null ? null : DateTime.now().difference(_lastUploadAt!);
-    if (since != null && since < _bikeHeartbeat - const Duration(seconds: 10)) {
+    if (since != null && since < interval - const Duration(seconds: 10)) {
       return;
     }
 
@@ -243,18 +302,16 @@ class RiderTracking extends _$RiderTracking {
   void _queueUpload(Position position) {
     _pendingUpload = position;
 
+    final interval = _uploadInterval;
     final since = _lastUploadAt == null
         ? null
         : DateTime.now().difference(_lastUploadAt!);
-    if (since == null || since >= MapConfig.riderUploadInterval) {
+    if (since == null || since >= interval) {
       _flushUpload();
       return;
     }
 
-    _uploadThrottle ??= Timer(
-      MapConfig.riderUploadInterval - since,
-      _flushUpload,
-    );
+    _uploadThrottle ??= Timer(interval - since, _flushUpload);
   }
 
   Future<void> _flushUpload() async {
@@ -305,14 +362,22 @@ Stream<AssignedBikeEntity?> riderAssignedBike(Ref ref) {
   return ref.watch(riderRepositoryProvider).watchAssignedBike();
 }
 
-/// Keeps GPS tracking running for as long as the signed-in rider holds a
-/// company bike -- including while they are Offline or the app is in the
-/// background -- and shuts everything down when they sign out.
+/// Keeps a rider's location flowing to dispatch for exactly as long as it
+/// should, and shuts everything down when they sign out.
+///
+/// Two independent reasons to track, in descending strength:
+///
+///  * a company bike is assigned -- tracked continuously and in the background,
+///    even while the rider is Offline, because the bike is company property;
+///  * the rider is simply on duty -- a coarse, foreground-only presence fix, so
+///    distance-scoped dispatch can tell whether a new request is near them.
+///    A rider it cannot place gets offered nothing, so going Offline is what
+///    turns this off, and nothing else.
 ///
 /// Watched once from the app root so it runs regardless of which screen the
 /// rider is on.
 @Riverpod(keepAlive: true)
-class BikeTrackingSupervisor extends _$BikeTrackingSupervisor {
+class RiderLocationSupervisor extends _$RiderLocationSupervisor {
   @override
   void build() {
     final auth = ref.watch(authStateControllerProvider);
@@ -332,6 +397,20 @@ class BikeTrackingSupervisor extends _$BikeTrackingSupervisor {
         if (!next.hasValue) return;
         final bike = next.value;
         Future.microtask(() => ref.read(riderTrackingProvider.notifier).setBike(bike));
+      },
+      fireImmediately: true,
+    );
+
+    ref.listen<AsyncValue<RiderEntity?>>(
+      riderProfileProvider,
+      (_, next) {
+        final rider = next.value;
+        if (rider == null) return;
+        // 'disabled' is an admin lockout, 'offline' the rider's own choice.
+        final onDuty = rider.status != 'offline' && rider.status != 'disabled';
+        Future.microtask(
+          () => ref.read(riderTrackingProvider.notifier).setOnDuty(onDuty),
+        );
       },
       fireImmediately: true,
     );

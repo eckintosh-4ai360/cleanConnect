@@ -16,7 +16,8 @@ enum LocationAccess {
 
 /// Why the GPS stream has to keep running with the app in the background.
 enum BackgroundTracking {
-  /// Foreground only.
+  /// Foreground only — including an on-duty rider's coarse presence tracking,
+  /// which exists so dispatch knows which pickups are near them.
   none,
 
   /// The rider is on an active pickup.
@@ -157,12 +158,16 @@ class LocationService {
     BackgroundTracking background = BackgroundTracking.none,
     String? bikeLabel,
     int distanceFilterMeters = MapConfig.riderDistanceFilterMeters,
+    LocationAccuracy accuracy = LocationAccuracy.bestForNavigation,
+    Duration interval = const Duration(seconds: 5),
   }) {
     return Geolocator.getPositionStream(
       locationSettings: _settingsFor(
         background: background,
         bikeLabel: bikeLabel,
         distanceFilterMeters: distanceFilterMeters,
+        accuracy: accuracy,
+        interval: interval,
       ),
     );
   }
@@ -171,21 +176,23 @@ class LocationService {
     required BackgroundTracking background,
     required String? bikeLabel,
     required int distanceFilterMeters,
+    required LocationAccuracy accuracy,
+    required Duration interval,
   }) {
     final inBackground = background != BackgroundTracking.none;
 
     if (kIsWeb) {
       return LocationSettings(
-        accuracy: LocationAccuracy.high,
+        accuracy: accuracy,
         distanceFilter: distanceFilterMeters,
       );
     }
 
     if (Platform.isAndroid) {
       return AndroidSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
+        accuracy: accuracy,
         distanceFilter: distanceFilterMeters,
-        intervalDuration: const Duration(seconds: 5),
+        intervalDuration: interval,
         forceLocationManager: false,
         foregroundNotificationConfig: switch (background) {
           BackgroundTracking.none => null,
@@ -212,7 +219,7 @@ class LocationService {
 
     if (Platform.isIOS || Platform.isMacOS) {
       return AppleSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
+        accuracy: accuracy,
         distanceFilter: distanceFilterMeters,
         activityType: ActivityType.automotiveNavigation,
         allowBackgroundLocationUpdates: inBackground,
@@ -222,7 +229,7 @@ class LocationService {
     }
 
     return LocationSettings(
-      accuracy: LocationAccuracy.high,
+      accuracy: accuracy,
       distanceFilter: distanceFilterMeters,
     );
   }

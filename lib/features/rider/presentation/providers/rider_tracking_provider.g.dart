@@ -44,7 +44,7 @@ final class RiderTrackingProvider
   }
 }
 
-String _$riderTrackingHash() => r'3bd8e96e2135822b90c1038a65321032e188611d';
+String _$riderTrackingHash() => r'0aed45c994fdbfe5b87f7819b2bcb32cadf5518d';
 
 /// Streams rider GPS updates and broadcasts location to Supabase
 
@@ -112,47 +112,71 @@ final class RiderAssignedBikeProvider
 
 String _$riderAssignedBikeHash() => r'89f104a09d8fd0af4739dde6ca72e2c488de4053';
 
-/// Keeps GPS tracking running for as long as the signed-in rider holds a
-/// company bike -- including while they are Offline or the app is in the
-/// background -- and shuts everything down when they sign out.
+/// Keeps a rider's location flowing to dispatch for exactly as long as it
+/// should, and shuts everything down when they sign out.
+///
+/// Two independent reasons to track, in descending strength:
+///
+///  * a company bike is assigned -- tracked continuously and in the background,
+///    even while the rider is Offline, because the bike is company property;
+///  * the rider is simply on duty -- a coarse, foreground-only presence fix, so
+///    distance-scoped dispatch can tell whether a new request is near them.
+///    A rider it cannot place gets offered nothing, so going Offline is what
+///    turns this off, and nothing else.
 ///
 /// Watched once from the app root so it runs regardless of which screen the
 /// rider is on.
 
-@ProviderFor(BikeTrackingSupervisor)
-final bikeTrackingSupervisorProvider = BikeTrackingSupervisorProvider._();
+@ProviderFor(RiderLocationSupervisor)
+final riderLocationSupervisorProvider = RiderLocationSupervisorProvider._();
 
-/// Keeps GPS tracking running for as long as the signed-in rider holds a
-/// company bike -- including while they are Offline or the app is in the
-/// background -- and shuts everything down when they sign out.
+/// Keeps a rider's location flowing to dispatch for exactly as long as it
+/// should, and shuts everything down when they sign out.
+///
+/// Two independent reasons to track, in descending strength:
+///
+///  * a company bike is assigned -- tracked continuously and in the background,
+///    even while the rider is Offline, because the bike is company property;
+///  * the rider is simply on duty -- a coarse, foreground-only presence fix, so
+///    distance-scoped dispatch can tell whether a new request is near them.
+///    A rider it cannot place gets offered nothing, so going Offline is what
+///    turns this off, and nothing else.
 ///
 /// Watched once from the app root so it runs regardless of which screen the
 /// rider is on.
-final class BikeTrackingSupervisorProvider
-    extends $NotifierProvider<BikeTrackingSupervisor, void> {
-  /// Keeps GPS tracking running for as long as the signed-in rider holds a
-  /// company bike -- including while they are Offline or the app is in the
-  /// background -- and shuts everything down when they sign out.
+final class RiderLocationSupervisorProvider
+    extends $NotifierProvider<RiderLocationSupervisor, void> {
+  /// Keeps a rider's location flowing to dispatch for exactly as long as it
+  /// should, and shuts everything down when they sign out.
+  ///
+  /// Two independent reasons to track, in descending strength:
+  ///
+  ///  * a company bike is assigned -- tracked continuously and in the background,
+  ///    even while the rider is Offline, because the bike is company property;
+  ///  * the rider is simply on duty -- a coarse, foreground-only presence fix, so
+  ///    distance-scoped dispatch can tell whether a new request is near them.
+  ///    A rider it cannot place gets offered nothing, so going Offline is what
+  ///    turns this off, and nothing else.
   ///
   /// Watched once from the app root so it runs regardless of which screen the
   /// rider is on.
-  BikeTrackingSupervisorProvider._()
+  RiderLocationSupervisorProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'bikeTrackingSupervisorProvider',
+        name: r'riderLocationSupervisorProvider',
         isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$bikeTrackingSupervisorHash();
+  String debugGetCreateSourceHash() => _$riderLocationSupervisorHash();
 
   @$internal
   @override
-  BikeTrackingSupervisor create() => BikeTrackingSupervisor();
+  RiderLocationSupervisor create() => RiderLocationSupervisor();
 
   /// {@macro riverpod.override_with_value}
   Override overrideWithValue(void value) {
@@ -163,17 +187,25 @@ final class BikeTrackingSupervisorProvider
   }
 }
 
-String _$bikeTrackingSupervisorHash() =>
-    r'aac496ed22f1d921767377c1d6451f43cfc3488b';
+String _$riderLocationSupervisorHash() =>
+    r'8fe1ccd074a8e689cc0e452488ca4ecae9099a2a';
 
-/// Keeps GPS tracking running for as long as the signed-in rider holds a
-/// company bike -- including while they are Offline or the app is in the
-/// background -- and shuts everything down when they sign out.
+/// Keeps a rider's location flowing to dispatch for exactly as long as it
+/// should, and shuts everything down when they sign out.
+///
+/// Two independent reasons to track, in descending strength:
+///
+///  * a company bike is assigned -- tracked continuously and in the background,
+///    even while the rider is Offline, because the bike is company property;
+///  * the rider is simply on duty -- a coarse, foreground-only presence fix, so
+///    distance-scoped dispatch can tell whether a new request is near them.
+///    A rider it cannot place gets offered nothing, so going Offline is what
+///    turns this off, and nothing else.
 ///
 /// Watched once from the app root so it runs regardless of which screen the
 /// rider is on.
 
-abstract class _$BikeTrackingSupervisor extends $Notifier<void> {
+abstract class _$RiderLocationSupervisor extends $Notifier<void> {
   void build();
   @$mustCallSuper
   @override

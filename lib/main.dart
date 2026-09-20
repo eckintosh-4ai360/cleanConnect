@@ -65,8 +65,9 @@ class CleanConnectApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeControllerProvider);
     final router = ref.watch(routerProvider);
-    // Keeps a rider's company bike tracked whichever screen they are on.
-    ref.watch(bikeTrackingSupervisorProvider);
+    // Keeps a rider's company bike tracked, and an on-duty rider placeable for
+    // distance-scoped dispatch, whichever screen they are on.
+    ref.watch(riderLocationSupervisorProvider);
 
     return MaterialApp.router(
       title: 'CleanConnect',
