@@ -2,11 +2,16 @@
 //
 // Fired by a Postgres trigger (trg_notify_riders_on_new_pickup, see
 // supabase/migrations/20260818113212_notify_riders_trigger.sql) whenever a
-// customer creates a new pending pickup request. Broadcasts a data-only FCM
-// push to every rider with a stored fcm_token, so the app can show an
-// on-screen "incoming request" alert with vibration — even in the background
-// or when the app is killed (Android). Ports functions/index.js's
-// notifyRidersOnNewPickup Cloud Function.
+// customer creates a new pending pickup request. Sends a data-only FCM push to
+// riders with a stored fcm_token, so the app can show an on-screen "incoming
+// request" alert with vibration — even in the background or when the app is
+// killed (Android). Ports functions/index.js's notifyRidersOnNewPickup Cloud
+// Function.
+//
+// Who gets it is decided by the caller, not here: since
+// 20260920140000_pickup_distance_discovery.sql the trigger resolves the riders
+// within the pickup's discovery radius and passes them in `riderIds`, so a
+// request in Tarkwa no longer rings a phone in Accra.
 //
 // Not user-facing (verify_jwt = false in config.toml) — authenticated by a
 // shared secret the trigger sends in x-webhook-secret, generated once and
@@ -35,6 +40,9 @@ interface PickupPayload {
   customerId?: string;
   customerName?: string;
   location?: string;
+  locationLat?: number;
+  locationLng?: number;
+  radiusKm?: number;
   timeSlot?: string;
   binTypes?: string[];
 }
@@ -78,9 +86,21 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // A null riderIds means "the whole fleet" — used only for pushes that are not
+  // a job offer for one address (the nightly summary), or for a request with no
+  // coordinates. An empty array is the opposite: the caller resolved the set of
+  // riders and it came out empty, so sending to everyone would be exactly the
+  // fleet-wide broadcast distance-scoped dispatch exists to prevent.
   const riderIds = Array.isArray(payload.riderIds)
     ? payload.riderIds.filter((id): id is string => typeof id === "string" && id.length > 0)
     : null;
+
+  if (riderIds && riderIds.length === 0) {
+    console.log(`[notify-riders] no riders in range for request ${payload.requestId}.`);
+    return new Response(JSON.stringify({ sent: 0 }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   let ridersQuery = supabase
     .from("riders")
@@ -132,6 +152,12 @@ Deno.serve(async (req: Request) => {
     customerId: payload.customerId ?? "",
     customerName: payload.customerName ?? "Customer",
     location: payload.location ?? "",
+    // Where the pickup is, and the circle it was dispatched in. The app shows
+    // the rider how far the job is straight from the push, before the request
+    // row has loaded.
+    locationLat: payload.locationLat == null ? "" : String(payload.locationLat),
+    locationLng: payload.locationLng == null ? "" : String(payload.locationLng),
+    radiusKm: payload.radiusKm == null ? "" : String(payload.radiusKm),
     timeSlot: payload.timeSlot ?? "",
     binTypes: JSON.stringify(payload.binTypes ?? []),
   };

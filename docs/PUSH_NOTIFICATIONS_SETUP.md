@@ -6,13 +6,36 @@ looping vibration) when a customer creates a pending pickup. The path is:
 ```
 customer INSERT on pickup_requests
   -> trg_notify_riders_on_new_pickup (Postgres trigger, pg_net)
+     - resolves the riders within app_settings.pickup_discovery_radius_km
+       of the pickup (public.riders_near) and passes them as `riderIds`
   -> notify-riders-on-new-pickup (Supabase Edge Function)
-  -> FCM v1 data message to every riders.fcm_token
+  -> FCM v1 data message to those riders' fcm_token
   -> NotificationService / firebaseMessagingBackgroundHandler (Flutter)
 ```
 
 Data-only messages (no `notification` block) on purpose — that is what lets the
 app take over rendering and vibration even when it is backgrounded or killed.
+
+## Who gets rung
+
+Not the whole fleet: a request in Tarkwa must not ring a phone in Accra. See
+`supabase/migrations/20260920140000_pickup_distance_discovery.sql`.
+
+- A new request goes to riders within `pickup_discovery_radius_km` (default 4)
+  of the pickup, measured straight-line from each rider's last reported fix.
+- If nobody nearby takes it, `escalate_pickup_discovery` (pg_cron, every minute)
+  doubles the radius every `pickup_discovery_escalation_minutes` up to
+  `pickup_discovery_max_radius_km`, alerting only the riders each step newly
+  reaches. The last step also reaches riders with no usable position.
+- A rider with no position, or one older than `rider_location_max_age_minutes`
+  (default 12 h), is not dispatchable until the app reports one. The rider app
+  keeps a coarse presence fix flowing while the rider is on duty
+  (`RiderLocationSupervisor`), which is what makes that work; the Pickups screen
+  tells the rider when location is off and they are therefore missing work.
+- A request with no coordinates at all (legacy rows) still goes to every rider —
+  it cannot be placed, so it cannot be scoped.
+- All four knobs are editable from the admin panel, Settings → Pickup Discovery
+  Radius.
 
 ## Done in the repo
 
