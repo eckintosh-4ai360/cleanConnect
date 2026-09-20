@@ -93,7 +93,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>CleanConnect uses your camera to scan a customer's bin QR code so a pickup can only be marked complete once you're actually at their bin.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>CleanConnect uses your location to show you on the map, guide you to pickups, and let customers track their collection in real time.</string>
+	<string>CleanConnect uses your location to set your pickup point accurately and to show a rider's live progress while a collection is active.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>CleanConnect shares your location with dispatch and the customer while you are on an active pickup, including when the app is in the background.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

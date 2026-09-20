@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -8,7 +10,6 @@ import '../providers/customer_providers.dart';
 import '../../domain/entities/customer_entities.dart';
 import '../../domain/payg_pricing.dart';
 import '../../../../core/shared/widgets/clean_connect_button.dart';
-import '../../../../core/config/map_config.dart';
 import '../../../../core/services/directions_service.dart';
 import '../../../../core/services/location_service.dart';
 import '../../../../core/utils/geo_utils.dart';
@@ -59,6 +60,108 @@ class PickupRequestScreen extends HookConsumerWidget {
 
     final isSubmitting = useState(false);
     final isInitialized = useState(false);
+    final hasRequestedInitialLocation = useState(false);
+
+    /// Ask for a foreground GPS fix when the customer begins a pickup. This
+    /// is deliberately separate from rider tracking: customer location is
+    /// used only to set this request's destination, while riders share their
+    /// live position during the trip.
+    Future<void> useCurrentLocation({bool showFeedback = true}) async {
+      isLocating.value = true;
+
+      try {
+        final access = await LocationService.instance.ensurePermission();
+        if (!context.mounted) return;
+
+        switch (access) {
+          case LocationAccess.granted:
+            final position = await LocationService.instance.currentPosition();
+            if (!context.mounted) return;
+
+            if (position == null) {
+              if (showFeedback) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Could not get your current location. Try again.',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return;
+            }
+
+            final point = LatLng(position.latitude, position.longitude);
+            selectedLocation.value = point;
+            // Show a meaningful value immediately while reverse geocoding
+            // runs. Coordinates, not this label, are what we save and send to
+            // the rider.
+            selectedLocationLabel.value = 'Current location';
+            final label = await DirectionsService.instance.reverseGeocode(
+              point,
+            );
+            if (!context.mounted || selectedLocation.value != point) return;
+            if (label?.trim().isNotEmpty == true) {
+              selectedLocationLabel.value = label!.trim();
+            }
+
+          case LocationAccess.serviceDisabled:
+            if (showFeedback) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Turn on location services to use this.'),
+                  action: SnackBarAction(
+                    label: 'Open settings',
+                    onPressed: LocationService.instance.openLocationSettings,
+                  ),
+                ),
+              );
+            }
+          case LocationAccess.deniedForever:
+            if (showFeedback) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text(
+                    'Location permission is blocked for CleanConnect.',
+                  ),
+                  action: SnackBarAction(
+                    label: 'Open settings',
+                    onPressed: LocationService.instance.openAppSettings,
+                  ),
+                ),
+              );
+            }
+          case LocationAccess.denied:
+            if (showFeedback) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Location permission was not granted.'),
+                ),
+              );
+            }
+        }
+      } finally {
+        if (context.mounted) {
+          isLocating.value = false;
+        }
+      }
+    }
+
+    // Saved addresses and registered-bin coordinates remain available as a
+    // fallback, but a new pickup starts with the customer's present location
+    // when they allow it. That makes the destination on the tracking map
+    // accurate for customers outside Tarkwa too.
+    useEffect(() {
+      if (hasRequestedInitialLocation.value) return null;
+      hasRequestedInitialLocation.value = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          unawaited(useCurrentLocation(showFeedback: false));
+        }
+      });
+      return null;
+    }, const []);
 
     // Subscription state. Whether this pickup has to be paid for comes from
     // the database's derived flag, never from the plan's display name -- the
@@ -96,11 +199,11 @@ class PickupRequestScreen extends HookConsumerWidget {
             selectedBins.value = [primaryType];
           }
 
-          // 2. Pre-select location from the registered bin's GPS fix -- it is
-          // already real coordinates, not typed text, so it is safe to default
-          // to. The customer can still override it below.
+          // 2. Use the registered bin's GPS fix only when the device has not
+          // supplied a current location. A booking should follow the customer
+          // if they have moved since the bin was registered.
           final binLocation = GeoUtils.tryParseLatLng(primaryBin.gpsLocation);
-          if (binLocation != null) {
+          if (selectedLocation.value == null && binLocation != null) {
             selectedLocation.value = binLocation;
           }
 
@@ -142,82 +245,19 @@ class PickupRequestScreen extends HookConsumerWidget {
       return null;
     }, [addressesState.hasValue, binsState.hasValue]);
 
-    Future<void> useCurrentLocation() async {
-      isLocating.value = true;
-      final access = await LocationService.instance.ensurePermission();
-
-      if (!context.mounted) {
-        isLocating.value = false;
-        return;
-      }
-
-      switch (access) {
-        case LocationAccess.granted:
-          final position = await LocationService.instance.currentPosition();
-          if (position != null) {
-            selectedLocation.value = LatLng(
-              position.latitude,
-              position.longitude,
-            );
-            selectedLocationLabel.value = await DirectionsService.instance
-                .reverseGeocode(selectedLocation.value!);
-          } else if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Could not get your current location. Try again.',
-                ),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        case LocationAccess.serviceDisabled:
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Turn on location services to use this.'),
-              action: SnackBarAction(
-                label: 'Open settings',
-                onPressed: LocationService.instance.openLocationSettings,
-              ),
-            ),
-          );
-        case LocationAccess.deniedForever:
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Location permission is blocked for CleanConnect.',
-              ),
-              action: SnackBarAction(
-                label: 'Open settings',
-                onPressed: LocationService.instance.openAppSettings,
-              ),
-            ),
-          );
-        case LocationAccess.denied:
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Location permission was not granted.'),
-            ),
-          );
-      }
-
-      isLocating.value = false;
-    }
-
     Future<void> chooseOnMap() async {
-      // Try a real GPS fix before falling back to the Tarkwa placeholder, so
-      // the picker opens centered on the customer's actual position instead
-      // of always looking like it's ignoring GPS.
+      // A map pin is still available for a different address, but its starting
+      // point must be a real customer/bin/saved-address coordinate. Do not
+      // silently place a customer in Tarkwa when their location is unknown.
       if (selectedLocation.value == null) {
         await useCurrentLocation();
-        if (!context.mounted) return;
+        if (!context.mounted || selectedLocation.value == null) return;
       }
 
       final result = await Navigator.of(context).push<PickedLocation>(
         MaterialPageRoute(
-          builder: (_) => LocationPickerScreen(
-            initialPosition: selectedLocation.value ?? MapConfig.fallbackCenter,
-          ),
+          builder: (_) =>
+              LocationPickerScreen(initialPosition: selectedLocation.value!),
         ),
       );
       if (result != null) {
