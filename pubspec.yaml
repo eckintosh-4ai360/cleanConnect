@@ -2,7 +2,10 @@ name: clean_connect
 description: "A commercial-grade Waste Management Platform built with Flutter."
 publish_to: "none"
 
-version: 1.0.0+1
+# Build 2 includes the iOS `cleanconnect` URL scheme used by Supabase
+# password-recovery links.  A new build number is essential: iOS reads URL
+# schemes from the installed app bundle, not from a hot-reloaded Flutter app.
+version: 1.0.1+2
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
